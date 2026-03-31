@@ -45,7 +45,8 @@ from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWr
 N_EPOCHS=80
 MODELS = {
     "tabpfn": lambda: TabPFNWrapper(),
-    "finetune_tabpfn_crls": lambda: FinetuneTabPFNWrapper(
+    "tabpfnv2_6": lambda: TabPFNWrapper(model_path="tabpfn-v2.6-regressor-v2.6_default.ckpt"),
+    "finetune_realtabpfnv2_5_crls": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -63,7 +64,7 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="crls",
     ),
-    "finetune_tabpfn_crps": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_crps": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -99,7 +100,7 @@ MODELS = {
     #     extra_regressor_kwargs={"average_before_softmax": True},
     #     beta="wCRPS_left",
     # ),
-    "finetune_tabpfn_wcrps_center": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_wcrps_center": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -153,7 +154,7 @@ MODELS = {
     #     extra_regressor_kwargs={"average_before_softmax": True},
     #     beta="brier",
     # ),
-    "finetune_tabpfn_ce": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_ce": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -171,7 +172,7 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="ce",
     ),
-    "finetune_tabpfn_beta_0.5": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_beta_0.5": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -189,7 +190,7 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="beta_0.5",
     ),
-    "finetune_tabpfn_beta_1.5": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_beta_1.5": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -207,7 +208,7 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="beta_1.5",
     ),
-    "finetune_tabpfn_beta_1.8": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_beta_1.8": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -225,7 +226,7 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="beta_1.8",
     ),
-    "finetune_tabpfn_beta_1.8_mae": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_beta_1.8_mae": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
@@ -244,7 +245,7 @@ MODELS = {
         beta="beta_1.8",
         early_stopping_metric="mae",
     ),
-    "finetune_tabpfn_is_90": lambda: FinetuneTabPFNWrapper(
+    "finetune_realtabpfnv2_5_is_90": lambda: FinetuneTabPFNWrapper(
         device="cuda",
         epochs=N_EPOCHS,
         learning_rate=1e-5,
