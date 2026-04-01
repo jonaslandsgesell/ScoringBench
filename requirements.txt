@@ -1,5 +1,7 @@
 numpy
-sklearn
+scikit-learn
 pandas
 tqdm
 torch
+pytest
+pyarrow

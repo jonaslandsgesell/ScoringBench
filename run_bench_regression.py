@@ -29,7 +29,7 @@ from scoringbench import config as cfg
 from scoringbench.datasets import DATASETS_CONFIG
 from scoringbench.runner import run_benchmark
 from scoringbench.utils import set_seed
-from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWrapper, XGBVectorWrapper, XGBQuantileVectorWrapper
+from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWrapper, XGBVectorWrapper, XGBQuantileVectorWrapper, PytabkitRealMLPWrapper
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,13 @@ MODELS = {
     "tabicl": lambda: TabICLWrapper(),
     "xgb_vector": lambda: XGBVectorWrapper(n_bins=50, num_boost_round=100),
     "xgb_vector_quantile": lambda: XGBQuantileVectorWrapper(n_bins=50, num_boost_round=100),
+    "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
+        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        n_quantiles=50,
+    ),
 }
+
 
 
 # ---------------------------------------------------------------------------
