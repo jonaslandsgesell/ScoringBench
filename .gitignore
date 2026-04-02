@@ -1,1 +1,6 @@
 *.pyc
+*.tex
+*.log
+*.png
+*.csv
+*.pdf

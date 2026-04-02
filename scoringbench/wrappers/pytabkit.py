@@ -213,3 +213,19 @@ class PytabkitRealMLPWrapper(ProbabilisticWrapper):
             bin_midpoints=bin_midpoints,
             mean=mean,
         )
+
+
+class PytabkitRealMLPHPOWrapper(PytabkitRealMLPWrapper):
+    """Like `PytabkitRealMLPWrapper` but uses `RealMLP_HPO_Regressor`."""
+
+    def _build_model(self):
+        try:
+            from pytabkit import RealMLP_HPO_Regressor
+        except Exception as exc:  # pragma: no cover - import/runtime issues
+            raise ImportError(
+                "Failed to import pytabkit. Install pytabkit[models] to use this wrapper"
+            ) from exc
+
+        logging.getLogger('pytabkit').setLevel(logging.WARNING)
+        self._model = RealMLP_HPO_Regressor(**self._init_kwargs)
+        logger.debug("Built pytabkit RealMLP_HPO_Regressor (init kwargs: %s)", self._init_kwargs)

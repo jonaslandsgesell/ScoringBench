@@ -97,10 +97,6 @@ class TestDeltaDistribution:
         r = compute_scoring_rules(*delta)
         assert r["sharpness"] == pytest.approx(0.0, abs=1e-6)
 
-    def test_brier(self, delta):
-        r = compute_scoring_rules(*delta)
-        assert r["brier_score"] == pytest.approx(0.0, abs=1e-6)
-
     def test_crls(self, delta):
         r = compute_scoring_rules(*delta)
         assert r["crls"] == pytest.approx(0.0, abs=1e-4)
@@ -146,10 +142,6 @@ class TestUniformDistribution:
     def test_sharpness(self, uniform):
         r = compute_scoring_rules(*uniform)
         assert r["sharpness"] == pytest.approx(np.sqrt(1.25), abs=1e-5)
-
-    def test_brier(self, uniform):
-        r = compute_scoring_rules(*uniform)
-        assert r["brier_score"] == pytest.approx(0.75, abs=1e-5)
 
     def test_crls(self, uniform):
         expected = -np.log(0.75) + np.log(2) + (-np.log(0.75))
@@ -207,10 +199,6 @@ class TestAsymmetricDistribution:
         r = compute_scoring_rules(*asym)
         assert r["log_score"] == pytest.approx(-np.log(0.7), abs=1e-5)
 
-    def test_brier(self, asym):
-        r = compute_scoring_rules(*asym)
-        assert r["brier_score"] == pytest.approx(0.14, abs=1e-5)
-
     def test_sharpness(self, asym):
         r = compute_scoring_rules(*asym)
         assert r["sharpness"] == pytest.approx(np.sqrt(0.44), abs=1e-5)
@@ -241,7 +229,7 @@ class TestPerSampleGrid:
             "crps", "log_score", "sharpness",
             "coverage_90", "interval_score_90",
             "coverage_95", "interval_score_95",
-            "crls", "brier_score",
+            "crls",
             "wcrps_left", "wcrps_right", "wcrps_center",
             "dispersion",
         }
@@ -263,7 +251,7 @@ class TestComputeMetrics:
         dist = _make_dist(probas, edges)
         m = compute_metrics(dist, y)
         assert "mae" in m and "rmse" in m and "r2" in m
-        assert "crps" in m and "brier_score" in m and "log_score" in m
+        assert "crps" in m and "log_score" in m
 
     def test_mean_used_for_point_metrics(self):
         edges = np.arange(5, dtype=float)
@@ -294,10 +282,6 @@ class TestSanityChecks:
     def test_crps_nonnegative(self, random_dist):
         r = compute_scoring_rules(*random_dist)
         assert r["crps"] >= -1e-10
-
-    def test_brier_nonnegative(self, random_dist):
-        r = compute_scoring_rules(*random_dist)
-        assert r["brier_score"] >= -1e-10
 
     def test_sharpness_nonnegative(self, random_dist):
         r = compute_scoring_rules(*random_dist)

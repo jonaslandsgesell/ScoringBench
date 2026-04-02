@@ -159,12 +159,23 @@ def build_results_rows(
 # ---------------------------------------------------------------------------
 
 def save_detailed_csv(rows: list[dict], output_dir: Path) -> pd.DataFrame:
-    """Append rows to benchmark_results_detailed.csv (or create it)."""
+    """Upsert rows into benchmark_results_detailed.csv (create if absent).
+
+    When resuming a benchmark run the caller passes all folds for a dataset
+    (both previously-completed and newly-run ones).  Without deduplication
+    this would accumulate duplicate rows across resume runs and corrupt
+    aggregated statistics.  We therefore drop duplicates on the identity
+    key (dataset, model, fold), keeping the last occurrence so that a
+    re-computed row always overwrites the stale one.
+    """
     dest = output_dir / "benchmark_results_detailed.csv"
     new_df = pd.DataFrame(rows)
     if dest.exists():
         existing = pd.read_csv(dest)
         combined = pd.concat([existing, new_df], ignore_index=True)
+        dedup_cols = [c for c in ("dataset", "model", "fold") if c in combined.columns]
+        if dedup_cols:
+            combined = combined.drop_duplicates(subset=dedup_cols, keep="last")
     else:
         combined = new_df
     combined.to_csv(dest, index=False)

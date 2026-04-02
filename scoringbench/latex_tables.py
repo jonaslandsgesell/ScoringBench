@@ -31,7 +31,6 @@ def write_latex_tables(root: str, rows: List[dict]) -> None:
         ('crps', ['crps']),
         ('log_score', ['log_score', 'logscore', 'log_s']),
         ('crls', ['crls']),
-        ('brier_score', ['brier_score', 'brier']),
         # energy scores for multiple beta values
         ('energy_score_beta_0.2', ['energy_score_beta_0.2', 'energy_score_0.2']),
         ('energy_score_beta_0.5', ['energy_score_beta_0.5', 'energy_score_0.5']),

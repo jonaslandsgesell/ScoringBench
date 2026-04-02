@@ -7,14 +7,14 @@ Public API
 compute_metrics(dist, y_true) -> dict
     All metrics: MAE, RMSE, R², CRPS, log-score, sharpness, dispersion,
     90%/95% coverage and interval scores, energy scores β∈{0.5,1,1.5,2},
-    CRLS, Brier score.
+    CRLS.
 
 compute_point_metrics(y_true, y_pred) -> dict
     MAE, RMSE, R².
 
 compute_scoring_rules(dist, y_true) -> dict
     CRPS, log-score, sharpness, dispersion, coverage and interval scores,
-    energy scores, CRLS, Brier score, wCRPS_left, wCRPS_right, wCRPS_center.
+    energy scores, CRLS, wCRPS_left, wCRPS_right, wCRPS_center.
     dist is a DistributionPrediction from scoringbench.wrappers.
     bin_edges / bin_midpoints may be 1-D (shared grid) or 2-D (per-sample).
     Uses PyTorch on GPU when available; falls back to NumPy otherwise.
@@ -63,7 +63,7 @@ def compute_scoring_rules(dist: DistributionPrediction, y_true: np.ndarray) -> d
     Returns keys: crps, log_score, sharpness, dispersion,
                   coverage_90, interval_score_90,
                   coverage_95, interval_score_95,
-                  crls, brier_score,
+                  crls,
                   wcrps_left, wcrps_right, wcrps_center,
                   energy_score_beta_{0.5,1.0,1.5,2.0}.
     """
@@ -114,7 +114,7 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
 
     mids = bin_mids[None, :] if shared else bin_mids     # broadcast-ready
 
-    # ---- bin index of each y (reused by log_score, CRLS, Brier) ----
+    # ---- bin index of each y (reused by log_score, CRLS) ----
     if shared:
         y_bin = torch.searchsorted(bin_edges[1:].contiguous(), y).clamp(0, n_bins - 1)
     else:
@@ -227,12 +227,6 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
     crls_bins  = target_cdf * (-torch.log(cdf_c)) + (1 - target_cdf) * (-torch.log1p(-cdf_c))
     crls       = (crls_bins * bw).sum(dim=-1).mean().item()
 
-    # ---- Brier score ----
-    # = mean_n sum_k (p_k - 1{k==target_bin})^2
-    target_oh = torch.zeros_like(probas)
-    target_oh.scatter_(1, y_bin.unsqueeze(1), 1.0)
-    brier_score = ((probas - target_oh).pow(2)).sum(dim=-1).mean().item()
-
     return {
         "crps":              crps,
         "log_score":         log_score,
@@ -243,7 +237,6 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
         "coverage_95":       cov_95,
         "interval_score_95": is_95,
         "crls":              crls,
-        "brier_score":       brier_score,
         "wcrps_left":        wcrps_left,
         "wcrps_right":       wcrps_right,
         "wcrps_center":      wcrps_center,

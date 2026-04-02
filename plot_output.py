@@ -276,7 +276,7 @@ for mode in modes_to_run:
         csv_per_dataset.to_csv(os.path.join(mode_dir, f"per_dataset_table_{csv_mode}.csv"), index=False)
 
         # --- Bar plots for key metrics ---
-        metrics = ["mae", "rmse", "crps", "crls", "brier_score", "wcrps_left", "wcrps_right", "wcrps_center", "sharpness", "dispersion", "r2", "cov_90", "cov_95", "log_score"]
+        metrics = ["mae", "rmse", "crps", "crls", "wcrps_left", "wcrps_right", "wcrps_center", "sharpness", "dispersion", "r2", "cov_90", "cov_95", "log_score"]
         for metric in metrics:
             if metric not in avg_all.columns:
                 continue
@@ -359,7 +359,6 @@ for mode in modes_to_run:
             "rmse": r"$\mathbb{E}\left[\frac{B - M}{|B|}\right] \times 100\%$",
             "crps": r"$\mathbb{E}\left[\frac{B - M}{|B|}\right] \times 100\%$",
             "crls": r"$\mathbb{E}\left[\frac{B - M}{|B|}\right] \times 100\%$",
-            "brier_score": r"$\mathbb{E}\left[\frac{B - M}{|B|}\right] \times 100\%$",
             "sharpness": r"$\mathbb{E}\left[\frac{B - M}{|B|}\right] \times 100\%$",
             "dispersion": r"$\mathbb{E}\left[\frac{M - B}{|B|}\right] \times 100\%$",
             "r2": r"$\mathbb{E}[(R^2_M - R^2_B)] \times 100~\text{pp}$",
@@ -377,7 +376,6 @@ for mode in modes_to_run:
             "rmse": r"$\mathbb{E}_{i}[\text{RMSE}_i]$",
             "crps": r"$\mathbb{E}_{i}[\text{CRPS}_i]$",
             "crls": r"$\mathbb{E}_{i}[\text{CRLS}_i]$",
-            "brier_score": r"$\mathbb{E}_{i}[\text{Brier}_i]$",
             "sharpness": r"$\mathbb{E}_{i}[\text{Sharp}_i]$",
             "dispersion": r"$\mathbb{E}_{i}[\text{Disp}_i]$",
             "r2": r"$\mathbb{E}_{i}[R^2_i]$",

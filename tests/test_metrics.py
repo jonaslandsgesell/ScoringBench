@@ -1,10 +1,19 @@
 import math
+import warnings
 
 import numpy as np
+import pytest
 
 from scoringbench import __version__
-from scoringbench.metrics import compute_point_metrics
+from scoringbench.metrics import compute_point_metrics, compute_scoring_rules
 from scoringbench.wrappers import DistributionPrediction
+
+# Force CPU so the test runs on machines without a working CUDA device.
+try:
+    import torch as _torch
+    _torch.cuda.is_available = lambda: False
+except Exception:
+    _torch = None
 
 
 def test_scoringbench_imports():
@@ -37,3 +46,6 @@ def test_distribution_prediction_container():
     assert dist.bin_edges.shape[0] == 3
     assert dist.bin_midpoints.shape == (2,)
     assert dist.mean.shape == (2,)
+
+
+

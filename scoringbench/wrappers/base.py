@@ -19,7 +19,7 @@ class DistributionPrediction:
     or 2-D (per-sample grid, e.g. when derived from per-sample quantiles).
     metrics.py handles both cases.
     """
-    probas: np.ndarray         # (n_samples, n_bins)
+    probas: np.ndarray         # (n_samples, n_bins)  — PMF: mass per bin, sums to 1
     bin_edges: np.ndarray      # (n_bins+1,) or (n_samples, n_bins+1)
     bin_midpoints: np.ndarray  # (n_bins,)   or (n_samples, n_bins)
     mean: np.ndarray           # (n_samples,)
