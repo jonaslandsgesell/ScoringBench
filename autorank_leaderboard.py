@@ -82,7 +82,7 @@ def _save_cd_diagram_data(out_dir, metric, result, rankedDF, order, hib):
         json.dump(cd_data, f, indent=2)
 
 def load_metric_matrix(root, metric):
-    """Load metric data by dataset and model (all fold values)."""
+    """Load metric data by dataset and model, aggregated across folds."""
     data = []
     for entry in os.listdir(root):
         entry_path = os.path.join(root, entry)
@@ -106,9 +106,10 @@ def load_metric_matrix(root, metric):
     if not data: return None
     
     df_metric = pd.DataFrame(data)
-    # Pivot: rows=dataset+fold combinations, columns=models
-    df_metric['dataset_fold'] = df_metric['dataset'] + '_fold_' + df_metric['fold'].astype(str)
-    pivot = df_metric.pivot(index='dataset_fold', columns='model', values='score')
+    # Aggregate across folds: average score per dataset per model avoiding pseudo-replication treat dataset as observation
+    df_agg = df_metric.groupby(['dataset', 'model'])['score'].mean().reset_index()
+    # Pivot: rows=datasets, columns=models, values=averaged scores
+    pivot = df_agg.pivot(index='dataset', columns='model', values='score')
     return pivot.dropna(how='any')
 
 def main():

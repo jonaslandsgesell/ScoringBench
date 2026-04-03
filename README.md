@@ -9,7 +9,7 @@ ScoringBench was created to:
 - Highlight the value of distributional outputs for real-world decision making, where prediction intervals are often more actionable than point estimates.
 - Support research and development of models that output full predictive distributions, not just point estimates.
 
-For more details on the motivation and methodology, see the accompanying publication by the authors https://arxiv.org/abs/2603.08206.
+For more details on the motivation and methodology, see the accompanying publications by the authors https://arxiv.org/abs/2603.29928 and https://arxiv.org/abs/2603.08206.
 
 # ScoringBench
 
@@ -18,33 +18,37 @@ ScoringBench is a compact benchmarking suite for probabilistic regression on tab
 ## Quick overview — important scripts
 
 - `run_bench_regression.py`: run the benchmark (all datasets, models, CV folds). Use `--lite` for a fast smoke test and `--output_dir` to change the output path.
-- `permutation_leader_board.py`: compute permutation-based p-values and build leaderboards from the per-model Parquet outputs; writes CSVs to `output/figures/permutation/` and appends LaTeX snippets to `output/figures/absolute_metrics.tex`.
+- `autorank_leaderboard.py`: compute statistical rankings with critical-difference diagrams; generates JSON data and LaTeX tables in `output/figures/leaderboard/`.
 - `plot_output.py`: generate summary and per-dataset tables/plots from benchmark outputs. Defaults are reasonable; use `--relative`, `--median`, or `--output` to customize.
+
+## Related tools
+
+- [autorank](https://sherbold.github.io/autorank/) — statistical ranking and critical-difference diagrams
 
 ## Benchmark output (summary)
 
-Each run writes a self-contained directory under `output/` with aggregated CSVs and per-fold results. Newer runs save per-model Parquet files (`<run>/model_name.parquet`) containing fold-level rows; legacy JSON per-fold layout is also supported in some tools but the leaderboard and migration tools expect the Parquet layout.
+Each run writes a self-contained directory under `output/` with aggregated CSVs and per-fold results. Newer runs save per-model Parquet files (`<run>/model_name.parquet`) containing fold-level rows.
 
 Typical files:
 
 - `benchmark_results_aggregated.csv` — mean ± std per model/dataset
 - `benchmark_results_detailed.csv` — fold-level rows
-- `output/<run>/` — per-run folder with per-model parquet or per-dataset/fold JSON (legacy)
+- `output/` — per-model parquet
 
 ## Workflow
 
 1. git clone --recurse-submodules https://github.com/jonaslandsgesell/ScoringBench.git
 2. Add your custom wrapper with a unique name (see `scoringbench/wrappers/` and inherit `ProbabilisticWrapper`).
 3. python run_bench_regression.py
-4. python permutation_leader_board.py
-5. Commit your model parquet file (documenting each run) and the updated leaderboard CSVs in `output/figures/permutation/`. Since the output repository is separate from the main repository, push to both. This serves as a public ledger and allows traceability.
+4. python autorank_leaderboard.py
+5. Commit your model parquet file (documenting each run) and the updated leaderboard data in `output/figures/leaderboard/`. Since the output repository is separate from the main repository, push to both. This serves as a public ledger and allows traceability.
 6. Create a pull request to the ScoringBench repository for review; contributions that meet standards will be merged.
-7. Upon merge, https://scoringbench.bolt.host/ will automatically display the updated leaderboard; the CSV is also available in the repository.
+7. Upon merge, https://scoringbench.bolt.host/ will automatically display the updated leaderboard; the data is also available in the repository.
 
 ## Tests
 
 Run the test suite with:
 
 ```
-python -m pytest tests/test_scoring.py -v --tb=short
+python -m pytest tests
 ```

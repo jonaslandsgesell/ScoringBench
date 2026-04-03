@@ -122,29 +122,47 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
             bin_edges[:, 1:].contiguous(), y.unsqueeze(1)
         ).squeeze(1).clamp(0, n_bins - 1)
 
-    # ---- CRPS + Weighted CRPS variants ----
-    # sq_err_bw is reused by wCRPS_left/right/center at zero extra cost.
-    indicators  = (mids >= y[:, None]).float()
-    sq_err_bw   = (cdf - indicators).pow(2) * bw          # (n_samples, n_bins)
-    crps        = sq_err_bw.sum(dim=-1).mean().item()
+    # ---- CRPS ----
+    indicators = (mids >= y[:, None]).float()
+    sq_err_bw  = (cdf - indicators).pow(2) * bw           # (n_samples, n_bins)
+    crps       = sq_err_bw.sum(dim=-1).mean().item()
 
-    # Normalize bin midpoints to [0, 1] for scale-invariant positional weighting.
-    m_ref  = bin_mids if shared else bin_mids              # (n_bins,) or (n_samples, n_bins)
-    m_min  = m_ref.min()
-    m_max  = m_ref.max()
-    u      = ((m_ref - m_min) / (m_max - m_min).clamp(min=1e-10)).clamp(0, 1)
-    # Broadcast weight vectors to (1, n_bins) for shared or (n_samples, n_bins) otherwise.
+    # ---- Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17) ----
+    # qwCRPS_v(F, y) = 2 ∫₀¹ ρ_α(y, q_α) v(α) dα
+    # where ρ_α(y, q) = (I[y ≤ q] − α)(q − y) is the pinball/check function.
+    # Weight functions following Table 1 of Gneiting & Ranjan (2011):
+    #   left-tail:  v(α) = (1−α)²
+    #   right-tail: v(α) = α²
+    #   center:     v(α) = α(1−α)
+    alphas_qw = torch.linspace(0.01, 0.99, 99, device=device)   # (A,)
+    d_alpha   = 1.0 / (len(alphas_qw) + 1)                       # ≈ 0.01
+
+    # Invert the CDF: for each sample i and level α_j find the smallest bin k
+    # with cdf[i, k] >= α_j.  Expand alphas to (n_samples, A) so searchsorted
+    # can match the (n_samples, n_bins) cdf row-by-row.
+    alphas_expanded = alphas_qw[None, :].expand(n_samples, -1).contiguous()  # (n_samples, A)
+    idx_q = torch.searchsorted(cdf.contiguous(), alphas_expanded).clamp(0, n_bins - 1)
+    # idx_q: (n_samples, A)
+
     if shared:
-        w_left   = (1 - u).pow(2).unsqueeze(0)            # (1, n_bins)
-        w_right  = u.pow(2).unsqueeze(0)
-        w_center = (4 * u * (1 - u)).unsqueeze(0)
+        q_a = bin_mids[idx_q]                    # (n_samples, A)
     else:
-        w_left   = (1 - u).pow(2)
-        w_right  = u.pow(2)
-        w_center = 4 * u * (1 - u)
-    wcrps_left   = (sq_err_bw * w_left).sum(dim=-1).mean().item()
-    wcrps_right  = (sq_err_bw * w_right).sum(dim=-1).mean().item()
-    wcrps_center = (sq_err_bw * w_center).sum(dim=-1).mean().item()
+        q_a = torch.gather(bin_mids, 1, idx_q)   # (n_samples, A)
+
+    # Pinball loss per sample and quantile level: 2(I[y ≤ q_α] − α)(q_α − y)
+    pinball = (
+        2.0
+        * ((y[:, None] <= q_a).float() - alphas_qw[None, :])
+        * (q_a - y[:, None])
+    )                                                              # (n_samples, A)
+
+    v_left   = (1.0 - alphas_qw).pow(2)                          # (A,)
+    v_right  = alphas_qw.pow(2)
+    v_center = alphas_qw * (1.0 - alphas_qw)
+
+    wcrps_left   = (pinball * v_left[None, :]).sum(dim=-1).mean().item() * d_alpha
+    wcrps_right  = (pinball * v_right[None, :]).sum(dim=-1).mean().item() * d_alpha
+    wcrps_center = (pinball * v_center[None, :]).sum(dim=-1).mean().item() * d_alpha
 
     # ---- Log score ----
     sel_p = probas[ns_idx, y_bin]
@@ -242,18 +260,3 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
         "wcrps_center":      wcrps_center,
         **{f"energy_score_beta_{b}": v for b, v in zip(ENERGY_BETAS, energy_scores)},
     }
-
-
-# ---------------------------------------------------------------------------
-# Legacy shim — kept so existing imports don't break
-# ---------------------------------------------------------------------------
-
-def compute_uncertainty_metrics(model, X_test, y_test) -> dict:
-    """Deprecated shim — delegates to the new wrapper-based API."""
-    from .wrappers import TabPFNWrapper
-    wrapper = TabPFNWrapper.__new__(TabPFNWrapper)
-    wrapper._torch = __import__("torch")
-    wrapper._model = model
-    dist = wrapper.predict_distribution(X_test)
-    return compute_scoring_rules(dist, np.asarray(y_test))
-
