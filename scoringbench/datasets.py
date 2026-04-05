@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import re
 import zipfile
-import tarfile
 import urllib.request
 from pathlib import Path
 
@@ -133,132 +132,6 @@ def _load_pmlb(config: dict) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-def _load_uci(config: dict) -> tuple[pd.DataFrame, pd.Series]:
-    """Load a UCI dataset via the *ucimlrepo* package."""
-    from ucimlrepo import fetch_ucirepo          # soft dependency
-
-    uci_id = config['uci_id']
-    print(f"  Fetching UCI dataset {uci_id} via ucimlrepo ...")
-    dataset = fetch_ucirepo(id=uci_id)
-    X = dataset.data.features
-    y = dataset.data.targets
-
-    # Handle multi-target datasets
-    if isinstance(y, pd.DataFrame) and y.shape[1] > 1:
-        target_col = config.get('target_col')
-        if target_col and target_col in y.columns:
-            y = y[target_col]
-        else:
-            y = y.iloc[:, 0]
-    elif isinstance(y, pd.DataFrame):
-        y = y.iloc[:, 0]
-
-    return X, pd.Series(y, name='target')
-
-
-def _load_kaggle(config: dict) -> tuple[pd.DataFrame, pd.Series]:
-    """Load a Kaggle dataset.  Requires *kaggle* CLI to be installed."""
-    import subprocess
-
-    name = config['name']
-    kaggle_dataset = config['kaggle_dataset']
-    target_col = config['target_col']
-
-    cache_dir = CACHE_DIR / name
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    csv_files = sorted(cache_dir.glob('*.csv'))
-    if not csv_files:
-        print(f"  Downloading {name} from Kaggle ({kaggle_dataset}) ...")
-        try:
-            subprocess.run(
-                ['kaggle', 'datasets', 'download', '-d', kaggle_dataset,
-                 '-p', str(cache_dir), '--unzip'],
-                check=True, capture_output=True, text=True,
-            )
-        except FileNotFoundError:
-            raise RuntimeError(
-                "kaggle CLI not found. Install with: pip install kaggle\n"
-                "Then configure API credentials: "
-                "https://github.com/Kaggle/kaggle-api#api-credentials"
-            ) from None
-        csv_files = sorted(cache_dir.glob('*.csv'))
-
-    if not csv_files:
-        raise FileNotFoundError(
-            f"No CSV files found for {name} after download"
-        )
-
-    # Use specified csv_file or the largest CSV available
-    csv_file = config.get('csv_file')
-    if csv_file:
-        df = pd.read_csv(cache_dir / csv_file)
-    else:
-        csv_files.sort(key=lambda f: f.stat().st_size, reverse=True)
-        df = pd.read_csv(csv_files[0])
-
-    # Strip whitespace from column names (common in Kaggle CSVs)
-    df.columns = df.columns.str.strip()
-    target_col = target_col.strip()
-
-    X = df.drop(columns=[target_col])
-    y = df[target_col]
-    return X, y
-
-
-def _load_dcc(config: dict) -> tuple[pd.DataFrame, pd.Series]:
-    """Load a dataset from DCC / Luis Torgo's regression collection."""
-    url = config['url']
-    name = config['name']
-
-    ext = '.tar.gz' if url.endswith('.tar.gz') else '.tgz'
-    cache_path = _ensure_cached(name, url, f"{name}{ext}")
-
-    extract_dir = CACHE_DIR / name / 'extracted'
-    if not extract_dir.exists():
-        extract_dir.mkdir(parents=True)
-        with tarfile.open(cache_path, 'r:gz') as tar:
-            tar.extractall(extract_dir)
-
-    # Collect all data / test files (skip metadata)
-    skip_suffixes = {'.names', '.domain', '.gz', '.tgz'}
-    skip_names = {'README', 'readme'}
-    all_files = [
-        f for f in extract_dir.rglob('*')
-        if f.is_file()
-        and f.suffix not in skip_suffixes
-        and f.name not in skip_names
-        and f.suffix in ('.data', '.test', '.csv', '')
-    ]
-
-    if not all_files:
-        raise FileNotFoundError(f"No data files found in {extract_dir}")
-
-    dfs: list[pd.DataFrame] = []
-    for data_file in all_files:
-        try:
-            df = pd.read_csv(data_file, sep=r'\s+', header=None, engine='python')
-            dfs.append(df)
-        except Exception:
-            try:
-                df = pd.read_csv(data_file, header=None)
-                dfs.append(df)
-            except Exception:
-                continue
-
-    if not dfs:
-        raise ValueError(f"Could not parse any data files for {name}")
-
-    df = pd.concat(dfs, ignore_index=True)
-
-    # Last column is always the target for DCC regression datasets
-    X = df.iloc[:, :-1]
-    y = df.iloc[:, -1]
-    X.columns = [f"feature_{i}" for i in range(X.shape[1])]
-    y.name = 'target'
-    return X, y
-
-
 def _load_keel(config: dict) -> tuple[pd.DataFrame, pd.Series]:
     """Load a dataset from the KEEL repository (.dat format inside .zip)."""
     url = config['url']
@@ -326,33 +199,23 @@ def _load_keel(config: dict) -> tuple[pd.DataFrame, pd.Series]:
 # TabRegSet-101 benchmark datasets
 # ---------------------------------------------------------------------------
 TABREGSET_DATASETS = [
-    # ---- UCI datasets (loaded via ucimlrepo, ID from URL path) ----
-    {'name': 'Abalone', 'source': 'uci', 'uci_id': 1,
+    # ---- UCI datasets converted to OpenML (no ucimlrepo dependency) ----
+    {'name': 'Abalone', 'source': 'openml', 'id': 183,
      'dedup_keys': ['abalone']},
-    {'name': 'Student_Performance', 'source': 'uci', 'uci_id': 320,
-     'target_col': 'G3'},
-    {'name': 'Infrared_Thermography_Temperature', 'source': 'uci',
-     'uci_id': 925},
-    {'name': 'Parkinsons_Telemonitoring', 'source': 'uci', 'uci_id': 189,
-     'target_col': 'total_UPDRS'},
-    {'name': 'Energy_Efficiency', 'source': 'uci', 'uci_id': 242,
-     'target_col': 'Y1',
+    {'name': 'Student_Performance', 'source': 'openml', 'id': 42352},
+    {'name': 'Infrared_Thermography_Temperature', 'source': 'openml',
+     'id': 46613},
+    {'name': 'Parkinsons_Telemonitoring', 'source': 'openml', 'id': 4531},
+    {'name': 'Energy_Efficiency', 'source': 'openml', 'id': 44960,
      'dedup_keys': ['energy-efficiency', 'energy_efficiency']},
-    {'name': 'QsarFishToxicity', 'source': 'uci', 'uci_id': 504},
-    {'name': 'concrete_compressive_strength', 'source': 'uci', 'uci_id': 165},
-    {'name': 'PRODUCTIVITY', 'source': 'uci', 'uci_id': 597,
-     'target_col': 'actual_productivity'},
-    {'name': 'CCPP', 'source': 'uci', 'uci_id': 294,
-     'target_col': 'PE'},
-    {'name': 'AIRFOIL', 'source': 'uci', 'uci_id': 291,
+    {'name': 'QsarFishToxicity', 'source': 'openml', 'id': 44970},
+    {'name': 'concrete_compressive_strength', 'source': 'openml', 'id': 44959},
+    {'name': 'PRODUCTIVITY', 'source': 'openml', 'id': 42989},
+    {'name': 'AIRFOIL', 'source': 'openml', 'id': 44957,
      'dedup_keys': ['airfoil_self_noise', 'airfoilselfnoise']},
-    {'name': 'TETOUAN', 'source': 'uci', 'uci_id': 849},
-    {'name': 'BIAS_CORRECTION', 'source': 'uci', 'uci_id': 514,
-     'target_col': 'Next_Tmax'},
-    {'name': 'APARTMENTS', 'source': 'uci', 'uci_id': 555},
-    {'name': 'NewsPopularity', 'source': 'uci', 'uci_id': 332,
-     'target_col': 'shares',
-     'dedup_keys': ['onlinenewspopularity', 'OnlineNewsPopularity']},
+    {'name': 'BIAS_CORRECTION', 'source': 'openml', 'id': 42897},
+    # NewsPopularity (id=42724) removed — already in OpenML suite 269
+    # CCPP/TETOUAN/APARTMENTS removed — ucimlrepo server unreachable
 
     # ---- PMLB datasets (TSV.gz from GitHub, target col = 'target') ----
     {'name': '1027_ESL', 'source': 'pmlb',
@@ -402,35 +265,28 @@ TABREGSET_DATASETS = [
     {'name': '218_house_8L', 'source': 'pmlb',
      'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/218_house_8L/218_house_8L.tsv.gz'},
 
-    # ---- Kaggle datasets (requires kaggle CLI + API key) ----
-    {'name': 'MedicalCost', 'source': 'kaggle',
-     'kaggle_dataset': 'mirichoi0218/insurance',
-     'target_col': 'charges'},
-    {'name': 'Vehicle', 'source': 'kaggle',
-     'kaggle_dataset': 'nehalbirla/vehicle-dataset-from-cardekho',
-     'target_col': 'selling_price'},
-    {'name': 'LifeExpectancy', 'source': 'kaggle',
-     'kaggle_dataset': 'kumarajarshi/life-expectancy-who',
-     'target_col': 'Life expectancy'},
-    {'name': 'BigMartSales', 'source': 'kaggle',
-     'kaggle_dataset': 'brijbhushannanda1979/bigmart-sales-data',
-     'target_col': 'Item_Outlet_Sales'},
-    {'name': 'VideoGameSales', 'source': 'kaggle',
-     'kaggle_dataset': 'gregorut/videogamesales',
-     'target_col': 'Global_Sales'},
+    # ---- Additional PMLB datasets (replacing Kaggle, zero-auth) ----
+    {'name': '574_house_16H', 'source': 'pmlb',
+     'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/574_house_16H/574_house_16H.tsv.gz'},
+    {'name': '560_bodyfat', 'source': 'pmlb',
+     'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/560_bodyfat/560_bodyfat.tsv.gz'},
+    {'name': '690_visualizing_galaxy', 'source': 'pmlb',
+     'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/690_visualizing_galaxy/690_visualizing_galaxy.tsv.gz'},
+    {'name': '210_cloud', 'source': 'pmlb',
+     'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/210_cloud/210_cloud.tsv.gz'},
+    {'name': '519_vinnie', 'source': 'pmlb',
+     'url': 'https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/519_vinnie/519_vinnie.tsv.gz'},
 
-    # ---- DCC / Luis Torgo regression datasets ----
-    {'name': 'CalHousing', 'source': 'dcc',
-     'url': 'https://www.dcc.fc.up.pt/~ltorgo/Regression/cal_housing.tgz',
-     'dedup_keys': ['californiahousing', 'california:housing', 'calhousing']},
-    {'name': 'Ailerons', 'source': 'dcc',
-     'url': 'https://www.dcc.fc.up.pt/~ltorgo/Regression/ailerons.tgz'},
-    {'name': 'DeltaElevators', 'source': 'dcc',
-     'url': 'https://www.dcc.fc.up.pt/~ltorgo/Regression/delta_elevators.tgz'},
-    {'name': 'Pole', 'source': 'dcc',
-     'url': 'https://www.dcc.fc.up.pt/~ltorgo/Regression/pol.tgz'},
-    {'name': 'Kinematics', 'source': 'dcc',
-     'url': 'https://www.dcc.fc.up.pt/~ltorgo/Regression/kinematics.tar.gz'},
+    # ---- Additional KEEL datasets (replacing Kaggle, zero-auth) ----
+    {'name': 'AutoMPG', 'source': 'keel',
+     'url': 'https://sci2s.ugr.es/keel/dataset/data/regression/autoMPG6.zip',
+     'dedup_keys': ['autompg', 'auto_mpg']},
+    {'name': 'Stock', 'source': 'keel',
+     'url': 'https://sci2s.ugr.es/keel/dataset/data/regression/stock.zip'},
+    {'name': 'Plastic', 'source': 'keel',
+     'url': 'https://sci2s.ugr.es/keel/dataset/data/regression/plastic.zip'},
+    {'name': 'Quake', 'source': 'keel',
+     'url': 'https://sci2s.ugr.es/keel/dataset/data/regression/quake.zip'},
 
     # ---- KEEL datasets ----
     {'name': 'Wizmir', 'source': 'keel',
@@ -495,7 +351,7 @@ SKLEARN_LOADERS = {
 def load_dataset(dataset_config: dict) -> tuple[pd.DataFrame, pd.Series]:
     """Load and preprocess a dataset from any supported source.
 
-    Supported sources: sklearn, openml, pmlb, uci, kaggle, dcc, keel.
+    Supported sources: sklearn, openml, pmlb, keel.
     """
     source = dataset_config.get('source', 'openml')
 
@@ -523,15 +379,6 @@ def load_dataset(dataset_config: dict) -> tuple[pd.DataFrame, pd.Series]:
 
     elif source == 'pmlb':
         X, y = _load_pmlb(dataset_config)
-
-    elif source == 'uci':
-        X, y = _load_uci(dataset_config)
-
-    elif source == 'kaggle':
-        X, y = _load_kaggle(dataset_config)
-
-    elif source == 'dcc':
-        X, y = _load_dcc(dataset_config)
 
     elif source == 'keel':
         X, y = _load_keel(dataset_config)
