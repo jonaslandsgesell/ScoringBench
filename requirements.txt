@@ -6,3 +6,4 @@ torch
 pytest
 pyarrow
 autorank
+openml

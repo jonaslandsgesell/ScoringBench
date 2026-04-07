@@ -19,9 +19,9 @@ class TabICLWrapper(ProbabilisticWrapper):
     and cv.py will run point metrics only.
     """
 
-    # Intended quantile grid for the histogram reconstruction
-    num_quantiles =200
-    _ALPHAS = np.linspace(0.01, 0.99, num_quantiles).tolist()
+    # Quantile levels and output grid resolution
+    _ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
+    _N_GRID = 200                                         # regular z-grid bins per sample
 
     def __init__(self, **kwargs):
         from tabicl import TabICLRegressor
@@ -54,29 +54,55 @@ class TabICLWrapper(ProbabilisticWrapper):
         if q.shape[1] != len(self._ALPHAS) and q.shape[0] == len(self._ALPHAS):
             q = q.T
 
+        # 1. Enforce monotonicity by sorting
+        q = np.sort(q, axis=1)
+
         n_samples = q.shape[0]
         alphas = np.array(self._ALPHAS, dtype=float)
+        # Extend with boundary CDF values (0 at left tail, 1 at right tail)
+        alphas_ext = np.concatenate([[0.0], alphas, [1.0]])
 
-        # Build per-sample bin edges: left tail + n_alphas quantiles + right tail
-        # Left / right tail width = neighboring inter-quantile distance
-        left_w  = np.maximum(q[:, 1]  - q[:, 0],  1e-6)   # (n_samples,)
-        right_w = np.maximum(q[:, -1] - q[:, -2], 1e-6)
-        bin_edges = np.concatenate(
-            [(q[:, 0] - left_w)[:, None], q, (q[:, -1] + right_w)[:, None]],
-            axis=1,
-        )  # (n_samples, n_alphas + 1) = (n_samples, n_bins + 1)
+        n_grid = self._N_GRID
+        all_bin_edges = np.empty((n_samples, n_grid + 1), dtype=np.float32)
+        all_probas    = np.empty((n_samples, n_grid),     dtype=np.float32)
 
-        # Mass per bin: left_tail mass = alphas[0], inter-quantile = diff(alphas),
-        # right_tail mass = 1 - alphas[-1]
-        masses = np.concatenate([[alphas[0]], np.diff(alphas), [1.0 - alphas[-1]]])
-        probas = np.broadcast_to(masses[None, :], (n_samples, len(masses))).copy()
+        for i in range(n_samples):
+            qi = q[i]
 
-        bin_midpoints = (bin_edges[:, :-1] + bin_edges[:, 1:]) / 2   # (n_samples, n_bins)
-        mean = np.sum(probas * bin_midpoints, axis=-1)                  # (n_samples,)
+            # Tail extension: use neighbouring inter-quantile gap
+            left_w  = max(qi[1]  - qi[0],  1e-6)
+            right_w = max(qi[-1] - qi[-2], 1e-6)
+            z_min = qi[0]  - left_w
+            z_max = qi[-1] + right_w
+
+            # 2. Regular per-sample z-grid
+            z_edges = np.linspace(z_min, z_max, n_grid + 1)
+
+            # Anchor quantiles with boundary values
+            q_ext = np.concatenate([[z_min], qi, [z_max]])
+
+            # 3. Interpolate CDF at bin edges
+            cdf_at_edges = np.interp(z_edges, q_ext, alphas_ext)
+
+            # 4. Density = dCDF/dz; clamp ≥ 0 and convert to masses
+            bin_widths = np.diff(z_edges)
+            masses = np.diff(cdf_at_edges)          # = density * dz
+            masses = np.maximum(masses, 0.0)        # 5. Clamp non-negative
+
+            # 6. Renormalize
+            total = masses.sum()
+            if total > 0:
+                masses /= total
+
+            all_bin_edges[i] = z_edges.astype(np.float32)
+            all_probas[i]    = masses.astype(np.float32)
+
+        bin_midpoints = (all_bin_edges[:, :-1] + all_bin_edges[:, 1:]) / 2
+        mean = (all_probas * bin_midpoints).sum(axis=-1)
 
         return DistributionPrediction(
-            probas=probas,
-            bin_edges=bin_edges,
+            probas=all_probas,
+            bin_edges=all_bin_edges,
             bin_midpoints=bin_midpoints,
             mean=mean,
         )

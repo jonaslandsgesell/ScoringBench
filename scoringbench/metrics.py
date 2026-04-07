@@ -1,6 +1,7 @@
 """Scoring rules and point metrics for tabular regression.
 
-All functions work on numpy arrays only — no torch dependency.
+All functions work on numpy arrays. PyTorch is used internally for GPU acceleration
+when available; falls back to CPU otherwise.
 
 Public API
 ----------
@@ -17,13 +18,14 @@ compute_scoring_rules(dist, y_true) -> dict
     energy scores, CRLS, wCRPS_left, wCRPS_right, wCRPS_center.
     dist is a DistributionPrediction from scoringbench.wrappers.
     bin_edges / bin_midpoints may be 1-D (shared grid) or 2-D (per-sample).
-    Uses PyTorch on GPU when available; falls back to NumPy otherwise.
+    Uses PyTorch on GPU when available; falls back to CPU otherwise.
 """
 
 import logging
 import time
 
 import numpy as np
+import torch
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from .wrappers import DistributionPrediction
@@ -67,8 +69,6 @@ def compute_scoring_rules(dist: DistributionPrediction, y_true: np.ndarray) -> d
                   wcrps_left, wcrps_right, wcrps_center,
                   energy_score_beta_{0.5,1.0,1.5,2.0}.
     """
-    import torch
-    
     probas     = dist.probas.astype(np.float32)
     bin_edges  = dist.bin_edges.astype(np.float32)
     bin_mids   = dist.bin_midpoints.astype(np.float32)
@@ -93,9 +93,14 @@ def compute_scoring_rules(dist: DistributionPrediction, y_true: np.ndarray) -> d
 # ---------------------------------------------------------------------------
 
 def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, shared):
-    """All scoring rules computed on GPU (or CPU) via PyTorch tensors."""
-    import torch
+    """All scoring rules computed on GPU (or CPU) via PyTorch tensors.
 
+    Note: `probas` are PMF values (probability mass per bin), i.e. for each
+    sample the entries satisfy ∑_k p_k = 1 and represent P(z ∈ bin_k).
+    To obtain a density at a bin midpoint divide by the bin width:
+    density_k = p_k / w_k. Integrating densities over the grid then
+    recovers 1: ∑_k density_k * w_k = 1.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     probas    = torch.as_tensor(probas_np,    dtype=torch.float32, device=device)
@@ -245,6 +250,37 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
     crls_bins  = target_cdf * (-torch.log(cdf_c)) + (1 - target_cdf) * (-torch.log1p(-cdf_c))
     crls       = (crls_bins * bw).sum(dim=-1).mean().item()
 
+    # ---- CDE Loss (Continuous Density Estimation Loss) ----
+    # From Izbicki and Lee (2016): "Nonparametric Conditional Density Estimation..."
+    # First derived 1980 https://www.jstor.org/stable/4615859 Empirical Choice of Histograms and Kernel Density Estimators Mats Rudemo
+    #
+    # General proper scoring rule for density comparison:
+    # L(f, g) = ∫∫ (f(z|x) - g(z|x))² dP(x) dz
+    #         = ∫∫ f² dP(x)dz - 2∫∫ f·g dP(x)dz + ∫∫ g² dP(x)dz
+    #
+    # For scoring rules, we drop constants independent of g:
+    #   L_CDE(f, g) = ∫∫ g² dP(x)dz - 2∫∫ f·g dP(x)dz
+    #
+    # With empirical target f (point mass at y):
+    #   ∫ g² dz  = ∫ [g(z)]² dz        (second moment of g over support)
+    #   ∫ f·g dz = g(y)                 (density of g evaluated at y)
+    #
+    # Discretized form (on grid with bin widths w_k and grid PMF p_k):
+    #   where g_density_k = p_k / w_k
+    #   ∫ g² dz  ≈  ∑_k (p_k/w_k)² · w_k = ∑_k p_k² / w_k
+    #   g(y)     ≈  p_ky / w_ky  (where y_bin = k_y finds bin containing y)
+    #
+    # Grid-stable form (converges as w_k → 0 uniformly):
+    #   L_CDE ≈ ∑_k p_k²/w_k − 2 p_ky/w_ky
+    term1 = (probas.pow(2) / bw.clamp(min=1e-10)).sum(dim=-1)  # ∫ g² dz
+    p_at_y = probas.gather(1, y_bin.unsqueeze(1)).squeeze(1)
+    if shared:
+        dz_at_y = bin_widths[y_bin]
+    else:
+        dz_at_y = bin_widths.gather(1, y_bin.unsqueeze(1)).squeeze(1)
+    term2 = 2.0 * p_at_y / dz_at_y.clamp(min=1e-10)           # 2·g(y)
+    cde_loss = (term1 - term2).mean().item()
+
     return {
         "crps":              crps,
         "log_score":         log_score,
@@ -255,6 +291,7 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
         "coverage_95":       cov_95,
         "interval_score_95": is_95,
         "crls":              crls,
+        "cde_loss":          cde_loss,
         "wcrps_left":        wcrps_left,
         "wcrps_right":       wcrps_right,
         "wcrps_center":      wcrps_center,

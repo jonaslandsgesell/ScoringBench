@@ -66,7 +66,7 @@ def run_fold(
                 "crps", "log_score", "sharpness",
                 "coverage_90", "interval_score_90",
                 "coverage_95", "interval_score_95",
-                "crls",
+                "crls", "cde_loss",
                 "wcrps_left", "wcrps_right", "wcrps_center",
                 *[f"energy_score_beta_{b}" for b in ENERGY_BETAS],
             ):
