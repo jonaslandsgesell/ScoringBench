@@ -7,3 +7,4 @@ pytest
 pyarrow
 autorank
 openml
+pingouin

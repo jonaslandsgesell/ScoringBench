@@ -352,4 +352,3 @@ def test_wcrps_exact_values_with_epsilon():
         f"expected {expected_wcrps_center:.6f}, got {res['wcrps_center']:.6f}, "
         f"error {abs(res['wcrps_center'] - expected_wcrps_center):.6f}, epsilon {epsilon}"
     )
-

@@ -2,28 +2,26 @@
 
 Public API
 ----------
-save_fold_json(fold_data, output_dir, dataset_name, fold_idx)
+save_fold_parquet(fold_data, output_dir, dataset_name, fold_idx)
     Persist raw fold results as JSON.
 
 build_results_row(dataset_config, X, cv_results) -> list[dict]
-    Flatten CV results into a list of per-fold CSV rows (one per fold).
-
-save_detailed_csv(rows, output_dir)
-    Write / append benchmark_results_detailed.csv.
-
-save_aggregated_csv(detailed_df, output_dir)
-    Compute per-dataset / per-model statistics and write
-    benchmark_results_aggregated.csv.
+    Flatten CV results into a list of per-fold rows (one per fold).
 """
 
 import json
 import os
+import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
+from filelock import FileLock, Timeout as FileLockTimeout
 
 from .utils import make_json_serializable
+
+# How long (seconds) to wait for a per-parquet lock before giving up.
+# SLURM jobs on the same model can queue briefly; 10 min is generous.
+_LOCK_TIMEOUT = 600
 
 
 # Detect parquet engine availability
@@ -64,14 +62,8 @@ def _atomic_parquet_write(df: pd.DataFrame, dest: Path, engine: str | None) -> N
 # Fold-level JSON persistence
 # ---------------------------------------------------------------------------
 
-def save_fold_json(fold_data: dict, output_dir: Path, dataset_name: str, fold_idx: int) -> None:
-    """Write raw fold results to per-model layout:
-
-    <output_dir>/<model_name>/<dataset_name>/fold_<N>/results.json
-
-    `fold_data` is expected to be a dict mapping model_name -> metrics (same
-    shape as produced by `run_fold`). We iterate models present in the dict
-    and persist each model's metrics independently.
+def save_fold_parquet(fold_data: dict, output_dir: Path, dataset_name: str, fold_idx: int) -> None:
+    """Write raw fold results as per-model parquet files.
     """
     ds_safe = dataset_name.replace(" ", "_")
 
@@ -98,25 +90,50 @@ def save_fold_json(fold_data: dict, output_dir: Path, dataset_name: str, fold_id
         row_df = pd.DataFrame([payload])
 
         dest_parquet = output_dir / f"{model_name}.parquet"
+        lock_path    = dest_parquet.with_suffix(".parquet.lock")
 
-        # Persist/update per-model parquet (no legacy JSON fallback)
+        # Serialise concurrent writes from parallel SLURM array jobs.
+        # The lock covers the full read-modify-write so no two processes
+        # can interleave their updates to the same parquet file.
         try:
-            if dest_parquet.exists():
-                existing = pd.read_parquet(dest_parquet, engine=parquet_engine)
-                # Drop any existing row for same dataset+fold to allow re-run/upserts
-                mask = ~(
-                    (existing.get("dataset") == ds_safe) &
-                    (existing.get("fold") == fold_idx_val)
-                )
-                existing_clean = existing[mask]
-                combined = pd.concat([existing_clean, row_df], ignore_index=True)
-            else:
-                combined = row_df
+            with FileLock(str(lock_path), timeout=_LOCK_TIMEOUT):
+                # Re-read INSIDE the lock: a concurrent job may have appended
+                # rows while this job was computing its fold result.
+                if dest_parquet.exists():
+                    existing = pd.read_parquet(dest_parquet, engine=parquet_engine)
+                    # If this (dataset, fold) was already committed (e.g. by a
+                    # concurrent job), keep the existing row — never overwrite a
+                    # newer result with a stale one.
+                    already_written = (
+                        (existing.get("dataset") == ds_safe) &
+                        (existing.get("fold")    == fold_idx_val)
+                    ).any()
+                    if already_written:
+                        continue
+                    combined = pd.concat([existing, row_df], ignore_index=True)
+                else:
+                    combined = row_df
 
-            _atomic_parquet_write(combined, dest_parquet, parquet_engine)
-        except Exception:
-            # Propagate errors so issues are visible (no JSON fallback)
-            raise
+                _atomic_parquet_write(combined, dest_parquet, parquet_engine)
+
+        except FileLockTimeout:
+            raise RuntimeError(
+                f"Could not acquire lock for {dest_parquet} within "
+                f"{_LOCK_TIMEOUT}s. Another job may be stuck."
+            )
+        finally:
+            # If a stale lock file remains (older than _LOCK_TIMEOUT), remove it.
+            # This helps recover from jobs that died without releasing the lock.
+            try:
+                if lock_path.exists():
+                    age = time.time() - lock_path.stat().st_mtime
+                    if age > _LOCK_TIMEOUT:
+                        try:
+                            lock_path.unlink()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -152,48 +169,3 @@ def build_results_rows(
             rows.append(row)
 
     return rows
-
-
-# ---------------------------------------------------------------------------
-# CSV saving
-# ---------------------------------------------------------------------------
-
-def save_detailed_csv(rows: list[dict], output_dir: Path) -> pd.DataFrame:
-    """Upsert rows into benchmark_results_detailed.csv (create if absent).
-
-    When resuming a benchmark run the caller passes all folds for a dataset
-    (both previously-completed and newly-run ones).  Without deduplication
-    this would accumulate duplicate rows across resume runs and corrupt
-    aggregated statistics.  We therefore drop duplicates on the identity
-    key (dataset, model, fold), keeping the last occurrence so that a
-    re-computed row always overwrites the stale one.
-    """
-    dest = output_dir / "benchmark_results_detailed.csv"
-    new_df = pd.DataFrame(rows)
-    if dest.exists():
-        existing = pd.read_csv(dest)
-        combined = pd.concat([existing, new_df], ignore_index=True)
-        dedup_cols = [c for c in ("dataset", "model", "fold") if c in combined.columns]
-        if dedup_cols:
-            combined = combined.drop_duplicates(subset=dedup_cols, keep="last")
-    else:
-        combined = new_df
-    combined.to_csv(dest, index=False)
-    return combined
-
-
-def save_aggregated_csv(detailed_df: pd.DataFrame, output_dir: Path) -> None:
-    """Compute mean ± std per (dataset, model) and write aggregated CSV."""
-    if detailed_df.empty:
-        return
-
-    numeric_cols = detailed_df.select_dtypes(include=[np.number]).columns.tolist()
-    # Exclude index-like columns
-    numeric_cols = [c for c in numeric_cols if c not in ("fold",)]
-
-    agg = (
-        detailed_df.groupby(["dataset", "model"])[numeric_cols]
-        .agg(["mean", "std"])
-        .round(4)
-    )
-    agg.to_csv(output_dir / "benchmark_results_aggregated.csv")

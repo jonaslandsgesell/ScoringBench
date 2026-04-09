@@ -3,8 +3,8 @@
 Leaderboard (Fold-Level Version) - Statistical Ranking
 Two ranking approaches:
   1. rank_with_autorank   — Autorank-based statistical comparison with CD diagrams.
-  2. rank_with_standardized_scores — Magnitude-based: robust z-score (median/MAD)
-     standardization per dataset, then average across datasets.
+  2. rank_with_hedges_g_controlled — Effect size ranking: Hedges' g per dataset,
+     controlled for individual dataset difficulty/variance.
 """
 import argparse
 import os
@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
+import pingouin as pg
 import importlib.util
 import io
 import sys
@@ -89,6 +90,33 @@ def load_metric_matrix(root, metric):
     return pivot.dropna(how='any')
 
 
+def load_metric_long_format(root, metric):
+    """
+    Load metric data in long format (rows=fold-level for each dataset-model pair).
+    Returns DataFrame with columns: ['dataset', 'model', 'fold', 'score']
+    """
+    data = []
+    for entry in os.listdir(root):
+        entry_path = os.path.join(root, entry)
+        if not os.path.isfile(entry_path) or not entry.endswith('.parquet'):
+            continue
+        model = entry[:-8]
+        try:
+            df = pd.read_parquet(entry_path)
+            if df.empty or metric not in df.columns: continue
+            for _, row in df.iterrows():
+                data.append({
+                    "dataset": row.get('dataset', 'unknown'),
+                    "fold": row.get('fold', 0),
+                    "model": model,
+                    "score": float(row[metric]),
+                })
+        except Exception: continue
+
+    if not data: return None
+    return pd.DataFrame(data)
+
+
 # ---------------------------------------------------------------------------
 # Ranking approach 1: Autorank
 # ---------------------------------------------------------------------------
@@ -115,63 +143,67 @@ def rank_with_autorank(pivot, metric, order, hib, alpha):
 
 
 # ---------------------------------------------------------------------------
-# Ranking approach 2: Robust standardized scores (median / MAD)
+# Ranking approach 2: Hedges' g effect size (controlled for dataset variance)
 # ---------------------------------------------------------------------------
 
-def rank_with_standardized_scores(pivot, hib):
+def rank_with_hedges_g_controlled(df_long, hib):
     """
-    Magnitude-based ranking using robust z-scores per dataset.
+    Effect size ranking using Hedges' g per dataset.
+    Compares each model's performance on a dataset to the average of all other models.
+    This controls for difficulty: a 1.0 improvement on a tight dataset is worth more
+    than on a noisy one.
 
-        Steps:
-            1. pivot already contains (dataset, model, avg_score) — fold aggregation done upstream.
-            2. Per dataset, compute median and MAD across models. IMPORTANT: aggregate correlated
-                 observations first to avoid pseudoreplication (e.g. group correlated samples by
-                 block or fold and compute block means before computing dataset-level statistics).
-                 Failure to account for correlation leads to underestimated variance and overly
-                 narrow confidence intervals (see Lazic 2010 https://bmcneurosci.biomedcentral.com/articles/10.1186/1471-2202-11-5).
-            3. Standardize each model's score: z = (score - dataset_median) / (dataset_MAD + eps).
-            4. Average standardized scores across datasets.
-            5. Rank: if higher_is_better, higher avg_z → rank 1; else lower avg_z → rank 1.
+    Args:
+        df_long: DataFrame with columns ['dataset', 'model', 'fold', 'score']
+        hib: bool (Higher Is Better)
 
-    Returns a DataFrame with columns: rank, model, avg_z, median_z, std_z, n_datasets.
+    Returns a DataFrame with columns: rank, model, avg_g, std_g, n_datasets.
     """
-    eps = 1e-8  # prevent division by zero when MAD == 0
+    models = df_long['model'].unique()
+    datasets = df_long['dataset'].unique()
+    model_summaries = []
 
-    # Step 2 & 3: per-dataset robust standardization
-    dataset_medians = pivot.median(axis=1)       # shape: (n_datasets,)
-    dataset_mads = pivot.apply(                   # shape: (n_datasets,)
-        lambda row: np.median(np.abs(row - np.median(row))), axis=1
-    )
+    for model in models:
+        dataset_gs = []
 
-    z_scores = pivot.subtract(dataset_medians, axis=0).divide(
-        dataset_mads + eps, axis=0
-    )  # shape: (n_datasets, n_models)
+        for dataset in datasets:
+            # 1. Isolate the target model's fold performance
+            target_scores = df_long[(df_long['dataset'] == dataset) & 
+                                    (df_long['model'] == model)]['score']
+            
+            # 2. Isolate all other models (the 'Reference' for this dataset)
+            reference_scores = df_long[(df_long['dataset'] == dataset) & 
+                                       (df_long['model'] != model)]['score']
+            
+            if len(target_scores) < 2 or len(reference_scores) < 2:
+                continue
 
-    # Step 4: average standardized scores across datasets
-    avg_z = z_scores.mean(axis=0)
-    std_z = z_scores.std(axis=0)
-    median_z = z_scores.median(axis=0)
-    n_datasets = z_scores.shape[0]
+            # 3. Calculate Hedges' g (Effect size relative to dataset variance)
+            g = pg.compute_effsize(target_scores, reference_scores, eftype='hedges')
+            dataset_gs.append(g)
 
-    df = pd.DataFrame({
-        'model': avg_z.index,
-        'avg_z': avg_z.values,
-        'median_z': median_z.values,
-        'std_z': std_z.values,
-        'n_datasets': n_datasets,
-    })
+        if dataset_gs:
+            model_summaries.append({
+                'model': model,
+                'avg_g': np.mean(dataset_gs),
+                'std_g': np.std(dataset_gs),
+                'n_datasets': len(dataset_gs)
+            })
 
-    # Step 5: rank — higher avg_z is better when hib=True, lower when hib=False
-    df = df.sort_values('avg_z', ascending=not hib).reset_index(drop=True)
-    df.insert(0, 'rank', df.index + 1)
-    return df
+    # Create Ranking
+    results = pd.DataFrame(model_summaries)
+    # If hib=True, higher g is better. If hib=False, lower g (more negative) is better.
+    results = results.sort_values('avg_g', ascending=not hib).reset_index(drop=True)
+    results.insert(0, 'rank', results.index + 1)
+    
+    return results
 
 
 # ---------------------------------------------------------------------------
 # JSON output
 # ---------------------------------------------------------------------------
 
-def _rank_correlation(autorank_rankedDF, std_rankedDF):
+def _rank_correlation(autorank_rankedDF, hedges_rankedDF):
     """
     Compute Pearson correlation between the rank vectors of both methods.
     Models are aligned by name; only models present in both are used.
@@ -179,22 +211,22 @@ def _rank_correlation(autorank_rankedDF, std_rankedDF):
     """
     try:
         ar = autorank_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_autorank'})
-        st = std_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_std'})
-        merged = ar.merge(st, on='model')
+        hg = hedges_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_hedges_g'})
+        merged = ar.merge(hg, on='model')
         n = len(merged)
         if n < 3:
             return None, None, n
-        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_std'])
+        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_hedges_g'])
         return float(r), float(p), n
     except Exception:
         return None, None, 0
 
 
-def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, std_rankedDF, order, hib):
+def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hedges_rankedDF, order, hib):
     """
     Write a single JSON file with two top-level sections:
       - "autorank": statistical results from autorank
-      - "standardized_scores": magnitude-based robust z-score results
+      - "hedges_g": effect size ranking with Hedges' g per dataset
     Also includes Pearson correlation between both ranking methods.
     """
 
@@ -228,27 +260,27 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, std
             "magnitude_above": row.get('magnitude_above', 'unknown'),
         })
 
-    # --- standardized scores section ---
-    std_section = {
+    # --- Hedges' g section ---
+    hedges_section = {
         "description": (
-            "Robust z-score standardization per dataset (median/MAD), "
-            "averaged across datasets. Lower avg_z = better when higher_is_better=False."
+            "Effect size ranking using Hedges' g per dataset. "
+            "Compares each model to the average of other models on each dataset. "
+            "Controls for dataset difficulty/variance: larger improvement on tight datasets counts more."
         ),
         "models": [],
     }
-    for _, row in std_rankedDF.iterrows():
-        std_section["models"].append({
+    for _, row in hedges_rankedDF.iterrows():
+        hedges_section["models"].append({
             "rank": int(row['rank']),
             "name": row['model'],
-            "avg_z": float(row['avg_z']),
-            "median_z": float(row['median_z']),
-            "std_z": float(row['std_z']),
+            "avg_g": float(row['avg_g']),
+            "std_g": float(row['std_g']),
             "n_datasets": int(row['n_datasets']),
         })
 
-    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, std_rankedDF)
+    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, hedges_rankedDF)
 
-    n_datasets = int(std_rankedDF['n_datasets'].iloc[0]) if not std_rankedDF.empty else None
+    n_datasets = int(hedges_rankedDF['n_datasets'].iloc[0]) if not hedges_rankedDF.empty else None
 
     cd_data = {
         "metric": metric,
@@ -257,13 +289,13 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, std
         "n_datasets": n_datasets,
         "rank_correlation": {
             "method": "pearson",
-            "between": ["rank_autorank", "rank_standardized_scores"],
+            "between": ["rank_autorank", "rank_hedges_g"],
             "r": pearson_r,
             "pvalue": pearson_p,
             "n_models": n_models_corr,
         },
         "autorank": autorank_section,
-        "standardized_scores": std_section,
+        "hedges_g": hedges_section,
     }
 
     json_path = os.path.join(out_dir, f"cd_data_{metric}.json")
@@ -366,19 +398,32 @@ def main():
             print(f"Skipping {metric} (autorank error): {e}")
             continue
 
-        # --- Approach 2: Robust standardized scores ---
+        # --- Approach 2: Hedges' g effect size ---
         try:
-            std_rankedDF = rank_with_standardized_scores(pivot, hib)
+            df_long = load_metric_long_format(root, metric)
+            if df_long is None:
+                print(f"Warning: could not load long format data for {metric}")
+                hedges_rankedDF = pd.DataFrame(columns=["rank", "model", "avg_g", "std_g", "n_datasets"])
+            else:
+                # Apply transformation if needed (for coverage metrics)
+                if is_coverage:
+                    try:
+                        target = int(metric.split("_")[1]) / 100.0
+                    except Exception:
+                        target = 0.5
+                    df_long['score'] = (df_long['score'] - target).abs()
+                
+                hedges_rankedDF = rank_with_hedges_g_controlled(df_long, hib)
 
-            print(f"\n--- {metric} (Standardized Scores, median/MAD) ---")
-            print(std_rankedDF[["rank", "model", "avg_z", "median_z", "std_z"]].to_string(index=False))
+                print(f"\n--- {metric} (Hedges' g, Effect Size) ---")
+                print(hedges_rankedDF[["rank", "model", "avg_g", "std_g"]].to_string(index=False))
 
         except Exception as e:
-            print(f"Warning: standardized score ranking failed for {metric}: {e}")
-            std_rankedDF = pd.DataFrame(columns=["rank", "model", "avg_z", "median_z", "std_z", "n_datasets"])
+            print(f"Warning: Hedges' g ranking failed for {metric}: {e}")
+            hedges_rankedDF = pd.DataFrame(columns=["rank", "model", "avg_g", "std_g", "n_datasets"])
 
         # --- Save merged JSON ---
-        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, std_rankedDF, order, hib)
+        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hedges_rankedDF, order, hib)
 
 
 if __name__ == "__main__":

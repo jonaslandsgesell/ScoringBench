@@ -21,9 +21,7 @@ from .datasets import load_dataset
 from .cv import run_cv, run_fold
 from .results import (
     build_results_rows,
-    save_detailed_csv,
-    save_aggregated_csv,
-    save_fold_json,
+    save_fold_parquet,
 )
 
 
@@ -171,7 +169,7 @@ def run_benchmark(
                         fold_result[k] = v
 
                     fold_result["fold"] = global_fold
-                    save_fold_json(new_fold_data, output_dir, name, global_fold)
+                    save_fold_parquet(new_fold_data, output_dir, name, global_fold)
                     cv_results.append(fold_result)
 
             cv_results.sort(key=lambda d: d["fold"])
@@ -180,26 +178,15 @@ def run_benchmark(
             rows = build_results_rows(ds_config, X, cv_results)
             all_rows.extend(rows)
 
-            # Write / update CSVs after every dataset so partial runs are useful
-            detailed_df = save_detailed_csv(rows, output_dir)
-            save_aggregated_csv(
-                pd.read_csv(output_dir / "benchmark_results_detailed.csv"),
-                output_dir,
-            )
-
             print(f"\n✓ {name} done")
 
         except Exception:
             print(f"\n✗ {name} FAILED")
             traceback.print_exc()
 
-    # Final consolidated save
+    # Return accumulated results
     final_df = pd.DataFrame(all_rows)
     if not final_df.empty:
-        save_aggregated_csv(
-            pd.read_csv(output_dir / "benchmark_results_detailed.csv"),
-            output_dir,
-        )
         print(f"\n{sep}")
         print(f"Benchmark complete. Results in: {output_dir}")
         print(sep)

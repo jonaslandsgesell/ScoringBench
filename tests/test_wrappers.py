@@ -49,7 +49,7 @@ def test_tabicl_wrapper_predict_distribution_conversion():
     assert isinstance(dist, DistributionPrediction)
     assert dist.probas.shape[0] == 2
     # bin_edges may be shared (1-D) or per-sample (2-D)
-    expected_edges = len(w._ALPHAS) + 2
+    expected_edges = w._N_GRID + 1
     if dist.bin_edges.ndim == 1:
         assert dist.bin_edges.shape[0] == expected_edges
     else:

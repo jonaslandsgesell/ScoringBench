@@ -21,7 +21,7 @@ class TabICLWrapper(ProbabilisticWrapper):
 
     # Quantile levels and output grid resolution
     _ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
-    _N_GRID = 200                                         # regular z-grid bins per sample
+    _N_GRID = len(_ALPHAS)                                         # regular z-grid bins per sample
 
     def __init__(self, **kwargs):
         from tabicl import TabICLRegressor

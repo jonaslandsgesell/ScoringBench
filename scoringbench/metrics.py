@@ -127,11 +127,6 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
             bin_edges[:, 1:].contiguous(), y.unsqueeze(1)
         ).squeeze(1).clamp(0, n_bins - 1)
 
-    # ---- CRPS ----
-    indicators = (mids >= y[:, None]).float()
-    sq_err_bw  = (cdf - indicators).pow(2) * bw           # (n_samples, n_bins)
-    crps       = sq_err_bw.sum(dim=-1).mean().item()
-
     # ---- Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17) ----
     # qwCRPS_v(F, y) = 2 ∫₀¹ ρ_α(y, q_α) v(α) dα
     # where ρ_α(y, q) = (I[y ≤ q] − α)(q − y) is the pinball/check function.
@@ -210,35 +205,85 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
     is_90, cov_90 = _interval(0.10)
     is_95, cov_95 = _interval(0.05)
 
-    # ---- Energy scores (all betas; D_base built once for shared) ----
-    dist_to_y = (mids - y[:, None]).abs()                # (n_samples, n_bins)
 
-    if shared:
-        m      = bin_mids
-        D_base = (m[:, None] - m[None, :]).abs()         # (n_bins, n_bins)
 
-    energy_scores = []
-    for beta in ENERGY_BETAS:
-        powered_d = dist_to_y if beta == 1.0 else dist_to_y.pow(beta)
-        term1 = (probas * powered_d).sum(dim=-1)
+    def compute_energy_score_histogram_corrected(
+        probas: torch.Tensor, 
+        bin_mids: torch.Tensor, 
+        bin_widths: torch.Tensor, 
+        y: torch.Tensor, 
+        betas: list = [0.2, 0.5, 1.0, 1.5, 2.0]
+    ) -> dict:
+        """
+        Computes the Energy Score with exact uniform interval-correction.
+        At beta=1.0, this mathematically equals the exact continuous CRPS.
+        """
+        device = probas.device
+        n_samples, n_bins = probas.shape
+        shared = (bin_mids.ndim == 1)
+        
+        mids_ext = bin_mids[None, :] if shared else bin_mids
+        widths_ext = bin_widths[None, :] if shared else bin_widths
+        
+        # Define bin edges for the exact integral
+        left_edges = mids_ext - widths_ext / 2.0
+        right_edges = mids_ext + widths_ext / 2.0
+        
+        # Distance from edges to target y
+        u_l = left_edges - y[:, None]
+        u_r = right_edges - y[:, None]
 
-        if shared:
-            D     = D_base if beta == 1.0 else D_base.pow(beta)
-            term2 = 0.5 * torch.einsum("si,ij,sj->s", probas, D, probas)
-        else:
-            # Process in chunks to avoid OOM for large datasets
-            chunk = 256
-            parts = []
-            for s in range(0, n_samples, chunk):
-                e  = min(s + chunk, n_samples)
-                mi = bin_mids[s:e]                       # (c, n_bins)
-                D  = (mi.unsqueeze(2) - mi.unsqueeze(1)).abs()
+        results = {}
+
+        for beta in betas:
+            # ---- Term 1: E|X - y|^beta ----
+            # Exact integral for intra-bin uniform distribution.
+            # When a bin has zero width (degenerate bin), both the numerator and
+            # denominator are 0 (0/0 → NaN).  We clamp the denominator so that
+            # 0-width bins contribute 0 to Term 1, which is the correct limit.
+            numerator = u_r * u_r.abs().pow(beta) - u_l * u_l.abs().pow(beta)
+            expected_d = numerator / (widths_ext.clamp(min=1e-10) * (beta + 1.0))
+            term1 = (probas * expected_d).sum(dim=-1)
+
+            # ---- Term 2: 0.5 * E|X - X'|^beta ----
+            if shared:
+                D = (bin_mids[:, None] - bin_mids[None, :]).abs()
                 if beta != 1.0:
                     D = D.pow(beta)
-                parts.append(0.5 * torch.einsum("ci,cij,cj->c", probas[s:e], D, probas[s:e]))
-            term2 = torch.cat(parts)
+                
+                # Diagonal Correction (The Histogram Spirit Fix)
+                diag_corr = (2.0 * bin_widths.pow(beta)) / ((beta + 1.0) * (beta + 2.0))
+                D.diagonal().copy_(diag_corr)
+                
+                term2 = 0.5 * torch.einsum("si,ij,sj->s", probas, D, probas)
+            else:
+                chunk_size = 256
+                term2_parts = []
+                for i in range(0, n_samples, chunk_size):
+                    end = min(i + chunk_size, n_samples)
+                    p_c = probas[i:end]      
+                    m_c = bin_mids[i:end]    
+                    w_c = bin_widths[i:end]  
+                    
+                    Dc = (m_c.unsqueeze(2) - m_c.unsqueeze(1)).abs()
+                    if beta != 1.0:
+                        Dc = Dc.pow(beta)
+                    
+                    d_corr = (2.0 * w_c.pow(beta)) / ((beta + 1.0) * (beta + 2.0))
+                    idx = torch.arange(n_bins, device=device)
+                    Dc[:, idx, idx] = d_corr
+                    
+                    term2_parts.append(0.5 * torch.einsum("ci,cij,cj->c", p_c, Dc, p_c))
+                term2 = torch.cat(term2_parts)
 
-        energy_scores.append((term1 - term2).mean().item())
+            # Average over samples
+            results[f"energy_score_beta_{beta}"] = (term1 - term2).mean().item()
+
+        return results
+ 
+    energy_scores = []
+    for beta in ENERGY_BETAS:
+        energy_scores.append(compute_energy_score_histogram_corrected(probas, bin_mids, bin_widths, y, betas=[beta])[f"energy_score_beta_{beta}"])
 
     # ---- CRLS (Continuous Ranked Logarithmic Score) ----
     # = -sum_k w_k * [I(k>=target)*log(CDF_k) + I(k<target)*log(1-CDF_k)]
@@ -249,6 +294,8 @@ def _compute_scoring_rules_torch(probas_np, bin_edges_np, bin_mids_np, y_np, sha
     cdf_c      = cdf.clamp(eps, 1 - eps)
     crls_bins  = target_cdf * (-torch.log(cdf_c)) + (1 - target_cdf) * (-torch.log1p(-cdf_c))
     crls       = (crls_bins * bw).sum(dim=-1).mean().item()
+
+    crps = compute_energy_score_histogram_corrected(probas, bin_mids, bin_widths, y, betas=[1.0])[f"energy_score_beta_{1.0}"]
 
     # ---- CDE Loss (Continuous Density Estimation Loss) ----
     # From Izbicki and Lee (2016): "Nonparametric Conditional Density Estimation..."

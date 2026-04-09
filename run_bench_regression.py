@@ -240,7 +240,25 @@ MODELS = {
         extra_regressor_kwargs={"average_before_softmax": True},
         beta="is_90",
     ),
-    "tabicl": lambda: TabICLWrapper(),
+    "finetune_realtabpfnv2_5_cde": lambda: FinetuneTabPFNWrapper(
+        device="cuda",
+        epochs=N_EPOCHS,
+        learning_rate=1e-5,
+        weight_decay=0.1,
+        crps_loss_weight=1.0,
+        mse_loss_weight=0.0,
+        ce_loss_weight=0.0,
+        n_finetune_ctx_plus_query_samples=20_000,
+        n_estimators_finetune=1,
+        n_estimators_validation=8,
+        n_estimators_final_inference=8,
+        early_stopping=True,
+        early_stopping_patience=20,
+        finetune_ctx_query_split_ratio=0.4,
+        extra_regressor_kwargs={"average_before_softmax": True},
+        beta="cde",
+    ),
+    "tabiclv2": lambda: TabICLWrapper(),
     "xgb_vector": lambda: XGBVectorWrapper(n_bins=50, num_boost_round=100),
     "xgb_vector_quantile": lambda: XGBQuantileVectorWrapper(n_bins=50, num_boost_round=100),
     # "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
@@ -248,11 +266,11 @@ MODELS = {
     #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
     #     n_quantiles=50,
     # ),
-    # # "pytabkit_realmlp_hpo_cv_2_new": lambda: PytabkitRealMLPHPOWrapper(
+    # # "pytabkit_realmlp_hpo_cv_8_new": lambda: PytabkitRealMLPHPOWrapper(
     # #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
     # #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
     # #     n_quantiles=50,
-    # #     n_cv=2,
+    # #     n_cv=8,
     # #     hpo_space_name='tabarena-new',
     # #     use_caruana_ensembling=True,
     # # ),
@@ -278,6 +296,11 @@ def parse_args():
     p.add_argument("--sample_size",   type=int, default=cfg.SAMPLE_SIZE)
     p.add_argument("--n_repeats_cv",  type=int, default=cfg.N_REPEATS_CV,
                    help="Number of repeated CV rounds (each uses a fresh subsample)")
+    p.add_argument(
+        "--dataset_index", type=int, default=None,
+        help="0-based index into DATASETS_CONFIG. If set, only that one dataset "
+             "is benchmarked (for SLURM array jobs). If omitted, all datasets run.",
+    )
     return p.parse_args()
 
 
@@ -297,8 +320,19 @@ if __name__ == "__main__":
         print(f"Resuming into existing output directory: {output_dir}")
         print("Completed (dataset, fold) pairs will be skipped.")
 
+    if args.dataset_index is not None:
+        if args.dataset_index < 0 or args.dataset_index >= len(DATASETS_CONFIG):
+            print(f"Error: --dataset_index {args.dataset_index} is out of range "
+                  f"(0..{len(DATASETS_CONFIG) - 1} for {len(DATASETS_CONFIG)} datasets).")
+            sys.exit(1)
+        datasets_to_run = [DATASETS_CONFIG[args.dataset_index]]
+        print(f"Running single dataset #{args.dataset_index}: "
+              f"{datasets_to_run[0]['name']}")
+    else:
+        datasets_to_run = DATASETS_CONFIG
+
     run_benchmark(
-        datasets_config=DATASETS_CONFIG,
+        datasets_config=datasets_to_run,
         model_factories=MODELS,
         output_dir=output_dir,
         n_folds=n_folds,
