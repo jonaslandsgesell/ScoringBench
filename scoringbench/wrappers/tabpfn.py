@@ -23,11 +23,13 @@ class TabPFNWrapper(ProbabilisticWrapper):
     bar-distribution output (logits + borders) via output_type='full'.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, device=None, **kwargs):
         import torch
         from tabpfn import TabPFNRegressor
-        self._torch = torch
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
+        kwargs.pop('device', None)
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._device = device
         self._model = TabPFNRegressor(device=self._device, **kwargs)
 
     def fit(self, X, y) -> "TabPFNWrapper":
@@ -38,7 +40,7 @@ class TabPFNWrapper(ProbabilisticWrapper):
         return np.asarray(self._model.predict(X))
 
     def predict_distribution(self, X) -> DistributionPrediction:
-        torch = self._torch
+        import torch
         with torch.no_grad():
             pred_full = self._model.predict(X, output_type="full")
 
@@ -173,7 +175,6 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
     ):
         import torch
         from tabpfn.finetuning.finetuned_regressor import FinetunedTabPFNRegressor
-        self._torch = torch
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self._device = device
@@ -220,7 +221,7 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         return np.asarray(self._model.predict(X))
 
     def predict_distribution(self, X) -> DistributionPrediction:
-        torch = self._torch
+        import torch
         with torch.no_grad():
             pred_full = self._model.predict(X, output_type="full")
 
@@ -228,7 +229,7 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         if not isinstance(logits, torch.Tensor):
             logits = torch.as_tensor(logits, device=self._device)
         else:
-            logits = logits.to(self._device)        
+            logits = logits.to(self._device)
         criterion = pred_full["criterion"]
         bin_edges = criterion.borders.cpu().numpy()             # (n_bins+1,)
         bin_midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2   # (n_bins,)

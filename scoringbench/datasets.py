@@ -444,99 +444,116 @@ TALENT_OPENML_REGRESSION_DATASETS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Build final DATASETS_CONFIG
+# Lazy initialization: DATASETS_CONFIG is built only when first accessed
 # ---------------------------------------------------------------------------
-# Start with OpenML suite datasets
-DATASETS_CONFIG = generate_datasets_config_from_openml_suites(
-    suite_ids=[297, 299, 269]
-)
 
-# Merge TabRegSet-101 datasets, skipping duplicates
-_existing_names = {_normalize_name(d['name']) for d in DATASETS_CONFIG}
-_added = 0
-_skipped = []
-_added_names = []
-openml_datasets=TABREGSET_DATASETS+TALENT_OPENML_REGRESSION_DATASETS
-for _ds in openml_datasets:
-    _dedup_keys = _ds.get('dedup_keys')
-    if not _is_duplicate(_ds['name'], _existing_names, _dedup_keys, verbose=True):
-        _abbr = ''.join(
-            [w[0] for w in _ds['name'].split('_') if w]
-        ).upper()[:3]
-        _ds_config = {**_ds, 'abbr': _abbr}
-        _ds_config.pop('dedup_keys', None)
-        DATASETS_CONFIG.append(_ds_config)
-        _existing_names.add(_normalize_name(_ds['name']))
-        _added_names.append(_ds['name'])
-        _added += 1
-    else:
-        _skipped.append(_ds['name'])
+# Global cache for DATASETS_CONFIG (built lazily on first access)
+_DATASETS_CONFIG_CACHE = None
+_DATASETS_CONFIG_INITIALIZED = False
 
-print(f"\nAdded {_added} openml datasets "
-      f"(skipped {len(openml_datasets) - _added} duplicates)")
-if _skipped:
-    print(f"Skipped datasets: {', '.join(_skipped)}")
 
-# --- Final deduplication pass to catch any remaining duplicates ---
-# Prefer entries from OpenML when multiple sources map to the same
-# normalised dataset name. If OpenML not available, prefer PMLB, then KEEL,
-# then sklearn. This ensures deterministic, expected choices when
-# duplicates exist across sources.
-_priority = {'openml': 4, 'pmlb': 3, 'keel': 2, 'sklearn': 1}
+def _build_datasets_config():
+    """Build and deduplicate DATASETS_CONFIG. Called lazily on first access.
+    
+    This is deferred from module import to avoid fetching/validating datasets
+    immediately. Only called when benchmark is actually run.
+    """
+    global _DATASETS_CONFIG_CACHE, _DATASETS_CONFIG_INITIALIZED
+    
+    if _DATASETS_CONFIG_INITIALIZED:
+        return _DATASETS_CONFIG_CACHE
+    
+    print("Building datasets configuration...")
+    
+    # Start with OpenML suite datasets
+    config = generate_datasets_config_from_openml_suites(
+        suite_ids=[297, 299, 269]
+    )
 
-_dedup_map: dict[str, dict] = {}
-_removed_dups: list[tuple[str, str]] = []
+    # Merge TabRegSet-101 datasets, skipping duplicates
+    _existing_names = {_normalize_name(d['name']) for d in config}
+    _added = 0
+    _skipped = []
+    openml_datasets = TABREGSET_DATASETS + TALENT_OPENML_REGRESSION_DATASETS
+    for _ds in openml_datasets:
+        _dedup_keys = _ds.get('dedup_keys')
+        if not _is_duplicate(_ds['name'], _existing_names, _dedup_keys, verbose=False):
+            _abbr = ''.join(
+                [w[0] for w in _ds['name'].split('_') if w]
+            ).upper()[:3]
+            _ds_config = {**_ds, 'abbr': _abbr}
+            _ds_config.pop('dedup_keys', None)
+            config.append(_ds_config)
+            _existing_names.add(_normalize_name(_ds['name']))
+            _added += 1
+        else:
+            _skipped.append(_ds['name'])
 
-for _ds in DATASETS_CONFIG:
-    _norm = _normalize_name(_ds['name'])
-    if _norm not in _dedup_map:
-        _dedup_map[_norm] = _ds
-    else:
-        # Decide which to keep based on source priority
-        existing = _dedup_map[_norm]
-        existing_prio = _priority.get(existing.get('source', ''), 0)
-        new_prio = _priority.get(_ds.get('source', ''), 0)
-        if new_prio > existing_prio:
-            _removed_dups.append((_normalize_name(_ds['name']), existing['name']))
+    print(f"Added {_added} OpenML datasets (skipped {len(openml_datasets) - _added} duplicates)")
+
+    # --- Final deduplication pass ---
+    _priority = {'openml': 4, 'pmlb': 3, 'keel': 2, 'sklearn': 1}
+    _dedup_map: dict[str, dict] = {}
+    _removed_dups: list[tuple[str, str]] = []
+
+    for _ds in config:
+        _norm = _normalize_name(_ds['name'])
+        if _norm not in _dedup_map:
             _dedup_map[_norm] = _ds
         else:
-            _removed_dups.append((_ds['name'], existing['name']))
+            existing = _dedup_map[_norm]
+            existing_prio = _priority.get(existing.get('source', ''), 0)
+            new_prio = _priority.get(_ds.get('source', ''), 0)
+            if new_prio > existing_prio:
+                _removed_dups.append((_normalize_name(_ds['name']), existing['name']))
+                _dedup_map[_norm] = _ds
+            else:
+                _removed_dups.append((_ds['name'], existing['name']))
 
-DATASETS_CONFIG = list(_dedup_map.values())
+    config = list(_dedup_map.values())
 
-if _removed_dups:
-    print(f"\n⚠️  WARNING: Found and removed {len(_removed_dups)} DUPLICATE datasets:")
-    for _dup_name, _original_name in _removed_dups:
-        print(f"    REMOVED: {_dup_name} (kept: {_original_name})")
+    if _removed_dups:
+        print(f"⚠️  Found and removed {len(_removed_dups)} duplicate datasets (kept higher-priority sources)")
 
-print(f"\nDatassets config ready (before validation): {len(DATASETS_CONFIG)} datasets")
-print("Validation will run after dataset loading functions are defined...")
-print("\nAll datasets in config (before validation):")
-for _i, _ds in enumerate(DATASETS_CONFIG, 1):
-    print(f"  {_i:3d}. {_ds['name']}")
+    print(f"✓ Datasets config ready: {len(config)} datasets (before validation)")
 
-# --- Export the final datasets config to JSON for reproducibility ---
-_export_list = []
-for _ds in DATASETS_CONFIG:
-    entry = {'name': _ds['name'], 'source': _ds.get('source', 'openml')}
-    if entry['source'] == 'openml':
-        entry['id'] = _ds.get('id')
-    elif entry['source'] in ('pmlb', 'keel'):
-        entry['url'] = _ds.get('url')
-    elif entry['source'] == 'sklearn':
-        entry['loader'] = _ds.get('loader')
-    # preserve abbreviation when present
-    if 'abbr' in _ds:
-        entry['abbr'] = _ds['abbr']
-    _export_list.append(entry)
+    # Export to JSON for reproducibility
+    _export_list = []
+    for _ds in config:
+        entry = {'name': _ds['name'], 'source': _ds.get('source', 'openml')}
+        if entry['source'] == 'openml':
+            entry['id'] = _ds.get('id')
+        elif entry['source'] in ('pmlb', 'keel'):
+            entry['url'] = _ds.get('url')
+        elif entry['source'] == 'sklearn':
+            entry['loader'] = _ds.get('loader')
+        if 'abbr' in _ds:
+            entry['abbr'] = _ds['abbr']
+        _export_list.append(entry)
 
-_datasets_json_path = Path.cwd() / 'datasets.json'
-try:
-    with open(_datasets_json_path, 'w', encoding='utf-8') as _fh:
-        json.dump(_export_list, _fh, indent=2, ensure_ascii=False)
-    print(f"\nExported final datasets list to: {_datasets_json_path}")
-except Exception as _e:
-    print(f"Warning: could not write datasets.json: {_e}")
+    _datasets_json_path = Path.cwd() / 'datasets.json'
+    try:
+        with open(_datasets_json_path, 'w', encoding='utf-8') as _fh:
+            json.dump(_export_list, _fh, indent=2, ensure_ascii=False)
+        print(f"✓ Exported datasets list to: {_datasets_json_path}")
+    except Exception as _e:
+        print(f"⚠️  Could not write datasets.json: {_e}")
+    
+    _DATASETS_CONFIG_CACHE = config
+    _DATASETS_CONFIG_INITIALIZED = True
+    return config
+
+
+def get_DATASETS_CONFIG():
+    """Get DATASETS_CONFIG, building it lazily on first access."""
+    global _DATASETS_CONFIG_CACHE, _DATASETS_CONFIG_INITIALIZED
+    if not _DATASETS_CONFIG_INITIALIZED:
+        _build_datasets_config()
+    return _DATASETS_CONFIG_CACHE
+
+
+# Initialize DATASETS_CONFIG as empty; will be lazily populated
+DATASETS_CONFIG = []
 
 
 # ---------------------------------------------------------------------------
@@ -635,42 +652,53 @@ def load_dataset(dataset_config: dict) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# Validate datasets: filter out binary classification (not regression)
-# ---------------------------------------------------------------------------
-print("\n" + "="*70)
-print("VALIDATING DATASETS (checking for binary classification)...")
-print("="*70)
+def validate_datasets(datasets_config):
+    """Filter out binary classification datasets (not regression).
+    
+    Called only when benchmark actually runs, not at import time.
+    
+    Parameters
+    ----------
+    datasets_config : list[dict]
+        Unvalidated datasets from get_DATASETS_CONFIG()
+    
+    Returns
+    -------
+    list[dict]
+        Filtered datasets suitable for regression benchmarking
+    """
+    print("\n" + "="*70)
+    print("VALIDATING DATASETS (checking for binary classification)...")
+    print("="*70)
 
-_binary_classification_removed = []
-_validated_datasets = []
+    _binary_classification_removed = []
+    _validated_datasets = []
 
-for _ds in DATASETS_CONFIG:
-    try:
-        print(f"  Checking {_ds['name']:40s}...", end=" ", flush=True)
-        _, _y = load_dataset(_ds)
-        _n_unique = _y.nunique()
-        if _is_binary_classification(_y):
-            print("❌ REMOVED (binary classification - 2 labels)")
-            _binary_classification_removed.append(_ds['name'])
-        else:
-            print(f"✓ OK ({_n_unique} unique values)")
+    for _ds in datasets_config:
+        try:
+            print(f"  Checking {_ds['name']:40s}...", end=" ", flush=True)
+            _, _y = load_dataset(_ds)
+            _n_unique = _y.nunique()
+            if _is_binary_classification(_y):
+                print("❌ REMOVED (binary classification - 2 labels)")
+                _binary_classification_removed.append(_ds['name'])
+            else:
+                print(f"✓ OK ({_n_unique} unique values)")
+                _validated_datasets.append(_ds)
+        except Exception as e:
+            print(f"⚠️  KEPT (validation error: {str(e)[:40]})")
             _validated_datasets.append(_ds)
-    except Exception as e:
-        print(f"⚠️  KEPT (validation error: {str(e)[:40]})")
-        # Keep dataset even if there's an error during validation
-        _validated_datasets.append(_ds)
 
-DATASETS_CONFIG = _validated_datasets
+    print("\n" + "="*70)
+    if _binary_classification_removed:
+        print(f"⚠️  REMOVED {len(_binary_classification_removed)} BINARY CLASSIFICATION DATASETS:")
+        for _name in _binary_classification_removed:
+            print(f"    • {_name} (only 2 y labels - not suitable for regression)")
+    print("="*70)
 
-print("\n" + "="*70)
-if _binary_classification_removed:
-    print(f"⚠️  REMOVED {len(_binary_classification_removed)} BINARY CLASSIFICATION DATASETS:")
-    for _name in _binary_classification_removed:
-        print(f"    • {_name} (only 2 y labels - not suitable for regression)")
-print("="*70)
-
-print(f"\n✓ FINAL CLEAN LIST: {len(DATASETS_CONFIG)} regression datasets")
-print("\nAll validated datasets in benchmark:")
-for _i, _ds in enumerate(DATASETS_CONFIG, 1):
-    print(f"  {_i:3d}. {_ds['name']}")
+    print(f"\n✓ FINAL CLEAN LIST: {len(_validated_datasets)} regression datasets")
+    print("\nAll validated datasets in benchmark:")
+    for _i, _ds in enumerate(_validated_datasets, 1):
+        print(f"  {_i:3d}. {_ds['name']}")
+    
+    return _validated_datasets

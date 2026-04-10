@@ -26,7 +26,7 @@ sys.path.insert(0, str(project_root))
 import argparse
 
 from scoringbench import config as cfg
-from scoringbench.datasets import DATASETS_CONFIG
+from scoringbench.datasets import get_DATASETS_CONFIG, validate_datasets
 from scoringbench.runner import run_benchmark
 from scoringbench.utils import set_seed
 from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWrapper, XGBVectorWrapper, XGBQuantileVectorWrapper, PytabkitRealMLPWrapper, PytabkitRealMLPHPOWrapper
@@ -178,16 +178,21 @@ if __name__ == "__main__":
         print(f"Resuming into existing output directory: {output_dir}")
         print("Completed (dataset, fold) pairs will be skipped.")
 
+    # === LAZY LOAD & VALIDATE DATASETS ONLY WHEN BENCHMARK RUNS ===
+    print("Loading and validating datasets...")
+    all_datasets = get_DATASETS_CONFIG()
+    validated_datasets = validate_datasets(all_datasets)
+    
     if args.dataset_index is not None:
-        if args.dataset_index < 0 or args.dataset_index >= len(DATASETS_CONFIG):
+        if args.dataset_index < 0 or args.dataset_index >= len(validated_datasets):
             print(f"Error: --dataset_index {args.dataset_index} is out of range "
-                  f"(0..{len(DATASETS_CONFIG) - 1} for {len(DATASETS_CONFIG)} datasets).")
+                  f"(0..{len(validated_datasets) - 1} for {len(validated_datasets)} datasets).")
             sys.exit(1)
-        datasets_to_run = [DATASETS_CONFIG[args.dataset_index]]
+        datasets_to_run = [validated_datasets[args.dataset_index]]
         print(f"Running single dataset #{args.dataset_index}: "
               f"{datasets_to_run[0]['name']}")
     else:
-        datasets_to_run = DATASETS_CONFIG
+        datasets_to_run = validated_datasets
 
     run_benchmark(
         datasets_config=datasets_to_run,
