@@ -169,6 +169,7 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         mae_loss_clip: float | None = None,
         early_stopping_metric: str | None = None,
         beta: str | float = "crls",
+        **kwargs
     ):
         import torch
         from tabpfn.finetuning.finetuned_regressor import FinetunedTabPFNRegressor
@@ -208,6 +209,7 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
             mae_loss_clip=mae_loss_clip,
             early_stopping_metric=early_stopping_metric,
             beta=beta,
+            **kwargs
         )
 
     def fit(self, X, y) -> "FinetuneTabPFNWrapper":
