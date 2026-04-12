@@ -169,8 +169,8 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         mse_loss_clip: float | None = None,
         mae_loss_weight: float = 0.0,
         mae_loss_clip: float | None = None,
-        early_stopping_metric: str | None = None,
-        beta: str | float = "crls",
+        early_stopping_metric: str | None = None,  # None defaults to "same_as_beta"
+        beta: str | float | None = None,
         **kwargs
     ):
         import torch

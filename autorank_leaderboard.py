@@ -3,21 +3,22 @@
 Leaderboard (Fold-Level Version) - Statistical Ranking
 Two ranking approaches:
   1. rank_with_autorank   — Autorank-based statistical comparison with CD diagrams.
-  2. rank_with_hedges_g_controlled — Effect size ranking: Hedges' g per dataset,
-     controlled for individual dataset difficulty/variance.
+  2. rank_with_ranx — Ranx-based ranking using magnitude-based comparison with statistical significance testing.
 """
 import argparse
+import importlib.util
+import io
+import json
 import os
+import sys
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
-import pingouin as pg
-import importlib.util
-import io
-import sys
-import json
+from ranx import Run, compare
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +62,13 @@ def load_metric_matrix(root, metric):
     """
     Load metric data and return a pivot table (rows=datasets, columns=models)
     where each cell is the mean score across folds for that (dataset, model) pair.
-    Only rows complete across all models are kept.
+    
+    Robust handling: 
+    - Only includes models that have at least 90% dataset coverage for this metric.
+    - Models with < 90% coverage are excluded with a warning.
+    - Datasets where any of the remaining models is missing are dropped.
+    
+    Returns: (pivot_table, included_models) or (None, None) if no data available.
     """
     data = []
     for entry in os.listdir(root):
@@ -81,21 +88,62 @@ def load_metric_matrix(root, metric):
                 })
         except Exception: continue
 
-    if not data: return None
+    if not data: return None, None
 
     df_metric = pd.DataFrame(data)
     # Step 1: aggregate across folds → (dataset, model, avg_score)
     df_agg = df_metric.groupby(['dataset', 'model'])['score'].mean().reset_index()
     pivot = df_agg.pivot(index='dataset', columns='model', values='score')
-    return pivot.dropna(how='any')
+    
+    # Step 2: Identify models with any data for this metric
+    models_with_data = pivot.columns[pivot.notna().any()].tolist()
+    if not models_with_data:
+        return None, None
+    
+    # Step 3: Filter models by 90% dataset coverage threshold
+    total_datasets = len(pivot)
+    coverage_threshold = 0.90
+    models_sufficient_coverage = []
+    models_dropped = []
+    
+    for model in models_with_data:
+        coverage_count = pivot[model].notna().sum()
+        coverage_pct = coverage_count / total_datasets if total_datasets > 0 else 0.0
+        
+        if coverage_pct >= coverage_threshold:
+            models_sufficient_coverage.append(model)
+        else:
+            models_dropped.append((model, coverage_count, total_datasets, coverage_pct * 100))
+    
+    # Print warnings for dropped models
+    if models_dropped:
+        print(f"\n⚠️  WARNING: Dropping models with < 90% dataset coverage on metric '{metric}':")
+        for model, covered, total, pct in models_dropped:
+            print(f"   • {model}: {covered}/{total} datasets ({pct:.1f}%)")
+    
+    if not models_sufficient_coverage:
+        return None, None
+    
+    # Step 4: Keep only models with sufficient coverage, then remove datasets with any NaN
+    pivot_filtered = pivot[models_sufficient_coverage].dropna(how='any')
+    
+    if pivot_filtered.empty:
+        return None, None
+    
+    return pivot_filtered, models_sufficient_coverage
 
 
 def load_metric_long_format(root, metric):
     """
     Load metric data in long format (rows=fold-level for each dataset-model pair).
     Returns DataFrame with columns: ['dataset', 'model', 'fold', 'score']
+    
+    Robust handling: Includes all folds from models that have any data for this metric.
+    
+    Returns: (df_long, models_list) or (None, None) if no data available.
     """
     data = []
+    models_seen = set()
     for entry in os.listdir(root):
         entry_path = os.path.join(root, entry)
         if not os.path.isfile(entry_path) or not entry.endswith('.parquet'):
@@ -104,6 +152,7 @@ def load_metric_long_format(root, metric):
         try:
             df = pd.read_parquet(entry_path)
             if df.empty or metric not in df.columns: continue
+            models_seen.add(model)
             for _, row in df.iterrows():
                 data.append({
                     "dataset": row.get('dataset', 'unknown'),
@@ -113,8 +162,8 @@ def load_metric_long_format(root, metric):
                 })
         except Exception: continue
 
-    if not data: return None
-    return pd.DataFrame(data)
+    if not data: return None, None
+    return pd.DataFrame(data), list(models_seen)
 
 
 # ---------------------------------------------------------------------------
@@ -143,90 +192,160 @@ def rank_with_autorank(pivot, metric, order, hib, alpha):
 
 
 # ---------------------------------------------------------------------------
-# Ranking approach 2: Hedges' g effect size (controlled for dataset variance)
+# Ranking approach 2: Ranx magnitude-based ranking
 # ---------------------------------------------------------------------------
 
-def rank_with_hedges_g_controlled(df_long, hib):
+def rank_with_ranx_aggregated(df_long, hib=True):
     """
-    Effect size ranking using Hedges' g per dataset.
-    Compares each model's performance on a dataset to the average of all other models.
-    This controls for difficulty: a 1.0 improvement on a tight dataset is worth more
-    than on a noisy one.
-
-    Args:
-        df_long: DataFrame with columns ['dataset', 'model', 'fold', 'score']
-        hib: bool (Higher Is Better)
-
-    Returns a DataFrame with columns: rank, model, avg_g, std_g, n_datasets.
+    Ranks models by first aggregating folds (to avoid pseudoreplication)
+    and then performing a cross-dataset magnitude-stable comparison.
+    
+    Stability improvements:
+    - Filters models by 90% dataset coverage (matches autorank's robustness)
+    - Filters datasets by complete model coverage (no missing models)
+    - Handles NaN values robustly when averaging normalized scores
     """
-    models = df_long['model'].unique()
-    datasets = df_long['dataset'].unique()
-    model_summaries = []
+    try:
+        # 1. Aggregate folds to the Dataset level (The "Anti-Pseudoreplication" step)
+        df_agg = df_long.groupby(['model', 'dataset'])['score'].mean().reset_index()
 
-    for model in models:
-        dataset_gs = []
+        # 2. STABILITY FILTER: Apply coverage thresholds (matching autorank approach)
+        pivot_temp = df_agg.pivot(index='dataset', columns='model', values='score')
+        total_datasets = len(pivot_temp)
+        coverage_threshold = 0.90
+        
+        # Identify models with 90%+ dataset coverage
+        models_sufficient_coverage = []
+        for model in pivot_temp.columns:
+            coverage_count = pivot_temp[model].notna().sum()
+            coverage_pct = coverage_count / total_datasets if total_datasets > 0 else 0.0
+            if coverage_pct >= coverage_threshold:
+                models_sufficient_coverage.append(model)
+        
+        if not models_sufficient_coverage:
+            print("Warning: No models have 90%+ dataset coverage for ranx ranking")
+            return pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
+        
+        # Filter data to only include models with sufficient coverage
+        df_agg = df_agg[df_agg['model'].isin(models_sufficient_coverage)]
+        
+        # Filter to only datasets where ALL included models have data (complete case analysis)
+        pivot_filtered = pivot_temp[models_sufficient_coverage].dropna(how='any')
+        valid_datasets = set(pivot_filtered.index)
+        df_agg = df_agg[df_agg['dataset'].isin(valid_datasets)]
+        
+        if df_agg.empty:
+            print("Warning: No complete dataset-model pairs after filtering")
+            return pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
 
-        for dataset in datasets:
-            # 1. Isolate the target model's fold performance
-            target_scores = df_long[(df_long['dataset'] == dataset) & 
-                                    (df_long['model'] == model)]['score']
+        # 3. Normalize Magnitude per dataset
+        def standardize(x):
+            return (x - x.mean()) / (x.std() + 1e-9)
+
+        df_agg['norm_score'] = df_agg.groupby('dataset')['score'].transform(standardize)
+
+        # If lower is better, negate so higher normalized scores are better
+        if not hib:
+            df_agg['norm_score'] = -df_agg['norm_score']
+
+        # 4. Create ranx Runs
+        runs = []
+        for model_name in models_sufficient_coverage:
+            model_data = df_agg[df_agg['model'] == model_name]
             
-            # 2. Isolate all other models (the 'Reference' for this dataset)
-            reference_scores = df_long[(df_long['dataset'] == dataset) & 
-                                       (df_long['model'] != model)]['score']
+            # ranx format: { dataset_id: { model_id: normalized_score } }
+            run_dict = {
+                str(row.dataset): {model_name: float(row.norm_score)} 
+                for _, row in model_data.iterrows()
+                if pd.notna(row.norm_score)  # Skip NaN scores
+            }
             
-            if len(target_scores) < 2 or len(reference_scores) < 2:
-                continue
+            if run_dict:  # Only include model if it has valid scores
+                runs.append(Run(run_dict, name=model_name))
 
-            # 3. Calculate Hedges' g (Effect size relative to dataset variance)
-            g = pg.compute_effsize(target_scores, reference_scores, eftype='hedges')
-            dataset_gs.append(g)
+        if not runs:
+            print("Warning: No valid runs after filtering NaNs")
+            return pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
 
-        if dataset_gs:
-            model_summaries.append({
-                'model': model,
-                'avg_g': np.mean(dataset_gs),
-                'std_g': np.std(dataset_gs),
-                'n_datasets': len(dataset_gs)
+        # 5. Extract Leaderboard
+        leaderboard = []
+        for r in runs:
+            run_dict = r.to_dict()
+            if run_dict:
+                # Average normalized scores, skipping NaNs
+                scores = [float(next(iter(v.values()))) for v in run_dict.values()]
+                valid_scores = [s for s in scores if not np.isnan(s)]
+                avg_norm_score = np.mean(valid_scores) if valid_scores else 0.0
+                n_datasets_valid = len(valid_scores)
+            else:
+                avg_norm_score = 0.0
+                n_datasets_valid = 0
+            
+            leaderboard.append({
+                'model': r.name,
+                'mean_std_diff': float(avg_norm_score),
+                'n_datasets': n_datasets_valid
             })
 
-    # Create Ranking
-    results = pd.DataFrame(model_summaries)
-    # If hib=True, higher g is better. If hib=False, lower g (more negative) is better.
-    results = results.sort_values('avg_g', ascending=not hib).reset_index(drop=True)
-    results.insert(0, 'rank', results.index + 1)
+        results = pd.DataFrame(leaderboard).sort_values('mean_std_diff', ascending=False).reset_index(drop=True)
+        results.insert(0, 'rank', results.index + 1)
+        
+        return results
     
-    return results
+    except Exception as e:
+        print(f"Ranx aggregated ranking error: {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------
 # JSON output
 # ---------------------------------------------------------------------------
 
-def _rank_correlation(autorank_rankedDF, hedges_rankedDF):
+def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
     """
     Compute Pearson correlation between the rank vectors of both methods.
     Models are aligned by name; only models present in both are used.
     Returns (pearson_r, p_value, n_models) or (None, None, 0) on failure.
     """
     try:
+        # Handle empty dataframes
+        if autorank_rankedDF.empty or ranx_rankedDF.empty:
+            print("Warning: One or both ranking dataframes are empty, skipping correlation")
+            return None, None, 0
+        
+        # Check if required columns exist
+        if 'model' not in autorank_rankedDF.columns or 'rank' not in autorank_rankedDF.columns:
+            print("Warning: Autorank dataframe missing required columns")
+            return None, None, 0
+        
+        if 'model' not in ranx_rankedDF.columns or 'rank' not in ranx_rankedDF.columns:
+            print("Warning: Ranx dataframe missing required columns")
+            return None, None, 0
+        
         ar = autorank_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_autorank'})
-        hg = hedges_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_hedges_g'})
-        merged = ar.merge(hg, on='model')
+        rx = ranx_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_ranx'})
+        merged = ar.merge(rx, on='model')
         n = len(merged)
+        
         if n < 3:
+            print(f"Warning: Insufficient overlapping models ({n}) for correlation")
             return None, None, n
-        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_hedges_g'])
+        
+        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_ranx'])
+        print(f"Rank correlation: r={r:.3f}, p={p:.4f}, n_models={n}")
         return float(r), float(p), n
-    except Exception:
+    except Exception as e:
+        print(f"Error computing rank correlation: {e}")
         return None, None, 0
 
 
-def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hedges_rankedDF, order, hib):
+def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ranx_rankedDF, order, hib):
     """
     Write a single JSON file with two top-level sections:
       - "autorank": statistical results from autorank
-      - "hedges_g": effect size ranking with Hedges' g per dataset
+      - "ranx": ranx-based ranking with magnitude scores
     Also includes Pearson correlation between both ranking methods.
     """
 
@@ -260,27 +379,26 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hed
             "magnitude_above": row.get('magnitude_above', 'unknown'),
         })
 
-    # --- Hedges' g section ---
-    hedges_section = {
+    # --- Ranx section ---
+    ranx_section = {
         "description": (
-            "Effect size ranking using Hedges' g per dataset. "
-            "Compares each model to the average of other models on each dataset. "
-            "Controls for dataset difficulty/variance: larger improvement on tight datasets counts more."
+            "Ranx-based magnitude ranking with dataset normalization. "
+            "Averages performance across datasets for stable model comparison. "
+            "Includes standard deviation and dataset coverage metrics."
         ),
         "models": [],
     }
-    for _, row in hedges_rankedDF.iterrows():
-        hedges_section["models"].append({
+    for _, row in ranx_rankedDF.iterrows():
+        ranx_section["models"].append({
             "rank": int(row['rank']),
             "name": row['model'],
-            "avg_g": float(row['avg_g']),
-            "std_g": float(row['std_g']),
-            "n_datasets": int(row['n_datasets']),
+            "mean_std_diff": float(row.get('mean_std_diff', 0)),
+            "n_datasets": int(row.get('n_datasets', 0)),
         })
 
-    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, hedges_rankedDF)
+    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, ranx_rankedDF)
 
-    n_datasets = int(hedges_rankedDF['n_datasets'].iloc[0]) if not hedges_rankedDF.empty else None
+    n_datasets = None  # Not directly available in this scope
 
     cd_data = {
         "metric": metric,
@@ -289,13 +407,13 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hed
         "n_datasets": n_datasets,
         "rank_correlation": {
             "method": "pearson",
-            "between": ["rank_autorank", "rank_hedges_g"],
+            "between": ["rank_autorank", "rank_ranx"],
             "r": pearson_r,
             "pvalue": pearson_p,
             "n_models": n_models_corr,
         },
         "autorank": autorank_section,
-        "hedges_g": hedges_section,
+        "ranx": ranx_section,
     }
 
     json_path = os.path.join(out_dir, f"cd_data_{metric}.json")
@@ -316,7 +434,20 @@ def main():
     root = args.output
     if not os.path.exists(root): return
 
-    # Basic table generation
+    # Attempt to aggregate output/raw → output/ before analysis.
+    # This is best-effort: failures are printed but never stop the ranking.
+    raw_dir = os.path.join(root, "raw")
+    if os.path.isdir(raw_dir):
+        try:
+            _script_dir = os.path.dirname(os.path.abspath(__file__))
+            if _script_dir not in sys.path:
+                sys.path.insert(0, _script_dir)
+            from aggregate_datasets import aggregate as _aggregate
+            print(f"Aggregating raw parquets from {raw_dir} …")
+            _aggregate(raw_dir=Path(raw_dir), out_dir=Path(root))
+        except Exception as _exc:
+            print(f"Warning: aggregation step failed ({_exc}), continuing with existing output/ files.")
+
     rows_all = _collect_all_rows(root)
     writer = _load_write_latex_writer()
     if writer: writer(root, rows_all)
@@ -332,7 +463,7 @@ def main():
             except Exception: continue
 
     for metric in sorted(discovered_metrics):
-        pivot = load_metric_matrix(root, metric)
+        pivot, models_in_metric = load_metric_matrix(root, metric)
         if pivot is None: continue
 
         # Determine metric ordering and apply any score transformation
@@ -361,6 +492,7 @@ def main():
                 continue
 
             print(f"\n--- {metric} (Autorank) ---")
+            print(f"  Models: {len(models_in_metric)} | Datasets: {len(pivot)}")
             print(f"Order: {order} | higher_is_better: {hib}")
             cols = [c for c in ("rank", "model", "mean", "std", "meanrank") if c in autorank_rankedDF.columns]
             print(autorank_rankedDF[cols].to_string(index=False))
@@ -398,12 +530,12 @@ def main():
             print(f"Skipping {metric} (autorank error): {e}")
             continue
 
-        # --- Approach 2: Hedges' g effect size ---
+        # --- Approach 2: Ranx magnitude-based ranking ---
         try:
-            df_long = load_metric_long_format(root, metric)
+            df_long, models_in_long = load_metric_long_format(root, metric)
             if df_long is None:
                 print(f"Warning: could not load long format data for {metric}")
-                hedges_rankedDF = pd.DataFrame(columns=["rank", "model", "avg_g", "std_g", "n_datasets"])
+                ranx_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
             else:
                 # Apply transformation if needed (for coverage metrics)
                 if is_coverage:
@@ -413,17 +545,17 @@ def main():
                         target = 0.5
                     df_long['score'] = (df_long['score'] - target).abs()
                 
-                hedges_rankedDF = rank_with_hedges_g_controlled(df_long, hib)
+                ranx_rankedDF = rank_with_ranx_aggregated(df_long, hib)
 
-                print(f"\n--- {metric} (Hedges' g, Effect Size) ---")
-                print(hedges_rankedDF[["rank", "model", "avg_g", "std_g"]].to_string(index=False))
+                print(f"\n--- {metric} (Ranx Magnitude Ranking) ---")
+                print(ranx_rankedDF[["rank", "model", "mean_std_diff"]].to_string(index=False))
 
         except Exception as e:
-            print(f"Warning: Hedges' g ranking failed for {metric}: {e}")
-            hedges_rankedDF = pd.DataFrame(columns=["rank", "model", "avg_g", "std_g", "n_datasets"])
+            print(f"Warning: Ranx ranking failed for {metric}: {e}")
+            ranx_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff"])
 
         # --- Save merged JSON ---
-        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, hedges_rankedDF, order, hib)
+        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ranx_rankedDF, order, hib)
 
 
 if __name__ == "__main__":

@@ -111,14 +111,11 @@ def run_benchmark(
                     fold_result: dict = {}
                     models_present = []
                     for model_name in model_factories.keys():
-                        dest_parquet = output_dir / f"{model_name}.parquet"
-                        if dest_parquet.exists():
+                        raw_parquet = output_dir / "raw" / f"{model_name}_{ds_safe}.parquet"
+                        if raw_parquet.exists():
                             try:
-                                existing = pd.read_parquet(dest_parquet)
-                                mask = (
-                                    (existing.get("dataset") == ds_safe) &
-                                    (existing.get("fold") == global_fold)
-                                )
+                                existing = pd.read_parquet(raw_parquet)
+                                mask = (existing["fold"] == global_fold)
                                 matched = existing[mask]
                                 if not matched.empty:
                                     row = matched.iloc[0].to_dict()

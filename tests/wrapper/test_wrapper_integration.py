@@ -127,6 +127,11 @@ def _make_pytabkit():
         device=_cuda_or_cpu())
 
 
+def _make_catboost_quantile():
+    from scoringbench.wrappers.catboost_wrapper import CatBoostQuantileWrapper
+    return CatBoostQuantileWrapper(n_quantiles=99, iterations=200)
+
+
 # Registry — add new entries here to include a model in all tests below
 # Each param is a (name, factory) tuple so the fixture can log the name
 # without relying on pytest internals that differ across scopes.
@@ -136,6 +141,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabPFNWrapper",            _make_tabpfn),       id="TabPFNWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),
+    pytest.param(("CatBoostQuantileWrapper",  _make_catboost_quantile), id="CatBoostQuantileWrapper"),
 ]
 
 

@@ -29,7 +29,7 @@ from scoringbench import config as cfg
 from scoringbench.datasets import get_DATASETS_CONFIG, validate_datasets
 from scoringbench.runner import run_benchmark
 from scoringbench.utils import set_seed
-from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWrapper, XGBVectorWrapper, XGBQuantileVectorWrapper, PytabkitRealMLPWrapper, PytabkitRealMLPHPOWrapper
+from scoringbench.wrappers import TabPFNWrapper, FinetuneTabPFNWrapper, TabICLWrapper, XGBVectorWrapper, XGBQuantileVectorWrapper, PytabkitRealMLPWrapper, PytabkitRealMLPHPOWrapper, CatBoostQuantileWrapper
 
 
 # ---------------------------------------------------------------------------
@@ -116,14 +116,34 @@ MODELS = {
     f"tabpfn_realv2_5": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["realv2_5"]),
     f"tabpfn_v2_6": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["v2_6"]),
     **dict_finetuned_models,
+    "finetune_tabpfn_realv2_5_mse": lambda: FinetuneTabPFNWrapper(
+        device="cuda",
+        epochs=N_EPOCHS,
+        learning_rate=1e-5,
+        weight_decay=0.1,
+        crps_loss_weight=0.0,
+        mse_loss_weight=1.0,
+        ce_loss_weight=0.0,
+        n_finetune_ctx_plus_query_samples=20_000,
+        n_estimators_finetune=1,
+        n_estimators_validation=8,
+        n_estimators_final_inference=8,
+        early_stopping=True,
+        early_stopping_patience=20,
+        finetune_ctx_query_split_ratio=0.4,
+        extra_regressor_kwargs={"average_before_softmax": True},
+        beta=None,
+        early_stopping_metric="mse",
+    ),
     "tabiclv2": lambda: TabICLWrapper(),
     "xgb_vector": lambda: XGBVectorWrapper(n_bins=50, num_boost_round=100),
     "xgb_vector_quantile": lambda: XGBQuantileVectorWrapper(n_bins=50, num_boost_round=100),
-    "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
-        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-        n_quantiles=50,
-    ),
+    "catboost_quantile": lambda: CatBoostQuantileWrapper(n_quantiles=99, iterations=1000),
+    # "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
+    #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+    #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+    #     n_quantiles=50,
+    # ),
     # "pytabkit_realmlp_hpo_cv_8_new": lambda: PytabkitRealMLPHPOWrapper(
     #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
     #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',

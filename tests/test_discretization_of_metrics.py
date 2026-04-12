@@ -11,7 +11,10 @@ import numpy as np
 import pytest
 import torch
 
-from scoringbench.metrics import compute_scoring_rules, ENERGY_BETAS
+# Force CPU
+torch.cuda.is_available = lambda: False
+
+from scoringbench.metrics import compute_scoring_rules, ENERGY_BETAS, CRESSIE_READ_LAMBDAS
 from scoringbench.wrappers import DistributionPrediction
 
 
@@ -324,6 +327,9 @@ def test_all_metrics_discretization_stability_summary():
         "wcrps_right": 0.10,
         "wcrps_center": 0.10,
     }
+    # Add Cressie-Read thresholds
+    for lam in CRESSIE_READ_LAMBDAS:
+        thresholds[f"cressie_read_lambda_{lam}"] = 0.15
     # Coverage metrics use absolute difference
     coverage_thresholds = {
         "coverage_90": 0.10,
@@ -508,12 +514,29 @@ def test_metric_convergence_across_resolutions(metric_name):
             f"{_GRID_SIZES}:\n" + "\n".join(f"  - {f}" for f in failures)
         )
 
+@pytest.mark.parametrize("n_samples", [10, 20])
+@pytest.mark.parametrize("lam", CRESSIE_READ_LAMBDAS)
+def test_cressie_read_score_discretization_stability(n_samples, lam):
+    """Parametrized test for Cressie-Read scores with batch computation."""
+    batch = get_batch_distributions(n_samples)
+    
+    metrics_50 = compute_scoring_rules(batch[f"x_50_g_{n_samples}"], batch[f"x_50_f_{n_samples}"].mean)
+    metrics_100 = compute_scoring_rules(batch[f"x_100_g_{n_samples}"], batch[f"x_100_f_{n_samples}"].mean)
+    
+    key = f"cressie_read_lambda_{lam}"
+    assert_metric_stability(
+        metrics_50[key],
+        metrics_100[key],
+        key,
+        threshold=0.15
+    )
 
-@pytest.mark.parametrize("beta", ENERGY_BETAS)
-def test_energy_score_convergence_across_resolutions(beta):
-    """Verify energy score convergence as grid resolution doubles."""
+
+@pytest.mark.parametrize("lam", CRESSIE_READ_LAMBDAS)
+def test_cressie_read_score_convergence_across_resolutions(lam):
+    """Verify Cressie-Read score convergence as grid resolution doubles."""
     threshold_rel = 0.15
-    key = f"energy_score_beta_{beta}"
+    key = f"cressie_read_lambda_{lam}"
     values = {n: _compute_metrics_at_grid(n)[key] for n in _GRID_SIZES}
 
     failures = []

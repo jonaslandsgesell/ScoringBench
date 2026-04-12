@@ -12,6 +12,7 @@ run_cv(X, y, model_factories, n_folds, seed) -> list[dict]
 
 import time
 from typing import Callable
+import json
 
 import numpy as np
 import pandas as pd
@@ -78,32 +79,10 @@ def run_fold(
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        # Format metrics string with available metrics
-        metrics_parts = [f"MAE={metrics['mae']:.4f}", f"RMSE={metrics['rmse']:.4f}"]
-        
-        if metrics.get("r2") is not None:
-            metrics_parts.append(f"R²={metrics['r2']:.4f}")
-        
-        if metrics.get("crps") is not None:
-            metrics_parts.append(f"CRPS={metrics['crps']:.6f}")
-        
-        if metrics.get("crls") is not None:
-            metrics_parts.append(f"CRLS={metrics['crls']:.6f}")
-        
-        if metrics.get("log_score") is not None:
-            metrics_parts.append(f"LogScore={metrics['log_score']:.6f}")
-        
-        if metrics.get("coverage_90") is not None:
-            metrics_parts.append(f"Cov90={metrics['coverage_90']:.4f}")
-        
-        if metrics.get("cde_loss") is not None:
-            metrics_parts.append(f"CDE={metrics['cde_loss']:.6f}")
-        
-        if metrics.get("sharpness") is not None:
-            metrics_parts.append(f"Sharp={metrics['sharpness']:.6f}")
-        
-        metrics_str = "  ".join(metrics_parts)
-        print(f"    [{name}] {metrics_str}", flush=True)
+        # Convert numpy types to native Python types for JSON serialization
+        metrics_display = {k: float(v) if v is not None else None 
+                          for k, v in metrics.items()}
+        print(f"    [{name}] {json.dumps(metrics_display, indent=2)}")
         fold_results[name] = metrics
 
     return fold_results

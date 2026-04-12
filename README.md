@@ -27,13 +27,12 @@ ScoringBench is a compact benchmarking suite for probabilistic regression on tab
 
 ## Benchmark output (summary)
 
-Each run writes a self-contained directory under `output/` with aggregated CSVs and per-fold results. Newer runs save per-model Parquet files (`<run>/model_name.parquet`) containing fold-level rows.
+Each run writes per-(model, dataset) raw Parquet files to `output/raw/`. Running `autorank_leaderboard.py` automatically aggregates these into per-model Parquet files in `output/`, which then feed downstream analysis scripts.
 
 Typical files:
 
-- `benchmark_results_aggregated.csv` — mean ± std per model/dataset
-- `benchmark_results_detailed.csv` — fold-level rows
-- `output/` — per-model parquet
+- `output/raw/` — per-(model, dataset) raw parquet files
+- `output/` — aggregated per-model parquet files
 
 ## Workflow
 
@@ -41,7 +40,7 @@ Typical files:
 2. Add your custom wrapper with a unique name (see `scoringbench/wrappers/` and inherit `ProbabilisticWrapper`).
 3. python run_bench_regression.py
 4. python autorank_leaderboard.py
-5. Commit your model parquet file (documenting each run) and the updated leaderboard data in `output/figures/leaderboard/`. Since the output repository is separate from the main repository, push to both. This serves as a public ledger and allows traceability.
+5. Commit aggregated per-model Parquet files (`output/*.parquet`) and the generated JSON ranking files in `output/figures/leaderboard/` to git LFS. Since the output repository is separate from the main repository, push to both. This serves as a public ledger and allows traceability.
 6. Create a pull request to the ScoringBench repository for review; contributions that meet standards will be merged.
 7. Upon merge, https://scoringbench.bolt.host/ will automatically display the updated leaderboard; the data is also available in the repository.
 
@@ -51,4 +50,88 @@ Run the test suite with:
 
 ```
 python -m pytest tests
+```
+
+## Examples & Diagnostics
+
+### Configuration Comparison Diagnostic
+
+Diagnostic script to evaluate how hyperparameters affect distributional metrics:
+
+```python
+import numpy as np
+import pandas as pd
+import time
+from scoringbench.wrappers.tabpfn import TabPFNWrapper
+from scoringbench.metrics import compute_metrics
+
+CONFIGS = [
+    {"name": "v2.5: param=0.9", "model_path": "tabpfn-v2.5-regressor-v2.5_real.ckpt", "hyperparameter": 0.9},
+    {"name": "v2.5: param=1.0", "model_path": "tabpfn-v2.5-regressor-v2.5_real.ckpt", "hyperparameter": 1.0},
+    {"name": "v2.6: param=0.9", "model_path": "tabpfn-v2.6-regressor-v2.6_default.ckpt", "hyperparameter": 0.9},
+    {"name": "v2.6: param=1.0", "model_path": "tabpfn-v2.6-regressor-v2.6_default.ckpt", "hyperparameter": 1.0},
+]
+
+def evaluate_config(X_train, y_train, X_test, y_test, config_dict):
+    model = TabPFNWrapper(n_estimators=8, random_state=42, **{k: v for k, v in config_dict.items() if k != "name"})
+    t0 = time.time()
+    model.fit(X_train, y_train)
+    train_time = time.time() - t0
+    
+    y_test_np = np.asarray(y_test, dtype=float)
+    dist = model.predict_distribution(X_test)
+    metrics = compute_metrics(dist, y_test_np)
+    metrics["train_time"] = train_time
+    return metrics
+
+# Generate data & evaluate
+rng = np.random.default_rng(42)
+n_train, n_test, n_features = 100, 200, 2
+X = rng.normal(0, 1, (n_train + n_test, n_features))
+y = X @ rng.normal(0, 1, n_features) + rng.normal(0, 1, n_train + n_test)
+
+results = [{"config_name": cfg["name"], **evaluate_config(X[:n_train], y[:n_train], X[n_train:], y[n_train:], cfg)} 
+           for cfg in CONFIGS]
+df = pd.DataFrame(results)
+print(df)
+```
+
+**Metrics evaluated:** CRPS, log-score, CRLS, sharpness, dispersion, interval scores, beta-energy scores, quantile weighted WCRPS (left, center, right), and others.
+
+### CI/CD Assertions
+
+Add regression tests to your pipeline using ScoringBench metrics:
+
+```python
+import numpy as np
+from scoringbench.wrappers.tabpfn import TabPFNWrapper
+from scoringbench.metrics import compute_metrics
+
+model = TabPFNWrapper(n_estimators=8, random_state=42, model_path="tabpfn-v2.6-regressor-v2.6_default.ckpt")
+model.fit(X_train, y_train)
+
+y_test_np = np.asarray(y_test, dtype=float)
+dist = model.predict_distribution(X_test)
+metrics = compute_metrics(dist, y_test_np)
+
+# Assert on distributional metrics
+assert metrics["crps"] < 0.5, f"CRPS {metrics['crps']} exceeds threshold"
+assert metrics["log_score"] < 1.0, f"log_score {metrics['log_score']} exceeds threshold"
+assert not np.any(np.isnan(dist.mean())), "Predictions contain NaN"
+assert not np.any(np.isinf(dist.mean())), "Predictions contain Inf"
+```
+
+### Parallel HPC Execution (SLURM)
+
+Run the full benchmark in parallel across datasets:
+
+```bash
+# All datasets (0–103) in parallel:
+sbatch --array=0-103 run_benchmark.sbatch
+
+# Single dataset:
+sbatch --array=42 run_benchmark.sbatch
+
+# Sequential mode:
+sbatch run_benchmark.sbatch
 ```

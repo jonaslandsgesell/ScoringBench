@@ -23,6 +23,7 @@ from scoringbench.metrics import (
     compute_scoring_rules,
     compute_metrics,
     ENERGY_BETAS,
+    CRESSIE_READ_LAMBDAS,
 )
 
 # If PyTorch is installed but CUDA on this host is broken/unsupported, force
@@ -540,6 +541,7 @@ class TestPerSampleGrid:
             "dispersion",
         }
         expected_keys |= {f"energy_score_beta_{b}" for b in ENERGY_BETAS}
+        expected_keys |= {f"cressie_read_lambda_{lam}" for lam in CRESSIE_READ_LAMBDAS}
         assert expected_keys == set(r.keys())
 
 

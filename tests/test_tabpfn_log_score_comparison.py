@@ -26,7 +26,7 @@ sys.path.insert(0, "/home/landsges/ScoringBench")
 # Check prerequisites before importing heavy modules
 ATOL = 1e-4
 RTOL = 1e-3
-MODEL_PATH = "tabpfn-v2.6-regressor-v2.6_default.ckpt"
+MODEL_PATH = "tabpfn-v2.5-regressor-v2.5_real.ckpt"#"tabpfn-v2.6-regressor-v2.6_default.ckpt"
 
 # Determine availability by attempting to import the top-level `tabpfn`
 # package and the local `TabPFNWrapper`. If either import fails, skip tests.
