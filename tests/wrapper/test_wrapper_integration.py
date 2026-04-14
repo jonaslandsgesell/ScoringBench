@@ -132,6 +132,11 @@ def _make_catboost_quantile():
     return CatBoostQuantileWrapper(n_quantiles=99, iterations=200)
 
 
+def _make_xgblss():
+    from scoringbench.wrappers.xgblss_wrapper import XGBLSSWrapper
+    return XGBLSSWrapper(n_quantiles=50, num_boost_round=100, distribution="Gaussian")
+
+
 # Registry — add new entries here to include a model in all tests below
 # Each param is a (name, factory) tuple so the fixture can log the name
 # without relying on pytest internals that differ across scopes.
@@ -142,6 +147,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),
     pytest.param(("CatBoostQuantileWrapper",  _make_catboost_quantile), id="CatBoostQuantileWrapper"),
+    pytest.param(("XGBLSSWrapper",            _make_xgblss),       id="XGBLSSWrapper"),
 ]
 
 

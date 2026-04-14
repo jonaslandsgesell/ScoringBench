@@ -13,6 +13,7 @@ from .base import DistributionPrediction, ProbabilisticWrapper
 from .tabpfn import TabPFNWrapper, FinetuneTabPFNWrapper
 from .tabicl import TabICLWrapper
 from .xgb_vector import XGBVectorWrapper, XGBQuantileVectorWrapper
+from .xgblss_wrapper import XGBLSSWrapper
 from .pytabkit import (
     PytabkitRealMLPWrapper,
     PytabkitRealMLPHPOWrapper,
@@ -29,6 +30,7 @@ __all__ = [
     "TabICLWrapper",
     "XGBVectorWrapper",
     "XGBQuantileVectorWrapper",
+    "XGBLSSWrapper",
     "PytabkitRealMLPWrapper",
     "PytabkitRealMLPHPOWrapper",
     "PytabkitTabMDWrapper",

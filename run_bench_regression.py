@@ -35,10 +35,11 @@ from scoringbench.wrappers import (
     TabICLWrapper,
     XGBVectorWrapper,
     XGBQuantileVectorWrapper,
-    PytabkitRealMLPWrapper,
-    PytabkitRealMLPHPOWrapper,
-    PytabkitTabMDWrapper,
-    PytabkitTabMHPOWrapper,
+    # XGBLSSWrapper,
+    # PytabkitRealMLPWrapper,
+    # PytabkitRealMLPHPOWrapper,
+    # PytabkitTabMDWrapper,
+    # PytabkitTabMHPOWrapper,
     CatBoostQuantileWrapper,
 )
 
@@ -150,6 +151,7 @@ MODELS = {
     "xgb_vector": lambda: XGBVectorWrapper(n_bins=50, num_boost_round=100),
     "xgb_vector_quantile": lambda: XGBQuantileVectorWrapper(n_bins=50, num_boost_round=100),
     "catboost_quantile": lambda: CatBoostQuantileWrapper(n_quantiles=99, iterations=1000),
+    #"xgblss_Gaussian": lambda: XGBLSSWrapper(n_quantiles=100, num_boost_round=100, distribution="Gaussian"),
     # "tabm_d": lambda: PytabkitTabMDWrapper(
     #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
     #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
