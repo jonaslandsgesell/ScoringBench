@@ -111,7 +111,7 @@ def run_benchmark(
                     fold_result: dict = {}
                     models_present = []
                     for model_name in model_factories.keys():
-                        raw_parquet = output_dir / "raw" / f"{model_name}_{ds_safe}.parquet"
+                        raw_parquet = output_dir / "raw" / model_name / f"{ds_safe}.parquet"
                         if raw_parquet.exists():
                             try:
                                 existing = pd.read_parquet(raw_parquet)

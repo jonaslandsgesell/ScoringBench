@@ -27,12 +27,13 @@ ScoringBench is a compact benchmarking suite for probabilistic regression on tab
 
 ## Benchmark output (summary)
 
-Each run writes per-(model, dataset) raw Parquet files to `output/raw/`. Running `autorank_leaderboard.py` automatically aggregates these into per-model Parquet files in `output/`, which then feed downstream analysis scripts.
+Each run writes per-dataset per-model raw Parquet files to `output/raw/{model_name}/{dataset_name}.parquet`. This structure avoids concurrency issues when running multiple datasets in parallel (SLURM array jobs).
 
-Typical files:
+Typical directory structure:
 
-- `output/raw/` — per-(model, dataset) raw parquet files
-- `output/` — aggregated per-model parquet files
+- `output/raw/{model_name}/{dataset_name}.parquet` — raw results organized by model and dataset
+- `output/{model_name}.parquet` — aggregated per-model parquet files (after running autorank_leaderboard.py)
+
 
 ## Workflow
 

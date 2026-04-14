@@ -58,9 +58,10 @@ def _atomic_parquet_write(df: pd.DataFrame, dest: Path, engine: str | None) -> N
 def save_fold_parquet(fold_data: dict, output_dir: Path, dataset_name: str, fold_idx: int) -> None:
     """Write raw fold results as per-(model, dataset) parquet files.
 
-    Files are written to ``output_dir/raw/{model_name}_{dataset_name}.parquet``.
+    Files are written to ``output_dir/raw/{model_name}/{dataset_name}.parquet``.
     One SLURM array job typically owns one dataset, so each file is written by
-    exactly one process — no file locking required.
+    exactly one process — no file locking required. Per-dataset files avoid
+    concurrency issues when running multiple models or datasets in parallel.
     """
     ds_safe = dataset_name.replace(" ", "_")
     fold_idx_val = fold_idx
@@ -68,9 +69,6 @@ def save_fold_parquet(fold_data: dict, output_dir: Path, dataset_name: str, fold
     parquet_engine = _detect_parquet_engine()
     if not parquet_engine:
         raise RuntimeError("No parquet engine available (install pyarrow or fastparquet)")
-
-    raw_dir = output_dir / "raw"
-    raw_dir.mkdir(parents=True, exist_ok=True)
 
     for model_name, metrics in list(fold_data.items()):
         if model_name == "fold":
@@ -84,7 +82,9 @@ def save_fold_parquet(fold_data: dict, output_dir: Path, dataset_name: str, fold
         payload = make_json_serializable(payload)
         row_df = pd.DataFrame([payload])
 
-        dest_parquet = raw_dir / f"{model_name}_{ds_safe}.parquet"
+        model_raw_dir = output_dir / "raw" / model_name
+        model_raw_dir.mkdir(parents=True, exist_ok=True)
+        dest_parquet = model_raw_dir / f"{ds_safe}.parquet"
 
         # Append to the per-(model, dataset) file — safe because a single job
         # owns this file exclusively (one dataset per SLURM array task).
