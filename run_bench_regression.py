@@ -32,14 +32,15 @@ from scoringbench.utils import set_seed
 from scoringbench.wrappers import (
     TabPFNWrapper,
     FinetuneTabPFNWrapper,
+    FinetuneTabICLWrapper,
     TabICLWrapper,
     XGBVectorWrapper,
     XGBQuantileVectorWrapper,
-    # XGBLSSWrapper,
-    # PytabkitRealMLPWrapper,
-    # PytabkitRealMLPHPOWrapper,
-    # PytabkitTabMDWrapper,
-    # PytabkitTabMHPOWrapper,
+    XGBLSSWrapper,
+    PytabkitRealMLPWrapper,
+    PytabkitRealMLPHPOWrapper,
+    PytabkitTabMDWrapper,
+    PytabkitTabMHPOWrapper,
     CatBoostQuantileWrapper,
 )
 
@@ -95,6 +96,9 @@ def _create_finetune_model_tabpfn(beta_name, tabpfn_version):
     )
 
 
+# Note: finetuned TabICL wrapper is instantiated inline in MODELS below
+
+
 # Beta loss configurations for finetune models
 # To add more betas, simply append to this list, and the model will be automatically added to MODELS
 FINETUNE_BETAS = [
@@ -147,36 +151,48 @@ MODELS = {
         beta=None,
         early_stopping_metric="mse",
     ),
+    "finetune_tabiclv2": lambda: FinetuneTabICLWrapper(
+        epochs=N_EPOCHS,
+        learning_rate=1e-5,
+        n_estimators_finetune=2,
+        n_estimators_validation=2,
+        n_estimators_inference=8,
+        early_stopping=True,
+        patience=20,
+        eval_metric="mse",
+        random_state=0,
+        verbose=True,
+    ),
     "tabiclv2": lambda: TabICLWrapper(),
     "xgb_vector": lambda: XGBVectorWrapper(n_bins=50, num_boost_round=100),
     "xgb_vector_quantile": lambda: XGBQuantileVectorWrapper(n_bins=50, num_boost_round=100),
     "catboost_quantile": lambda: CatBoostQuantileWrapper(n_quantiles=99, iterations=1000),
-    #"xgblss_Gaussian": lambda: XGBLSSWrapper(n_quantiles=100, num_boost_round=100, distribution="Gaussian"),
-    # "tabm_d": lambda: PytabkitTabMDWrapper(
-    #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     n_quantiles=50,
-    # ),
-    # "tabm_hpo_cv_8_tabarena": lambda: PytabkitTabMHPOWrapper(
-    #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     n_quantiles=50,
-    #     hpo_space_name='tabarena',
-    #     n_cv=8
-    # ),
-    # "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
-    #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     n_quantiles=50,
-    # ),
-    # "pytabkit_realmlp_hpo_cv_8_new": lambda: PytabkitRealMLPHPOWrapper(
-    #     train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
-    #     n_quantiles=50,
-    #     n_cv=8,
-    #     hpo_space_name='tabarena-new',
-    #     use_caruana_ensembling=True,
-    # ),
+    "xgblss_Gaussian": lambda: XGBLSSWrapper(n_quantiles=100, num_boost_round=100, distribution="Gaussian"),
+    "tabm_d": lambda: PytabkitTabMDWrapper(
+        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        n_quantiles=50,
+    ),
+    "tabm_hpo_cv_8_tabarena": lambda: PytabkitTabMHPOWrapper(
+        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        n_quantiles=50,
+        hpo_space_name='tabarena',
+        n_cv=8
+    ),
+    "pytabkit_realmlp_td": lambda: PytabkitRealMLPWrapper(
+        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        n_quantiles=50,
+    ),
+    "pytabkit_realmlp_hpo_cv_8_new": lambda: PytabkitRealMLPHPOWrapper(
+        train_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        val_metric_name='multi_pinball(0.01,0.03,0.05,0.07,0.09,0.11,0.13,0.15,0.17,0.19,0.21,0.23,0.25,0.27,0.29,0.31,0.33,0.35,0.37,0.39,0.41,0.43,0.45,0.47,0.49,0.51,0.53,0.55,0.57,0.59,0.61,0.63,0.65,0.67,0.69,0.71,0.73,0.75,0.77,0.79,0.81,0.83,0.85,0.87,0.89,0.91,0.93,0.95,0.97,0.99)',
+        n_quantiles=50,
+        n_cv=8,
+        hpo_space_name='tabarena-new',
+        use_caruana_ensembling=True,
+    ),
 }
 
 

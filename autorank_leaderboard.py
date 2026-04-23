@@ -2,8 +2,9 @@
 """
 Leaderboard (Fold-Level Version) - Statistical Ranking
 Two ranking approaches:
-  1. rank_with_autorank   — Autorank-based statistical comparison with CD diagrams.
-  2. rank_with_ranx — Ranx-based ranking using magnitude-based comparison with statistical significance testing.
+    1. rank_with_autorank   — Autorank-based statistical comparison with CD diagrams.
+    2. rank_with_mean_std   — Magnitude-based ranking using per-dataset normalization
+         and mean normalized score.
 """
 import argparse
 import importlib.util
@@ -18,7 +19,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
-from ranx import Run, compare
 
 
 # ---------------------------------------------------------------------------
@@ -192,10 +192,10 @@ def rank_with_autorank(pivot, metric, order, hib, alpha):
 
 
 # ---------------------------------------------------------------------------
-# Ranking approach 2: Ranx magnitude-based ranking
+# Ranking approach 2: Mean-Std magnitude-based ranking
 # ---------------------------------------------------------------------------
 
-def rank_with_ranx_aggregated(df_long, hib=True):
+def rank_with_mean_std(df_long, hib=True):
     """
     Ranks models by first aggregating folds (to avoid pseudoreplication)
     and then performing a cross-dataset magnitude-stable comparison.
@@ -223,7 +223,7 @@ def rank_with_ranx_aggregated(df_long, hib=True):
                 models_sufficient_coverage.append(model)
         
         if not models_sufficient_coverage:
-            print("Warning: No models have 90%+ dataset coverage for ranx ranking")
+            print("Warning: No models have 90%+ dataset coverage for mean-std ranking")
             return pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
         
         # Filter data to only include models with sufficient coverage
@@ -248,52 +248,29 @@ def rank_with_ranx_aggregated(df_long, hib=True):
         if not hib:
             df_agg['norm_score'] = -df_agg['norm_score']
 
-        # 4. Create ranx Runs
-        runs = []
-        for model_name in models_sufficient_coverage:
-            model_data = df_agg[df_agg['model'] == model_name]
-            
-            # ranx format: { dataset_id: { model_id: normalized_score } }
-            run_dict = {
-                str(row.dataset): {model_name: float(row.norm_score)} 
-                for _, row in model_data.iterrows()
-                if pd.notna(row.norm_score)  # Skip NaN scores
-            }
-            
-            if run_dict:  # Only include model if it has valid scores
-                runs.append(Run(run_dict, name=model_name))
+        # 4. Aggregate normalized scores per model and produce leaderboard
+        # Compute mean normalized score and count of datasets per model
+        agg_scores = (
+            df_agg.groupby('model')['norm_score']
+            .agg(['mean', 'count'])
+            .rename(columns={'mean': 'mean_std_diff', 'count': 'n_datasets'})
+            .reset_index()
+        )
 
-        if not runs:
-            print("Warning: No valid runs after filtering NaNs")
+        if agg_scores.empty:
+            print("Warning: No valid model scores after normalization")
             return pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
 
-        # 5. Extract Leaderboard
-        leaderboard = []
-        for r in runs:
-            run_dict = r.to_dict()
-            if run_dict:
-                # Average normalized scores, skipping NaNs
-                scores = [float(next(iter(v.values()))) for v in run_dict.values()]
-                valid_scores = [s for s in scores if not np.isnan(s)]
-                avg_norm_score = np.mean(valid_scores) if valid_scores else 0.0
-                n_datasets_valid = len(valid_scores)
-            else:
-                avg_norm_score = 0.0
-                n_datasets_valid = 0
-            
-            leaderboard.append({
-                'model': r.name,
-                'mean_std_diff': float(avg_norm_score),
-                'n_datasets': n_datasets_valid
-            })
-
-        results = pd.DataFrame(leaderboard).sort_values('mean_std_diff', ascending=False).reset_index(drop=True)
+        agg_scores['mean_std_diff'] = agg_scores['mean_std_diff'].astype(float)
+        agg_scores['n_datasets'] = agg_scores['n_datasets'].astype(int)
+        results = agg_scores.sort_values('mean_std_diff', ascending=False).reset_index(drop=True)
         results.insert(0, 'rank', results.index + 1)
-        
+        # Keep only expected columns
+        results = results[['rank', 'model', 'mean_std_diff', 'n_datasets']]
         return results
     
     except Exception as e:
-        print(f"Ranx aggregated ranking error: {e}")
+        print(f"Mean-Std aggregated ranking error: {e}")
         import traceback
         traceback.print_exc()
         return pd.DataFrame()
@@ -303,7 +280,7 @@ def rank_with_ranx_aggregated(df_long, hib=True):
 # JSON output
 # ---------------------------------------------------------------------------
 
-def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
+def _rank_correlation(autorank_rankedDF, mean_rankedDF):
     """
     Compute Pearson correlation between the rank vectors of both methods.
     Models are aligned by name; only models present in both are used.
@@ -311,7 +288,7 @@ def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
     """
     try:
         # Handle empty dataframes
-        if autorank_rankedDF.empty or ranx_rankedDF.empty:
+        if autorank_rankedDF.empty or mean_rankedDF.empty:
             print("Warning: One or both ranking dataframes are empty, skipping correlation")
             return None, None, 0
         
@@ -320,12 +297,12 @@ def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
             print("Warning: Autorank dataframe missing required columns")
             return None, None, 0
         
-        if 'model' not in ranx_rankedDF.columns or 'rank' not in ranx_rankedDF.columns:
-            print("Warning: Ranx dataframe missing required columns")
+        if 'model' not in mean_rankedDF.columns or 'rank' not in mean_rankedDF.columns:
+            print("Warning: Mean-std dataframe missing required columns")
             return None, None, 0
         
         ar = autorank_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_autorank'})
-        rx = ranx_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_ranx'})
+        rx = mean_rankedDF[['model', 'rank']].rename(columns={'rank': 'rank_mean_std'})
         merged = ar.merge(rx, on='model')
         n = len(merged)
         
@@ -333,7 +310,7 @@ def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
             print(f"Warning: Insufficient overlapping models ({n}) for correlation")
             return None, None, n
         
-        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_ranx'])
+        r, p = stats.pearsonr(merged['rank_autorank'], merged['rank_mean_std'])
         print(f"Rank correlation: r={r:.3f}, p={p:.4f}, n_models={n}")
         return float(r), float(p), n
     except Exception as e:
@@ -341,17 +318,18 @@ def _rank_correlation(autorank_rankedDF, ranx_rankedDF):
         return None, None, 0
 
 
-def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ranx_rankedDF, order, hib):
+def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, mean_rankedDF, order, hib):
     """
     Write a single JSON file with two top-level sections:
       - "autorank": statistical results from autorank
-      - "ranx": ranx-based ranking with magnitude scores
+      - "mean_std_rank": mean-normalized ranking with magnitude scores
     Also includes Pearson correlation between both ranking methods.
     """
 
     # --- autorank section ---
     autorank_section = {
         "alpha": autorank_result.alpha,
+        "effect_size": autorank_result.effect_size,
         "cd": float(autorank_result.cd) if autorank_result.cd is not None else None,
         "pvalue": float(autorank_result.pvalue) if autorank_result.pvalue is not None else None,
         "omnibus_test": autorank_result.omnibus,
@@ -379,24 +357,23 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ran
             "magnitude_above": row.get('magnitude_above', 'unknown'),
         })
 
-    # --- Ranx section ---
-    ranx_section = {
+    # --- Mean-Std ranking section ---
+    mean_std_section = {
         "description": (
-            "Ranx-based magnitude ranking with dataset normalization. "
-            "Averages performance across datasets for stable model comparison. "
-            "Includes standard deviation and dataset coverage metrics."
+            "Mean normalized score ranking (per-dataset z-score). "
+            "Averages performance across datasets for stable model comparison."
         ),
         "models": [],
     }
-    for _, row in ranx_rankedDF.iterrows():
-        ranx_section["models"].append({
+    for _, row in mean_rankedDF.iterrows():
+        mean_std_section["models"].append({
             "rank": int(row['rank']),
             "name": row['model'],
             "mean_std_diff": float(row.get('mean_std_diff', 0)),
             "n_datasets": int(row.get('n_datasets', 0)),
         })
 
-    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, ranx_rankedDF)
+    pearson_r, pearson_p, n_models_corr = _rank_correlation(autorank_rankedDF, mean_rankedDF)
 
     n_datasets = None  # Not directly available in this scope
 
@@ -407,13 +384,13 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ran
         "n_datasets": n_datasets,
         "rank_correlation": {
             "method": "pearson",
-            "between": ["rank_autorank", "rank_ranx"],
+            "between": ["rank_autorank", "rank_mean_std"],
             "r": pearson_r,
             "pvalue": pearson_p,
             "n_models": n_models_corr,
         },
         "autorank": autorank_section,
-        "ranx": ranx_section,
+        "mean_std_rank": mean_std_section,
     }
 
     json_path = os.path.join(out_dir, f"cd_data_{metric}.json")
@@ -427,7 +404,8 @@ def save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ran
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", default="output")
+    parser.add_argument("--output", "--output_dir", dest="output", default="output_3000",
+                        help="Top-level output directory containing parquet files (default: output_3000)")
     parser.add_argument("--alpha", type=float, default=0.05, help="Significance level for statistical tests")
     args = parser.parse_args()
 
@@ -452,6 +430,9 @@ def main():
     writer = _load_write_latex_writer()
     if writer: writer(root, rows_all)
 
+    # Print datasets once after the first metric's model-dropping step
+    printed_datasets = False
+
     # Discover metrics
     discovered_metrics = set()
     for entry in os.listdir(root):
@@ -465,6 +446,18 @@ def main():
     for metric in sorted(discovered_metrics):
         pivot, models_in_metric = load_metric_matrix(root, metric)
         if pivot is None: continue
+
+        # After load_metric_matrix prints any model-dropping warnings, print
+        # the list of datasets used for the (filtered) pivot — only once.
+        try:
+            if not printed_datasets:
+                datasets_used = sorted(list(pivot.index))
+                if datasets_used:
+                    print(f"\nDatasets used ({len(datasets_used)}):")
+                    print('  ' + ', '.join(datasets_used))
+                printed_datasets = True
+        except Exception:
+            pass
 
         # Determine metric ordering and apply any score transformation
         is_coverage = metric.startswith("coverage_")
@@ -507,6 +500,16 @@ def main():
             sys.stdout = old_stdout
             latex_str = buffer.getvalue()
             if latex_str.strip():
+                # Escape underscores in model names (lines that don't start with \)
+                import re
+                lines = latex_str.split('\n')
+                for i, line in enumerate(lines):
+                    if line and not line[0] == '\\' and ' & ' in line:
+                        model_part = line.split(' & ')[0]
+                        if '_' in model_part:
+                            escaped_model = model_part.replace('_', '\\_')
+                            lines[i] = line.replace(model_part, escaped_model, 1)
+                latex_str = '\n'.join(lines)
                 with open(os.path.join(out_dir, f"latex_table_{metric}.tex"), 'w') as f:
                     f.write(latex_str)
 
@@ -530,12 +533,12 @@ def main():
             print(f"Skipping {metric} (autorank error): {e}")
             continue
 
-        # --- Approach 2: Ranx magnitude-based ranking ---
+        # --- Approach 2: Mean-Std magnitude-based ranking ---
         try:
             df_long, models_in_long = load_metric_long_format(root, metric)
             if df_long is None:
                 print(f"Warning: could not load long format data for {metric}")
-                ranx_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
+                mean_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
             else:
                 # Apply transformation if needed (for coverage metrics)
                 if is_coverage:
@@ -545,17 +548,17 @@ def main():
                         target = 0.5
                     df_long['score'] = (df_long['score'] - target).abs()
                 
-                ranx_rankedDF = rank_with_ranx_aggregated(df_long, hib)
+                mean_rankedDF = rank_with_mean_std(df_long, hib)
 
-                print(f"\n--- {metric} (Ranx Magnitude Ranking) ---")
-                print(ranx_rankedDF[["rank", "model", "mean_std_diff"]].to_string(index=False))
+                print(f"\n--- {metric} (Mean-Std Magnitude Ranking) ---")
+                print(mean_rankedDF[["rank", "model", "mean_std_diff"]].to_string(index=False))
 
         except Exception as e:
-            print(f"Warning: Ranx ranking failed for {metric}: {e}")
-            ranx_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff"])
+            print(f"Warning: Mean-Std ranking failed for {metric}: {e}")
+            mean_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff"])
 
         # --- Save merged JSON ---
-        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, ranx_rankedDF, order, hib)
+        save_merged_cd_data(out_dir, metric, autorank_rankedDF, autorank_result, mean_rankedDF, order, hib)
 
 
 if __name__ == "__main__":

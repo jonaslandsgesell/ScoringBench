@@ -6,6 +6,17 @@ import numpy as np
 
 from .base import DistributionPrediction, ProbabilisticWrapper
 
+import sys
+from pathlib import Path
+
+# Prefer local checkout of `tabicl` when present in the workspace.
+# Compute repository root relative to this file and insert the local
+# `tabicl/src` directory at the front of `sys.path` if it exists.
+repo_root = Path(__file__).resolve().parents[2]
+local_tabicl = repo_root / "tabicl" / "src"
+if local_tabicl.exists():
+    sys.path.insert(0, str(local_tabicl))
+
 
 class TabICLWrapper(ProbabilisticWrapper):
     """Wraps TabICLRegressor (v2).
@@ -20,12 +31,14 @@ class TabICLWrapper(ProbabilisticWrapper):
     """
 
     # Quantile levels and output grid resolution
-    _ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
-    _N_GRID = len(_ALPHAS)                                         # regular z-grid bins per sample
+    
+    
 
     def __init__(self, **kwargs):
         from tabicl import TabICLRegressor
         self._model = TabICLRegressor(**kwargs)
+        self._ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
+        self._N_GRID = len(self._ALPHAS)                                         # regular z-grid bins per sample
 
     def fit(self, X, y) -> "TabICLWrapper":
         self._model.fit(X, y)
@@ -105,4 +118,45 @@ class TabICLWrapper(ProbabilisticWrapper):
             bin_edges=all_bin_edges,
             bin_midpoints=bin_midpoints,
             mean=mean,
+        )
+
+class FinetuneTabICLWrapper(TabICLWrapper):
+    """Wraps a finetuned TabICL regressor.
+    
+    Inherits from TabICLWrapper to reuse the distribution prediction logic.
+    """
+
+    def __init__(
+        self,
+        *,
+        epochs: int = 80,
+        learning_rate: float = 1e-5,
+        n_estimators_finetune: int = 2,
+        n_estimators_validation: int = 2,
+        n_estimators_inference: int = 8,
+        early_stopping: bool = True,
+        patience: int = 8,
+        eval_metric: str | None = None,
+        random_state: int = 0,
+        verbose: bool = False,
+        **kwargs,
+    ):
+        # Initialize the base class to set _ALPHAS and _N_GRID
+        super().__init__(**kwargs)
+        
+        from tabicl import FinetunedTabICLRegressor
+
+        # Replace self._model with the finetuned variant
+        self._model = FinetunedTabICLRegressor(
+            epochs=epochs,
+            learning_rate=learning_rate,
+            n_estimators_finetune=n_estimators_finetune,
+            n_estimators_validation=n_estimators_validation,
+            n_estimators_inference=n_estimators_inference,
+            early_stopping=early_stopping,
+            patience=patience,
+            eval_metric=eval_metric,
+            random_state=random_state,
+            verbose=verbose,
+            **kwargs,
         )

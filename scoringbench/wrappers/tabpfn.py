@@ -8,12 +8,12 @@ from .base import DistributionPrediction, ProbabilisticWrapper
 
 
 import sys
-import os
+from pathlib import Path
 
-# # Get the absolute path to the current directory
-project_root = "/home/landsges/ScoringBench"
-# Insert it at the beginning of the search path
-sys.path.insert(0, project_root) ## so that modified tabpfn is preferred
+# Prefer local checkout of the repository when present in the workspace.
+repo_root = Path(__file__).resolve().parents[2]
+if repo_root.exists():
+    sys.path.insert(0, str(repo_root))  # prefer local modified packages
 
 
 class TabPFNWrapper(ProbabilisticWrapper):

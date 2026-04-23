@@ -21,7 +21,8 @@ import numpy as np
 import torch
 
 # Test requires the modified TabPFN from the workspace
-sys.path.insert(0, "/home/landsges/ScoringBench")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Check prerequisites before importing heavy modules
 ATOL = 1e-4

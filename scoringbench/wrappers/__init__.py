@@ -11,7 +11,7 @@ live in their own sub-modules:
 
 from .base import DistributionPrediction, ProbabilisticWrapper
 from .tabpfn import TabPFNWrapper, FinetuneTabPFNWrapper
-from .tabicl import TabICLWrapper
+from .tabicl import TabICLWrapper, FinetuneTabICLWrapper
 from .xgb_vector import XGBVectorWrapper, XGBQuantileVectorWrapper
 from .xgblss_wrapper import XGBLSSWrapper
 from .pytabkit import (
@@ -28,6 +28,7 @@ __all__ = [
     "TabPFNWrapper",
     "FinetuneTabPFNWrapper",
     "TabICLWrapper",
+    "FinetuneTabICLWrapper",
     "XGBVectorWrapper",
     "XGBQuantileVectorWrapper",
     "XGBLSSWrapper",

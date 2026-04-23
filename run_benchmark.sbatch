@@ -17,10 +17,17 @@
 #SBATCH --time=120:00:00
 #SBATCH --job-name=scoringbench
 
+# Hardcoded sample size
+SAMPLE_SIZE="3000" #"3000" is original 
+
 if [ -n "${SLURM_ARRAY_TASK_ID}" ]; then
     # Array mode: run only the dataset at index SLURM_ARRAY_TASK_ID
-    python run_bench_regression.py --dataset_index "${SLURM_ARRAY_TASK_ID}"
+    python run_bench_regression.py --dataset_index "${SLURM_ARRAY_TASK_ID}" \
+        --sample_size "${SAMPLE_SIZE}" \
+        --output_dir "./output_${SAMPLE_SIZE}"
 else
     # Sequential mode: run all datasets in one job (original behaviour)
-    python run_bench_regression.py
+    python run_bench_regression.py \
+        --sample_size "${SAMPLE_SIZE}" \
+        --output_dir "./output_${SAMPLE_SIZE}"
 fi

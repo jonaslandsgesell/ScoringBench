@@ -78,7 +78,7 @@ def write_latex_tables(root: str, rows: List[dict]) -> None:
             table3.append((found, '{:.3f}', display.upper()))
 
     def _esc(text):
-        return str(text).replace('_', '\\_').replace('%', '\\%')
+        return str(text).replace('\\', '\\textbackslash{}').replace('_', '\\_').replace('%', '\\%')
 
     def _format_val(metric, val, is_best, fmt):
         try:
@@ -221,9 +221,10 @@ def write_leaderboard_table(figures_dir: str, metric: str, df: pd.DataFrame, hig
         os.makedirs(figures_dir, exist_ok=True)
         out = os.path.join(figures_dir, f"leaderboard_{metric}.tex")
         lines = []
+        metric_esc = metric.replace('_', '\\_')
         lines.append('\\begin{table}[htbp]')
         lines.append('\\centering')
-        lines.append('\\caption{Leaderboard for ' + metric + '}')
+        lines.append('\\caption{Leaderboard for ' + metric_esc + '}')
         lines.append('\\label{tab:leaderboard_' + metric + '}')
         lines.append('\\small')
         lines.append('\\begin{tabular}{r l r r r}')
@@ -241,10 +242,10 @@ def write_leaderboard_table(figures_dir: str, metric: str, df: pd.DataFrame, hig
             obs_s = f"{obs:.3f}" if np.isfinite(obs) else ''
             norm_s = f"{norm:.3f}" if np.isfinite(norm) else ''
             if i == 0:
-                model_s = '\\textbf{' + model.replace('_', '\\_') + '}'
+                model_s = '\\textbf{' + model.replace('\\', '\\textbackslash{}').replace('_', '\\_') + '}'
                 norm_s = '$\\mathbf{' + norm_s + '}$' if norm_s else norm_s
             else:
-                model_s = model.replace('_', '\\_')
+                model_s = model.replace('\\', '\\textbackslash{}').replace('_', '\\_')
                 norm_s = '$' + norm_s + '$' if norm_s else norm_s
             p_s = '$' + p_s + '$' if p_s else p_s
             obs_s = '$' + obs_s + '$' if obs_s else obs_s
