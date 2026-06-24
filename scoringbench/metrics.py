@@ -118,6 +118,16 @@ def compute_energy_score_histogram_corrected(
         At beta=1.0, this mathematically equals the exact continuous CRPS.
         """
         device = probas.device
+        # Promote to float64: term1 - term2 (E|X-y| minus the half self-distance)
+        # is a difference of potentially large, nearly-equal values. In float32 the
+        # catastrophic cancellation can push the (non-negative) energy score / CRPS
+        # below zero for sharp or wide-binned predictive distributions (observed:
+        # CRPS down to -5.8 on quantile-histogram models). Double precision plus the
+        # per-sample clamp below restore the mathematical guarantee score >= 0.
+        probas = probas.double()
+        bin_mids = bin_mids.double()
+        bin_widths = bin_widths.double()
+        y = y.double()
         n_samples, n_bins = probas.shape
         shared = (bin_mids.ndim == 1)
         
@@ -176,8 +186,9 @@ def compute_energy_score_histogram_corrected(
                     term2_parts.append(0.5 * torch.einsum("ci,cij,cj->c", p_c, Dc, p_c))
                 term2 = torch.cat(term2_parts)
 
-            # Average over samples
-            results[f"energy_score_beta_{beta}"] = (term1 - term2).mean().item()
+            # Average over samples (clamp per-sample: energy score / CRPS is
+            # non-negative by definition; any sub-zero value is numerical error).
+            results[f"energy_score_beta_{beta}"] = (term1 - term2).clamp(min=0).mean().item()
 
         return results
 
