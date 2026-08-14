@@ -164,6 +164,62 @@ def test_shared_grid_stays_one_dimensional():
     assert np.asarray(e_out).ndim == 1
 
 
+def test_repaired_shared_grid_stays_one_dimensional():
+    """The *repair* path must also keep a shared grid shared.
+
+    Above only covers the regular fixed point, which returns its input and so
+    cannot regress.  This is the case that actually bit: TabPFN's borders carry a
+    tied pair, so every real prediction takes the resampling branch, and
+    broadcasting there hands ``metrics`` per-sample edges holding ``n_samples``
+    identical rows -- moving the energy score onto its per-sample branch, which
+    rebuilds the ``(n_bins, n_bins)`` pairwise-distance matrix once per sample
+    (measured ~144x slower) for bit-identical edge values.
+    """
+    edges = np.array([0.0, 1.0, 1.0, 2.0, 3.0])  # one tie -> not regular
+    probas = np.full((32, 4), 0.25)
+
+    e_out, p_out = regrid_to_uniform(edges, probas)
+
+    assert np.asarray(e_out).ndim == 1, "shared grid was broadcast to per-sample"
+    assert np.all(np.diff(np.asarray(e_out)) > 0.0)
+    assert np.asarray(p_out).shape == probas.shape
+
+
+def test_repaired_shared_grid_matches_explicit_per_sample_repair():
+    """Staying 1-D is a representation change only: the numbers are unchanged.
+
+    Feeding the same tied grid pre-broadcast to per-sample rows must reproduce the
+    shared result *exactly*, so the fast path is not trading accuracy for speed.
+    """
+    edges = np.array([-2.0, -1.0, -1.0, 0.5, 0.5, 0.5, 3.0])  # several ties
+    rng = np.random.default_rng(11)
+    p = rng.random((8, 6))
+    p /= p.sum(axis=-1, keepdims=True)
+
+    e_shared, p_shared = regrid_to_uniform(edges, p)
+    e_per, p_per = regrid_to_uniform(np.broadcast_to(edges, (8, 7)), p)
+
+    # Bit-for-bit: same affine map, same interpolant, same difference order.
+    np.testing.assert_array_equal(
+        np.broadcast_to(np.asarray(e_shared), np.asarray(e_per).shape),
+        np.asarray(e_per),
+    )
+    np.testing.assert_array_equal(np.asarray(p_shared), np.asarray(p_per))
+
+
+def test_shared_repair_is_idempotent():
+    """Repairing the repaired shared grid changes nothing further."""
+    edges = np.array([0.0, 0.0, 1.0, 2.0, 2.0, 5.0])
+    probas = np.full((4, 5), 0.2)
+
+    e1, p1 = regrid_to_uniform(edges, probas)
+    e2, p2 = regrid_to_uniform(e1, p1)
+
+    assert np.asarray(e2).ndim == 1
+    np.testing.assert_array_equal(np.asarray(e2), np.asarray(e1))
+    np.testing.assert_array_equal(np.asarray(p2), np.asarray(p1))
+
+
 def test_uniform_pmf_on_regular_grid_is_exactly_preserved():
     """Resampling a uniform density onto its own support reproduces it."""
     n_bins = 8

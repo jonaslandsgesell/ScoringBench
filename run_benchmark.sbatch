@@ -18,8 +18,14 @@
 #SBATCH --mem=128G
 #SBATCH --time=120:00:00
 #SBATCH --job-name=scoringbench
-#SBATCH --output=slurm_logs/slurm-%j.out
-#SBATCH --error=slurm_logs/slurm-%j.err
+# Log naming:
+#   * Array mode:  slurm_logs/scoringbench-<arrayJobId>_<taskId>.{out,err}
+#                  (matches the "22606392_34" shown by squeue).
+#   * Single mode: %A resolves to the job id and %a to 4294967294, so a plain
+#                  non-array run lands in scoringbench-<jobId>_4294967294.*.
+#                  Prefer `sbatch --array=<n> …` for readable names.
+#SBATCH --output=slurm_logs/%x-%A_%a.out
+#SBATCH --error=slurm_logs/%x-%A_%a.err
 
 # Hardcoded sample size
 SAMPLE_SIZE="3000" #"3000" is original 

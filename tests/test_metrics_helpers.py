@@ -8,7 +8,7 @@ import torch
 from scoringbench.metrics import (
     _interval,
     compute_quantile_wcrps,
-    compute_crls,
+    compute_crts,
     compute_cde_loss,
     unified_bin_density,
     compute_energy_score_histogram_corrected,
@@ -190,45 +190,57 @@ def test_quantile_wcrps_weights_sum(simple_shared_grid, simple_pmf_and_targets):
 
 
 # ============================================================================
-# Test compute_crls function
+# Test compute_crts function
 # ============================================================================
 
-def test_crls_basic(simple_shared_grid, simple_pmf_and_targets):
-    """Test basic CRLS computation."""
-    device = simple_shared_grid["device"]
-    bin_widths = simple_shared_grid["bin_widths"]
-    
+def test_crts_basic(simple_shared_grid, simple_pmf_and_targets):
+    """Test basic CRTS computation."""
+    bin_edges = simple_shared_grid["bin_edges"]
+
     cdf = simple_pmf_and_targets["cdf"]
+    y = simple_pmf_and_targets["y"]
     y_bin = simple_pmf_and_targets["y_bin"]
-    n_bins = simple_pmf_and_targets["n_bins"]
-    
-    eps = torch.finfo(torch.float32).eps
-    
-    crls = compute_crls(cdf, bin_widths, y_bin, n_bins, device, eps, shared=True)
-    
-    assert isinstance(crls, float)
-    assert crls >= 0  # CRLS should be non-negative
+
+    results = compute_crts(cdf, bin_edges, y, y_bin, shared=True)
+
+    assert isinstance(results, dict)
+    assert set(results.keys()) == {"crts_alpha_1.01", "crts_alpha_1.2", "crts_alpha_1.5", "crts_alpha_2.0"}
+    for v in results.values():
+        assert isinstance(v, float)
 
 
-def test_crls_perfect_prediction(device=torch.device("cpu")):
-    """Test CRLS with perfect prediction (point mass at target)."""
+def test_crts_perfect_prediction(device=torch.device("cpu")):
+    """Test CRTS with perfect prediction (point mass at target)."""
     n_samples = 2
     n_bins = 3
-    
+
     # Point mass at middle bin
     probas = torch.zeros((n_samples, n_bins), dtype=torch.float32, device=device)
     probas[:, 1] = 1.0
-    
+
     cdf = torch.cumsum(probas, dim=-1)
-    bin_widths = torch.ones(n_bins, dtype=torch.float32, device=device)
+    bin_edges = torch.tensor([0.0, 1.0, 2.0, 3.0], dtype=torch.float32, device=device)
+    y = torch.tensor([1.5, 1.5], dtype=torch.float32, device=device)
     y_bin = torch.tensor([1, 1], dtype=torch.int64, device=device)
-    
-    eps = torch.finfo(torch.float32).eps
-    
-    crls = compute_crls(cdf, bin_widths, y_bin, n_bins, device, eps, shared=True)
-    
-    # Perfect prediction should give low (but not zero due to discretization) CRLS
-    assert crls >= 0
+
+    results = compute_crts(cdf, bin_edges, y, y_bin, shared=True)
+
+    # Perfect prediction should give a finite value for all alphas
+    for key, val in results.items():
+        assert isinstance(val, float), f"{key} should be float"
+
+
+def test_crts_invalid_alpha_raises():
+    """compute_crts should raise ValueError for alpha <= 1 + 1e-4."""
+    n_bins = 4
+    cdf = torch.linspace(0.25, 1.0, n_bins).unsqueeze(0)
+    bin_edges = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0])
+    y = torch.tensor([2.5])
+    y_bin = torch.tensor([2])
+
+    import pytest
+    with pytest.raises(ValueError, match="1e-4"):
+        compute_crts(cdf, bin_edges, y, y_bin, shared=True, alphas=[1.0])
 
 
 # ============================================================================
@@ -285,15 +297,14 @@ def test_cde_loss_zero_prediction(device=torch.device("cpu")):
 def test_all_helpers_with_energy_score(simple_shared_grid, simple_pmf_and_targets):
     """Test that helper functions work together with energy score computation."""
     device = simple_shared_grid["device"]
-    bin_mids = simple_shared_grid["bin_mids"]
-    bin_widths = simple_shared_grid["bin_widths"]
+    bin_edges = simple_shared_grid["bin_edges"]
     
     probas = simple_pmf_and_targets["probas"]
     y = simple_pmf_and_targets["y"]
     
     # Compute energy score
     energy_result = compute_energy_score_histogram_corrected(
-        probas, bin_mids, bin_widths, y, betas=[0.5, 1.0, 1.5]
+        probas, bin_edges, y, betas=[0.5, 1.0, 1.5]
     )
     
     assert "energy_score_beta_0.5" in energy_result
@@ -310,15 +321,14 @@ def test_all_helpers_with_energy_score(simple_shared_grid, simple_pmf_and_target
 def test_helpers_with_several_betas(simple_shared_grid, simple_pmf_and_targets):
     """Test helper functions work with multiple beta values."""
     device = simple_shared_grid["device"]
-    bin_mids = simple_shared_grid["bin_mids"]
-    bin_widths = simple_shared_grid["bin_widths"]
+    bin_edges = simple_shared_grid["bin_edges"]
     
     probas = simple_pmf_and_targets["probas"]
     y = simple_pmf_and_targets["y"]
     
     betas_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5, 1.7, 1.8, 1.9]
     energy_result = compute_energy_score_histogram_corrected(
-        probas, bin_mids, bin_widths, y, betas=betas_list
+        probas, bin_edges, y, betas=betas_list
     )
     
     # All beta values should be present

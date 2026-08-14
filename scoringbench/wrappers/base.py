@@ -72,11 +72,26 @@ def regular_support(x, n_bins):
     return z_min, z_max
 
 
-def _monotone_cdf_at(x_row, c_row, edges_row):
+def _collapse_ties(x_row):
+    """Collapse tied abscissae; return ``(xs, order)`` for :func:`_monotone_cdf_at`.
+
+    ``xs`` are the sorted unique abscissae of ``x_row`` and ``order`` maps each
+    input node onto its slot in ``xs``.  Split out of :func:`_monotone_cdf_at` so
+    a *shared* abscissa row -- every sample resampled against one grid, as when a
+    natively-gridded model's borders are repaired -- pays for the sort once
+    instead of once per sample.
+    """
+    xs = np.unique(x_row)
+    return xs, np.searchsorted(xs, x_row)
+
+
+def _monotone_cdf_at(x_row, c_row, edges_row, collapsed=None):
     """Evaluate a monotone CDF at ``edges_row`` with a shape-preserving cubic.
 
     ``x_row`` is non-decreasing abscissae and ``c_row`` the matching
     non-decreasing CDF values (both 1-D); ``edges_row`` are the query points.
+    ``collapsed`` optionally supplies a precomputed :func:`_collapse_ties`
+    result for ``x_row`` (identical output, just not recomputed per row).
 
     Why PCHIP rather than linear interpolation
     ------------------------------------------
@@ -100,11 +115,25 @@ def _monotone_cdf_at(x_row, c_row, edges_row):
     the output bin ``searchsorted(edges[1:], y)`` would send a target on the atom
     to.  With two or fewer distinct abscissae there is no cubic to fit and the
     evaluation falls back to ``np.interp``.
+
+    Extreme coordinates
+    -------------------
+    PCHIP evaluates its cubic in the local variable ``t = x - x_i``, so ``t**3``
+    overflows to ``inf`` for spacings past ``~1e103`` and ``inf * 0.0 = nan``,
+    which the clip below silently turns into a flat PMF.  Rescaling ``x`` by a
+    power of two fixes it exactly -- the interpolant is equivariant in ``x`` and
+    ``np.ldexp`` only edits the exponent, so the result is bit-identical.
+
+    That normalises the overall magnitude but not the *ratio* of adjacent
+    spacings, and the node slopes ``dC / h_k`` still overflow when one gap
+    underflows against another (``[-1e-9, 0, 1e300]``).  No rescaling helps there,
+    so we fall back to a linear CDF: still monotone and mass-exact, forfeiting
+    only the density shape that
+    `tests/test_interpolation_scheme_selection.py` selects PCHIP for.
     """
     # np.unique returns the *sorted unique* abscissae; map each to the CDF value
     # of the LAST input node at that abscissa so an atom's full jump is kept.
-    xs = np.unique(x_row)
-    order = np.searchsorted(xs, x_row)
+    xs, order = _collapse_ties(x_row) if collapsed is None else collapsed
     cs = np.zeros(xs.shape, dtype=np.float64)
     cs[order] = c_row                    # later duplicates overwrite -> last wins
     cs = np.maximum.accumulate(cs)       # guard monotonicity after the scatter
@@ -112,13 +141,31 @@ def _monotone_cdf_at(x_row, c_row, edges_row):
     if xs.size < 3:
         return np.interp(edges_row, xs, cs)
 
-    c = PchipInterpolator(xs, cs, extrapolate=True)(edges_row)
+    # Exponent-only rescaling, so the significands (and the cubic) are unchanged.
+    scale = np.max(np.abs(xs))
+    shift = np.frexp(scale)[1] if (np.isfinite(scale) and scale > 0.0) else 0
+    xs_s = np.ldexp(xs, -shift)
+    edges_s = np.ldexp(edges_row, -shift)
+
+    # The shift can round two adjacent abscissae together; PCHIP needs them strict.
+    if np.all(np.diff(xs_s) > 0.0):
+        try:
+            # Raise rather than let an inf/nan reach the clip as a plausible PMF.
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                c = PchipInterpolator(xs_s, cs, extrapolate=True)(edges_s)
+            if not np.all(np.isfinite(c)):
+                raise FloatingPointError("non-finite PCHIP evaluation")
+        except (FloatingPointError, ValueError):
+            c = np.interp(edges_s, xs_s, cs)
+    else:
+        c = np.interp(edges_s, xs_s, cs)
+
     # PCHIP is monotone on its nodes, but extrapolation past the ends can leave
     # [0, 1]; clip so the differenced masses stay a valid PMF.
     return np.clip(c, cs[0], cs[-1])
 
 
-def resample_cdf_to_regular_grid(x, y, n_bins):
+def resample_cdf_to_regular_grid(x, y, n_bins, shared_x=False):
     """Interpolate a CDF onto a regular grid; return ``(bin_edges, probas)``.
 
     ``x`` is ``(rows, m)`` non-decreasing abscissae and ``y`` the matching
@@ -126,21 +173,28 @@ def resample_cdf_to_regular_grid(x, y, n_bins):
     the same levels.  ``x[:, 0]`` and ``x[:, -1]`` are taken as the support ends,
     so the caller is responsible for having extended them (see
     :func:`regular_support`) and for anchoring ``y`` at 0 and 1 there if it wants
-    the full unit of mass inside the grid.
+    the full unit of mass inside the grid.  Set ``shared_x=True`` only when every
+    row of ``x`` is identical; the returned edges are then 1-D.
 
     ``n_bins + 1`` equally spaced edges span ``[x[:, 0], x[:, -1]]``; ``C`` is
     interpolated there by :func:`_monotone_cdf_at` and forward-differenced into
     bin masses.  Because ``C`` is monotone the differences are non-negative and
     total mass is exactly ``C(x_last) - C(x_first)``; because they are taken at
     the bin edges each mass is the exact increment ``C(edge_{k+1}) - C(edge_k)``.
+
+    ``shared_x=True`` promises every row of ``x`` is identical.  The edges depend
+    on ``x`` alone, so the output grid is genuinely shared too and is returned 1-D
+    to keep ``metrics.py`` on its shared-grid branch.
     """
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
     rows = x.shape[0]
     y2 = np.broadcast_to(y, x.shape) if y.ndim == 1 else y
 
-    z_min = x[:, 0:1]
-    z_max = x[:, -1:]
+    # With shared abscissae every row's edges coincide, so build the single row.
+    x_rows = x[0:1] if shared_x else x
+    z_min = x_rows[:, 0:1]
+    z_max = x_rows[:, -1:]
 
     frac = np.linspace(0.0, 1.0, n_bins + 1)[None, :]
     edges = z_min + (z_max - z_min) * frac
@@ -149,21 +203,27 @@ def resample_cdf_to_regular_grid(x, y, n_bins):
     edges[:, 0] = z_min[:, 0]
     edges[:, -1] = z_max[:, 0]
 
+    # Round-off in the affine map can leave an interior edge a hair below its
+    # predecessor; a running max removes the resulting negative width.  Done in
+    # place so we do not allocate a second (rows, n_bins+1) copy.  Must precede
+    # the CDF evaluation so the masses are differenced at the *final* edges.
+    np.maximum.accumulate(edges, axis=-1, out=edges)
+
+    # A shared abscissa row has one tie structure; collapse it once, not per row.
+    collapsed = _collapse_ties(x[0]) if shared_x else None
+
     probas = np.empty((rows, n_bins), dtype=np.float64)
     for i in range(rows):
-        c = _monotone_cdf_at(x[i], y2[i], edges[i])
+        e_row = edges[0] if shared_x else edges[i]
+        c = _monotone_cdf_at(x[i], y2[i], e_row, collapsed=collapsed)
         m = np.maximum(np.diff(c), 0.0)
         s = m.sum()
         probas[i] = m / s if s > 0.0 else 1.0 / n_bins
 
-    # Round-off in the affine map can leave an interior edge a hair below its
-    # predecessor; a running max removes the resulting negative width.  Done in
-    # place so we do not allocate a second (rows, n_bins+1) copy
-    np.maximum.accumulate(edges, axis=-1, out=edges)
-    return edges, probas
+    return (edges[0] if shared_x else edges), probas
 
 
-def cdf_nodes_to_regular_grid(x_nodes, c_nodes, n_bins):
+def cdf_nodes_to_regular_grid(x_nodes, c_nodes, n_bins, shared_x=False):
     """Extend support, pin ``C = 0/1`` at the ends, resample onto a regular grid.
 
     The one entry point every wrapper shares: given monotone CDF nodes
@@ -173,15 +233,24 @@ def cdf_nodes_to_regular_grid(x_nodes, c_nodes, n_bins):
     mass, and hands off to :func:`resample_cdf_to_regular_grid`.  Owning the
     extend-and-anchor step here keeps every converter on the identical scheme and
     off re-implementing it.
+
+    ``shared_x=True`` declares every row of ``x_nodes`` identical and is forwarded
+    to :func:`resample_cdf_to_regular_grid`, which then returns 1-D edges.  The
+    extension is read off ``x`` alone, so a shared input stays shared.
     """
     x = np.atleast_2d(np.asarray(x_nodes, dtype=np.float64))
     rows = x.shape[0]
     c = np.broadcast_to(np.asarray(c_nodes, dtype=np.float64), x.shape) if np.ndim(c_nodes) == 1 else np.asarray(c_nodes, dtype=np.float64)
 
-    z_min, z_max = regular_support(x, n_bins)
-    xx = np.concatenate([z_min, x, z_max], axis=-1)
+    # Shared abscissae extend identically, so extend the single row and broadcast
+    # the result back as a view instead of concatenating `rows` copies of it.
+    x_ext = x[0:1] if shared_x else x
+    z_min, z_max = regular_support(x_ext, n_bins)
+    xx = np.concatenate([z_min, x_ext, z_max], axis=-1)
+    if shared_x:
+        xx = np.broadcast_to(xx, (rows, xx.shape[-1]))
     yy = np.concatenate([np.zeros((rows, 1)), c, np.ones((rows, 1))], axis=-1)
-    return resample_cdf_to_regular_grid(xx, yy, n_bins)
+    return resample_cdf_to_regular_grid(xx, yy, n_bins, shared_x=shared_x)
 
 
 def _is_regular(e, w):
@@ -224,17 +293,17 @@ def regrid_to_uniform(bin_edges, probas):
     Parameters
     ----------
     bin_edges : (n_bins+1,) or (n_samples, n_bins+1) array
-        Per-row edges.  A shared 1-D grid is promoted to 2-D unless it is already
-        regular, in which case it is returned as it came.
+        Per-row edges.  Shape is preserved: a shared 1-D grid stays 1-D.
     probas : (n_samples, n_bins) array
         Per-row PMF.
 
     Returns
     -------
     (bin_edges, probas)
-        ``bin_edges`` is 2-D (per-sample) for anything that had to be resampled.
-        An already-regular grid -- of either shape -- is returned untouched (the
-        same objects), which makes the map idempotent.
+        ``bin_edges`` keeps the input's rank: the repaired edges depend on the
+        input edges alone, so one shared grid maps to one shared grid (1-D in,
+        1-D out -- see ``_sanitize_native_grid`` for why that matters).
+        An already-regular grid is returned untouched, making the map idempotent.
     """
     e_in = np.asarray(bin_edges, dtype=np.float64)
     p_in = np.asarray(probas, dtype=np.float64)
@@ -256,7 +325,9 @@ def regrid_to_uniform(bin_edges, probas):
         return bin_edges, probas
 
     rows = max(e.shape[0], p_in.shape[0])
-    e = np.array(np.broadcast_to(e, (rows, n_bins + 1)), dtype=np.float64)
+    # Keep a shared grid as one row instead of `rows` identical copies: cheaper in
+    # memory and much faster to score downstream.
+    e = np.array(e if shared else np.broadcast_to(e, (rows, n_bins + 1)), dtype=np.float64)
     p = np.array(np.broadcast_to(p_in, (rows, n_bins)), dtype=np.float64)
 
     # Monotone edges (a caller may hand over an unsorted row) and a normalized,
@@ -270,38 +341,49 @@ def regrid_to_uniform(bin_edges, probas):
     # extend-anchor-resample path.
     c = np.concatenate([np.zeros((rows, 1)), np.cumsum(p, axis=-1)], axis=-1)
     c[:, -1] = 1.0                                        # exact, not just to rounding
-    return cdf_nodes_to_regular_grid(e, c, n_bins)
+    if shared:
+        # `e` is the one shared row; broadcast it back against the per-sample CDF
+        # rows as a *view* and tell the resampler the abscissae are shared, so it
+        # returns 1-D edges without ever allocating the (rows, n_bins+1) block.
+        e = np.broadcast_to(e, (rows, n_bins + 1))
+    return cdf_nodes_to_regular_grid(e, c, n_bins, shared_x=shared)
+
+
+def _has_positive_widths(bin_edges, probas):
+    """True when ``bin_edges`` forms a well-formed grid with every width > 0.
+
+    ``False`` for a malformed grid (edge count != bins + 1, or no bins), so the
+    caller hands those to :func:`regrid_to_uniform`, which returns them unchanged
+    -- the single "trust as-is" decision stays in one place.
+    """
+    e = np.asarray(bin_edges, dtype=np.float64)
+    n_bins = np.asarray(probas).shape[-1]
+    if n_bins == 0 or e.shape[-1] != n_bins + 1:
+        return False
+    # Require widths above EPS, not merely > 0: a genuinely positive but
+    # sub-EPS width would survive as-is here and reach the density metrics,
+    # where the width clamp then makes f_k = p_k / w_k inconsistent.  Widths in
+    # (0, EPS] are treated as degenerate and repaired by regrid_to_uniform,
+    # whose MIN_PAD span floor guarantees widths well above EPS.
+    return bool(np.all(np.diff(e, axis=-1) > EPS))
 
 
 def _sanitize_native_grid(bin_edges, probas):
-    """Cheap zero-width guard for a model that emits its own regular grid.
+    """Zero-width guard for a model that emits its own histogram grid.
 
     A natively-gridded model (``is_natively_gridded_model=True``, e.g. TabPFN's
-    bar-distribution borders) is trusted to emit positive-width bins, so a clean
-    grid is returned as the *same objects* (byte for byte) and resampling never
-    blurs it.  Only if a border repeats -- a ``w_k = 0`` bin, ``p_k / w_k = 0/0``
-    -- does the row fall back to :func:`regrid_to_uniform`, which resamples the
-    CDF onto positive widths and re-normalizes.  Detection is one ``np.diff``, so
-    the clean case is nearly free.
+    bar-distribution borders) is trusted to emit positive-width bins -- even
+    *irregular* ones -- so a clean grid is returned as the *same objects* (byte
+    for byte) and never resampled.  Only when a border repeats (any number of
+    ties, giving one or more ``w_k = 0`` bins whose density ``p_k / w_k`` is
+    ``0/0``) does the grid fall back to :func:`regrid_to_uniform`, which reads
+    the PMF as a CDF and resamples it onto positive widths.
+
+    TabPFN's borders contain ties, so that repair runs on every real prediction;
+    it keeps a shared 1-D grid 1-D, which is much faster to score downstream.
     """
-    e = np.asarray(bin_edges, dtype=np.float64)
-    p = np.asarray(probas, dtype=np.float64)
-    if p.ndim == 1:
-        p = p[None, :]
-
-    n_bins = p.shape[1]
-    # Only a well-formed (edges = bins + 1) grid can be checked; anything else is
-    # left for the downstream consumer to reject, exactly as before this guard.
-    if n_bins == 0 or e.shape[-1] != n_bins + 1:
+    if _has_positive_widths(bin_edges, probas):
         return bin_edges, probas
-
-    w = np.diff(e, axis=-1)
-    if np.all(w > 0.0):
-        # Clean grid: hand the model's own edges and PMF through unchanged.
-        return bin_edges, probas
-
-    # A tie collapsed at least one bin -- resample the CDF onto a positive-width
-    # grid.  regrid_to_uniform normalizes each row, so the result sums to 1.
     return regrid_to_uniform(bin_edges, probas)
 
 

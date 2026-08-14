@@ -22,7 +22,7 @@ import torch
 from sklearn.model_selection import KFold
 from sklearn.impute import SimpleImputer
 
-from .metrics import compute_metrics, compute_point_metrics, ENERGY_BETAS, DPD_BETAS
+from .metrics import compute_metrics, compute_point_metrics, ENERGY_BETAS, DPD_BETAS, CRTS_ALPHAS
 from .wrappers import ProbabilisticWrapper
 
 
@@ -49,10 +49,10 @@ def run_fold(
     - transform on X_test (apply train statistics)
     This ensures no data leakage from test to train via imputation statistics.
 
-    Returns {model_name: {mae, rmse, r2, crps, log_score, sharpness,
+    Returns {model_name: {mae, rmse, r2, crps, sharpness,
                           coverage_90, interval_score_90,
                           coverage_95, interval_score_95,
-                          train_time}}
+                          crts_alpha_{1.01,...,2.0}, train_time}}
     """
     # Impute missing values (learn from train, apply to both train and test)
     if X_train.isna().sum().sum() > 0 or X_test.isna().sum().sum() > 0:
@@ -90,13 +90,14 @@ def run_fold(
                 y_pred = model.predict(X_test)
                 metrics = compute_point_metrics(y_test_np, y_pred)
                 for key in (
-                    "crps", "log_score", "sharpness",
+                    "crps", "sharpness",
                     "coverage_90", "interval_score_90",
                     "coverage_95", "interval_score_95",
-                    "crls", "cde_loss",
+                    "cde_loss",
                     "wcrps_left", "wcrps_right", "wcrps_center",
                     *[f"energy_score_beta_{b}" for b in ENERGY_BETAS],
                     *[f"dpd_beta_{b}" for b in DPD_BETAS],
+                    *[f"crts_alpha_{a}" for a in CRTS_ALPHAS],
                 ):
                     metrics[key] = None
 

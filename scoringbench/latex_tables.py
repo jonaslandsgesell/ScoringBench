@@ -29,8 +29,14 @@ def write_latex_tables(root: str, rows: List[dict]) -> None:
 
     table2_wanted = [
         ('crps', ['crps']),
-        ('log_score', ['log_score', 'logscore', 'log_s']),
-        ('crls', ['crls']),
+        ('crts_alpha_1.01', ['crts_alpha_1.01']),
+        ('crts_alpha_1.2', ['crts_alpha_1.2']),
+        ('crts_alpha_1.5', ['crts_alpha_1.5']),
+        ('crts_alpha_2.0', ['crts_alpha_2.0']),
+        ('dpd_beta_0.01', ['dpd_beta_0.01']),
+        ('dpd_beta_0.2', ['dpd_beta_0.2']),
+        ('dpd_beta_0.5', ['dpd_beta_0.5']),
+        ('dpd_beta_1.0', ['dpd_beta_1.0']),
         ('cde_loss', ['cde_loss']),
         # energy scores for multiple beta values
         ('energy_score_beta_0.2', ['energy_score_beta_0.2', 'energy_score_0.2']),

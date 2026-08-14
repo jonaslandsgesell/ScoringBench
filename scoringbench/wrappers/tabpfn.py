@@ -56,10 +56,6 @@ class TabPFNWrapper(ProbabilisticWrapper):
         probas = torch.softmax(logits, dim=-1).cpu().numpy()    # (n_samples, n_bins)
         mean = (probas * bin_midpoints[None, :]).sum(axis=-1)   # (n_samples,)
 
-        # The criterion's borders already *are* a histogram grid with positive
-        # widths -- TabPFN predicts mass on a fixed bar chart rather than
-        # quantiles -- so there is nothing to repair and resampling could only
-        # blur it.  Pass the model's own grid and PMF through untouched.
         return DistributionPrediction(
             probas=probas,
             bin_edges=bin_edges,

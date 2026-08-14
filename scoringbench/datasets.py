@@ -153,43 +153,140 @@ def _is_classification(y: pd.Series) -> bool:
 # ---------------------------------------------------------------------------
 # OpenML suite loader (existing)
 # ---------------------------------------------------------------------------
+# The suite -> [dataset config] mapping is cached to disk, one JSON file per
+# suite id, in ``SUITE_CACHE_DIR``. OpenML (0.15.x) does NOT cache
+# ``get_suite``/``get_study`` calls, so without this every run (and every SLURM
+# array task) re-queries ``openml.org/api/v1/xml/study/{id}`` and dies with a
+# 504 when the OpenML server is flaky. Once a suite has been resolved once, we
+# read straight from the local cache and never touch the network again.
+#
+# On a transient failure we fall back to the last-known-good cached copy so a
+# single 504 no longer silently drops an entire suite's datasets.
+#
+# Set ``SCORINGBENCH_NO_CACHE=1`` to bypass the cache (force a fresh fetch).
+SUITE_CACHE_DIR = CACHE_DIR / 'suites'
+
+
+def _read_suite_cache(suite_id) -> list | None:
+    """Return cached dataset configs for ``suite_id`` or ``None`` if absent."""
+    path = SUITE_CACHE_DIR / f"suite_{suite_id}.json"
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        # Corrupt/partial cache file -> ignore and re-fetch.
+        return None
+
+
+def _write_suite_cache(suite_id, configs: list) -> None:
+    """Atomically persist a suite's resolved dataset configs to disk."""
+    try:
+        SUITE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = SUITE_CACHE_DIR / f"suite_{suite_id}.json"
+        tmp = path.with_suffix('.json.tmp')
+        with open(tmp, 'w') as f:
+            json.dump(configs, f, indent=2)
+        os.replace(tmp, path)
+    except Exception as e:
+        # Caching is best-effort; never fail over a cache write.
+        print(f"  [suite-cache] warning: could not cache suite "
+              f"{suite_id}: {str(e)[:80]}")
+
+
+def _fetch_suite_configs(suite_id) -> list:
+    """Fetch and resolve a single OpenML suite into a list of dataset configs.
+
+    Returns ``(configs, complete)`` where ``complete`` is ``True`` only if every
+    task in the suite resolved without error. A suite is cached only when it is
+    complete, so a partial fetch (e.g. a 504 on one task) is retried on the next
+    run instead of being frozen into the cache.
+
+    Raises on network/server errors from ``get_suite`` itself so the caller can
+    decide whether to fall back to a cached copy.
+    """
+    suite = openml.study.get_suite(suite_id)
+    print(f"  Processing OpenML Suite {suite_id} ('{suite.name}')...")
+    configs = []
+    complete = True
+    for task_id in suite.tasks:
+        try:
+            task = openml.tasks.get_task(task_id)
+            dataset_id = task.dataset_id
+            dataset = openml.datasets.get_dataset(
+                dataset_id, download_data=False
+            )
+            dataset_name = dataset.name
+            abbr = ''.join(
+                [word[0] for word in dataset_name.split('_') if word]
+            ).upper()[:3]
+
+            configs.append({
+                'name': dataset_name,
+                'abbr': abbr,
+                'source': 'openml',
+                'id': dataset_id,
+            })
+        except Exception as e:
+            complete = False
+            print(f"    Error processing task {task_id} "
+                  f"in suite {suite_id}: {e}")
+    return configs, complete
+
+
 def generate_datasets_config_from_openml_suites(suite_ids):
-    """Generate dataset configs from OpenML benchmark suites."""
+    """Generate dataset configs from OpenML benchmark suites.
+
+    Uses an on-disk per-suite cache (``SUITE_CACHE_DIR``) so suites are resolved
+    against the OpenML servers at most once per machine. Set the env var
+    ``SCORINGBENCH_NO_CACHE=1`` to bypass the cache and force a fresh fetch.
+    """
     datasets_config = []
     seen_dataset_ids = set()
+    no_cache = bool(os.environ.get('SCORINGBENCH_NO_CACHE'))
 
     print("Fetching datasets from OpenML suites...")
 
     for suite_id in suite_ids:
-        try:
-            suite = openml.study.get_suite(suite_id)
-            print(f"  Processing OpenML Suite {suite_id} ('{suite.name}')...")
-            for task_id in suite.tasks:
-                try:
-                    task = openml.tasks.get_task(task_id)
-                    dataset_id = task.dataset_id
+        configs = None
 
-                    if dataset_id not in seen_dataset_ids:
-                        dataset = openml.datasets.get_dataset(
-                            dataset_id, download_data=False
-                        )
-                        dataset_name = dataset.name
-                        abbr = ''.join(
-                            [word[0] for word in dataset_name.split('_') if word]
-                        ).upper()[:3]
+        # --- Cache hit: reuse the previously resolved suite ---
+        if not no_cache:
+            configs = _read_suite_cache(suite_id)
+            if configs is not None:
+                print(f"  [suite-cache] hit for suite {suite_id} "
+                      f"({len(configs)} datasets)")
 
-                        datasets_config.append({
-                            'name': dataset_name,
-                            'abbr': abbr,
-                            'source': 'openml',
-                            'id': dataset_id,
-                        })
-                        seen_dataset_ids.add(dataset_id)
-                except Exception as e:
-                    print(f"    Error processing task {task_id} "
-                          f"in suite {suite_id}: {e}")
-        except Exception as e:
-            print(f"  Error retrieving suite {suite_id}: {e}")
+        # --- Cache miss (or bypass): fetch from OpenML ---
+        if configs is None:
+            try:
+                configs, complete = _fetch_suite_configs(suite_id)
+                # Only cache a fully-resolved suite so a partial fetch (e.g. a
+                # 504 on a single task) is retried next run instead of frozen.
+                if complete and not no_cache:
+                    _write_suite_cache(suite_id, configs)
+                elif not complete:
+                    print(f"  [suite-cache] suite {suite_id} incomplete "
+                          f"(some tasks failed) - NOT caching, will retry "
+                          f"next run")
+            except Exception as e:
+                print(f"  Error retrieving suite {suite_id}: {e}")
+                # Fall back to any stale-but-usable cached copy.
+                stale = _read_suite_cache(suite_id)
+                if stale is not None:
+                    print(f"  [suite-cache] falling back to cached suite "
+                          f"{suite_id} ({len(stale)} datasets)")
+                    configs = stale
+                else:
+                    configs = []
+
+        # --- Merge, deduplicating by dataset id ---
+        for cfg in configs:
+            dataset_id = cfg.get('id')
+            if dataset_id not in seen_dataset_ids:
+                datasets_config.append(cfg)
+                seen_dataset_ids.add(dataset_id)
 
     print("\nFinished populating DATASETS_CONFIG from OpenML suites.")
     return datasets_config

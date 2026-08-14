@@ -14,7 +14,7 @@ import torch
 # Force CPU
 torch.cuda.is_available = lambda: False
 
-from scoringbench.metrics import compute_scoring_rules, ENERGY_BETAS, DPD_BETAS
+from scoringbench.metrics import compute_scoring_rules, ENERGY_BETAS, DPD_BETAS, CRTS_ALPHAS
 from scoringbench.wrappers import DistributionPrediction
 
 
@@ -223,6 +223,36 @@ def get_batch_distributions(n_samples):
     return batch
 
 
+# Cache of full metric dicts keyed by n_samples.
+#
+# ``compute_scoring_rules`` returns *all* scoring rules in one pass, but the
+# parametrized stability tests each read out only a single key (one energy
+# beta, one DPD beta, one metric name, ...).  Recomputing the entire metric
+# dict once per parameter is the dominant cost of this module.  Memoizing the
+# two dicts (N=100 and N=150) per ``n_samples`` collapses those redundant
+# passes into a single computation shared across every parametrization.
+_metrics_cache = {}
+
+def get_discretization_metrics(n_samples):
+    """Return ``(metrics_100, metrics_150)`` metric dicts for ``n_samples``.
+
+    The result is cached so that ``compute_scoring_rules`` runs at most twice
+    per ``n_samples`` regardless of how many parametrized cases consume it.
+    """
+    if n_samples in _metrics_cache:
+        return _metrics_cache[n_samples]
+
+    batch = get_batch_distributions(n_samples)
+    metrics_100 = compute_scoring_rules(
+        batch[f"x_100_g_{n_samples}"], batch[f"x_100_f_{n_samples}"].mean
+    )
+    metrics_150 = compute_scoring_rules(
+        batch[f"x_150_g_{n_samples}"], batch[f"x_150_f_{n_samples}"].mean
+    )
+    _metrics_cache[n_samples] = (metrics_100, metrics_150)
+    return metrics_100, metrics_150
+
+
 
 def assert_metric_stability(val_lo, val_hi, metric_name, threshold=None, is_coverage=False):
     """Helper to check metric stability between two discretization levels.
@@ -267,29 +297,26 @@ relative_threshold=0.15
 @pytest.mark.parametrize("n_samples", [10, 20])
 @pytest.mark.parametrize("metric_name,threshold,is_coverage", [
     ("crps", relative_threshold, False),
-    ("log_score", relative_threshold, False),
     ("sharpness", relative_threshold, False),
     ("coverage_90", relative_threshold, True),
     ("coverage_95", relative_threshold, True),
     ("interval_score_90", relative_threshold, False),
     ("interval_score_95", relative_threshold, False),
-    ("crls", relative_threshold, False),
+    ("crts_alpha_1.01", relative_threshold, False),
     ("wcrps_left", relative_threshold, False),
     ("wcrps_right", relative_threshold, False),
     ("wcrps_center", relative_threshold, False),
     ("cde_loss", relative_threshold, False),
-    ("dpd_beta_0.0", relative_threshold, False),
+    ("dpd_beta_0.01", relative_threshold, False),
     ("dpd_beta_0.2", relative_threshold, False),
     ("dpd_beta_0.5", relative_threshold, False),
     ("dpd_beta_1.0", relative_threshold, False),
 ])
 def test_metric_discretization_stability(n_samples, metric_name, threshold, is_coverage):
     """Parametrized test for all metric types with batch computation."""
-    batch = get_batch_distributions(n_samples)
-    
-    # Compute metrics at both discretization levels (N=100 → N=150)
-    metrics_100 = compute_scoring_rules(batch[f"x_100_g_{n_samples}"], batch[f"x_100_f_{n_samples}"].mean)
-    metrics_150 = compute_scoring_rules(batch[f"x_150_g_{n_samples}"], batch[f"x_150_f_{n_samples}"].mean)
+    # Compute metrics at both discretization levels (N=100 → N=150).
+    # The dicts are memoized, so this is computed once per ``n_samples``.
+    metrics_100, metrics_150 = get_discretization_metrics(n_samples)
 
     val_100 = metrics_100[metric_name]
     val_150 = metrics_150[metric_name]
@@ -304,10 +331,10 @@ def test_metric_discretization_stability(n_samples, metric_name, threshold, is_c
 @pytest.mark.parametrize("beta", ENERGY_BETAS)
 def test_energy_score_discretization_stability(n_samples, beta):
     """Parametrized test for energy scores with batch computation."""
-    batch = get_batch_distributions(n_samples)
-    
-    metrics_100 = compute_scoring_rules(batch[f"x_100_g_{n_samples}"], batch[f"x_100_f_{n_samples}"].mean)
-    metrics_150 = compute_scoring_rules(batch[f"x_150_g_{n_samples}"], batch[f"x_150_f_{n_samples}"].mean)
+    # Memoized: ``compute_scoring_rules`` runs once per ``n_samples`` and is
+    # shared across every energy-beta parametrization instead of being redone
+    # for each of the 12 betas.
+    metrics_100, metrics_150 = get_discretization_metrics(n_samples)
 
     key = f"energy_score_beta_{beta}"
     assert_metric_stability(
@@ -323,26 +350,26 @@ def test_all_metrics_discretization_stability_summary():
     
     Uses batch computation for efficiency.
     """
-    batch = get_batch_distributions(40)
-    
-    metrics_100 = compute_scoring_rules(batch["x_100_g_40"], batch["x_100_f_40"].mean)
-    metrics_150 = compute_scoring_rules(batch["x_150_g_40"], batch["x_150_f_40"].mean)
+    # Reuse the memoized metric dicts (computed once per ``n_samples``).
+    metrics_100, metrics_150 = get_discretization_metrics(40)
     
     # Thresholds for different metric types
     thresholds = {
         "crps": 0.10,
-        "log_score": 0.15,
+        "dpd_beta_0.01": 0.15,
         "sharpness": 0.05,
         "dispersion": 0.2,
-        "crls": 0.10,
+        "crts_alpha_1.01": 0.10,
         "cde_loss": 0.10,
         "wcrps_left": 0.10,
         "wcrps_right": 0.10,
         "wcrps_center": 0.10,
     }
-    # Add DPD thresholds
+    # Add DPD and CRTS thresholds
     for b in DPD_BETAS:
         thresholds[f"dpd_beta_{b}"] = 0.10
+    for a in CRTS_ALPHAS:
+        thresholds[f"crts_alpha_{a}"] = 0.10
     # Coverage metrics use absolute difference
     coverage_thresholds = {
         "coverage_90": 0.10,
@@ -415,14 +442,14 @@ def test_all_metrics_discretization_stability_summary():
 # All scalar metrics returned by compute_scoring_rules (excluding energy_score_*)
 _SCALAR_METRICS = [
     "crps",
-    "log_score",
+    "dpd_beta_0.01",
     "sharpness",
     "dispersion",
     "coverage_90",
     "coverage_95",
     "interval_score_90",
     "interval_score_95",
-    "crls",
+    "crts_alpha_1.01",
     "cde_loss",
     "wcrps_left",
     "wcrps_right",

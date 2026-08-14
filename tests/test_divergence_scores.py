@@ -15,7 +15,10 @@ torch.cuda.is_available = lambda: False
 
 from scoringbench.metrics import (
     compute_scoring_rules,
+    compute_pseudospherical_scores,
     DPD_BETAS,
+    CRTS_ALPHAS,
+    PSEUDOS_ALPHAS,
 )  # noqa: E402
 from scoringbench.wrappers import DistributionPrediction
 
@@ -226,19 +229,17 @@ class TestDPDExactValues:
 class TestComparisonBetweenMetrics:
     """Tests comparing DPD behavior at perfect vs imperfect predictions."""
     
-    def test_beta0_matches_log_score(self):
-        """DPD at β=0 should match the negative log score computed elsewhere."""
+    def test_crts_keys_present(self):
+        """All crts_alpha_* keys should be present in results."""
         dist = get_imperfect_distribution()
         y_true = np.array([1.5], dtype=np.float32)
 
         metrics = compute_scoring_rules(dist, y_true)
-        dpd0 = metrics.get("dpd_beta_0.0")
-        logscore = metrics.get("log_score")
 
-        assert dpd0 is not None and logscore is not None
-        assert math.isclose(dpd0, logscore, rel_tol=1e-6, abs_tol=1e-6), (
-            f"dpd_beta_0.0 ({dpd0:.8f}) should equal log_score ({logscore:.8f})"
-        )
+        for alpha in CRTS_ALPHAS:
+            key = f"crts_alpha_{alpha}"
+            assert key in metrics, f"Missing {key}"
+            assert isinstance(metrics[key], float), f"{key} should be float"
 
 
 # ============================================================================
@@ -246,15 +247,16 @@ class TestComparisonBetweenMetrics:
 # ============================================================================
 
 def test_all_new_metrics_present_in_results():
-    """Verify all DPD metrics are computed and present in results."""
+    """Verify all DPD and CRTS metrics are computed and present in results."""
     dist = get_simple_distribution()
     y_true = np.array([1.5], dtype=np.float32)
 
     metrics = compute_scoring_rules(dist, y_true)
 
     for beta in DPD_BETAS:
-        key = f"dpd_beta_{beta}"
-        assert key in metrics, f"Missing {key}"
+        assert f"dpd_beta_{beta}" in metrics, f"Missing dpd_beta_{beta}"
+    for alpha in CRTS_ALPHAS:
+        assert f"crts_alpha_{alpha}" in metrics, f"Missing crts_alpha_{alpha}"
 
 
 def test_different_betas_produce_different_scores():
@@ -349,3 +351,438 @@ class TestEdgeCasesAndRobustness:
         assert math.isclose(cde, dpd1, rel_tol=1e-6, abs_tol=1e-8), (
             f"cde_loss ({cde}) should equal dpd_beta_1.0 ({dpd1})"
         )
+
+
+# ============================================================================
+# CRTS propriety guards
+#
+# CRTS integrates the binary α-Tsallis loss of the threshold indicator against
+# the predicted CDF.  At each bin the per-bin Bernoulli(p) is scored against the
+# observed indicator with the *full* α-Tsallis polynomial, whose integral term
+#
+#     [p^α + (1-p)^α] / α
+#
+# is what makes the rule strictly proper.  A naive log-score → power-score text
+# substitution that drops this normalisation term yields an IMPROPER rule whose
+# expected score is no longer minimised at the true forecast.  The two tests
+# below are the strongest regression guards against that specific mistake:
+#
+#   1.  α = 2 collapses CRTS to (a discretisation of) the CRPS.
+#   2.  The expected CRTS is strictly minimised at the data-generating
+#       forecast — i.e. the rule is empirically proper.
+# ============================================================================
+
+def _gaussian_histogram_distribution(mu, sigma, edges, n_rows):
+    """Build a DistributionPrediction whose PMF is N(mu, sigma) on ``edges``."""
+    from scipy import stats
+
+    edges = np.asarray(edges, dtype=np.float64)
+    mids = (edges[:-1] + edges[1:]) / 2.0
+    cdf = stats.norm(mu, sigma).cdf(edges)
+    p = np.diff(cdf)[None, :].repeat(n_rows, axis=0)
+    return DistributionPrediction(
+        probas=p.astype(np.float32),
+        bin_edges=edges.astype(np.float32),
+        bin_midpoints=mids.astype(np.float32),
+        mean=(p @ mids),
+    )
+
+
+def test_crts_alpha_2_matches_crps():
+    """α = 2 CRTS collapses to the CRPS (Brier-divergence identity).
+
+    The binary α-Tsallis loss at α = 2 is the Brier/quadratic score, so CRTS
+    integrates ∫ (F - 1{y ≤ t})^2 dt, which is exactly the CRPS.  On a fine grid
+    the two should agree up to discretisation error.  A missing normalisation
+    term would break this identity.
+    """
+    rng = np.random.default_rng(0)
+    y = rng.normal(0.0, 1.0, size=800).astype(np.float32)
+    edges = np.linspace(-7.0, 7.0, 201, dtype=np.float64)
+    dist = _gaussian_histogram_distribution(0.0, 1.0, edges, len(y))
+
+    metrics = compute_scoring_rules(dist, y)
+    crps = metrics["crps"]
+    crts2 = metrics["crts_alpha_2.0"]
+
+    assert math.isclose(crps, crts2, rel_tol=2e-2, abs_tol=2e-3), (
+        f"crts_alpha_2.0 ({crts2:.6f}) should match crps ({crps:.6f}) "
+        f"up to discretisation error"
+    )
+
+
+@pytest.mark.parametrize("alpha", [1.2, 1.5, 2.0])
+def test_crts_is_empirically_proper(alpha):
+    """The expected CRTS is strictly minimised at the true forecast.
+
+    Data are drawn from N(0, 1).  Among a set of candidate forecasts, only the
+    true one (μ=0, σ=1) should attain the lowest mean CRTS.  An improper rule
+    (e.g. one missing the p^α + (1-p)^α normalisation term) would let a
+    mis-specified forecast win — this test would then fail.
+
+    The 300-sample / 61-bin grid over [-6, 6] is deliberately small: the
+    propriety *margin* (runner-up minus true) converges by ~300 samples and is
+    within <1% of the value obtained with 1500 samples / 161 bins, so a coarser
+    grid keeps a comfortable margin while cutting the (quadratic-in-bins) energy
+    score cost that dominates ``compute_scoring_rules``.
+    """
+    rng = np.random.default_rng(0)
+    y = rng.normal(0.0, 1.0, size=300).astype(np.float32)
+    edges = np.linspace(-6.0, 6.0, 61, dtype=np.float64)
+    key = f"crts_alpha_{alpha}"
+
+    candidates = {
+        "true(0,1)": (0.0, 1.0),
+        "shift(0.5,1)": (0.5, 1.0),
+        "narrow(0,0.6)": (0.0, 0.6),
+        "wide(0,1.6)": (0.0, 1.6),
+    }
+
+    scores = {}
+    for name, (mu, sigma) in candidates.items():
+        dist = _gaussian_histogram_distribution(mu, sigma, edges, len(y))
+        scores[name] = compute_scoring_rules(dist, y)[key]
+
+    best = min(scores, key=scores.get)
+    assert best == "true(0,1)", (
+        f"CRTS (α={alpha}) is not proper: expected the true forecast to win, "
+        f"got {best}. Scores: "
+        + ", ".join(f"{n}={v:.4f}" for n, v in scores.items())
+    )
+    # Also require a clear margin so a near-tie doesn't mask a subtle bias.
+    runner_up = min(v for n, v in scores.items() if n != "true(0,1)")
+    assert scores["true(0,1)"] < runner_up, (
+        f"True forecast should strictly beat the runner-up (α={alpha}): "
+        f"true={scores['true(0,1)']:.4f} vs runner-up={runner_up:.4f}"
+    )
+
+
+# ============================================================================
+# Pseudospherical Score (Good, 1971)
+# ============================================================================
+#
+# The pseudospherical score is the *ratio-form* member of the density-power
+# family (DPD is the difference form).  We use the Gneiting & Raftery (2007,
+# eq. 12) affine normalisation.  For order α > 1,
+#
+#     PseudoS_α(f, y) = 1/(α-1) · [ (f(y)/‖f‖_α)^{α-1} − 1 ],
+#         ‖f‖_α = (∫ f^α dt)^{1/α},
+#
+# is positively oriented (larger = better), scale-invariant, and reduces (up to
+# the affine map) to the spherical score at α = 2.  ScoringBench reports it
+# negated so lower = better, under keys ``pseudospherical_alpha_{α}``.  The
+# ``1/(α-1)`` factor and ``−1`` offset are order-preserving, so propriety and
+# scale-invariance are unchanged.  These tests pin the properties that
+# are *specific* to the ratio form; propriety and support-insensitivity on the
+# production path are additionally covered by the support-sensitivity suite,
+# which auto-classifies these keys as proper.
+
+
+def _reference_pseudospherical(probas, bin_edges, y, alpha):
+    """Independent NumPy re-derivation of the (negated) pseudospherical score.
+
+        PseudoS_α = 1/(α-1) · [ f(y)^{α-1} / (∫ f^α dt)^{(α-1)/α} − 1 ]
+
+    (Gneiting & Raftery 2007, eq. 12) built from the *same* unified bin density
+    used by every two-term rule, so the point value ``f(y)`` and the norm
+    ``∫ f^α`` are functionals of one ``f`` (the pairing that makes the rule
+    proper).  Returned negated to match the module's lower-is-better convention.
+    """
+    f, w_eff = _reference_unified_density(probas, bin_edges)
+    f = np.asarray(f, dtype=float).reshape(-1)
+    edges = np.asarray(bin_edges, dtype=float)
+    y_bin = int(np.clip(np.searchsorted(edges[1:], y), 0, len(f) - 1))
+
+    eps = 1e-10
+    g_y = max(float(f[y_bin]), 0.0)
+    norm_alpha = max(float((f ** alpha * w_eff).sum()), eps)
+    denom = norm_alpha ** ((alpha - 1.0) / alpha)
+    ratio = g_y ** (alpha - 1.0) / denom
+    return -((ratio - 1.0) / (alpha - 1.0))
+
+
+@pytest.mark.parametrize("alpha", PSEUDOS_ALPHAS)
+def test_pseudospherical_matches_reference(alpha):
+    """The module's pseudospherical score matches an independent NumPy re-derivation.
+
+    Guards the closed-form ``∫ f^α = ∑_k f_k^α w_k^eff`` and the exponent
+    ``(α-1)/α`` on the norm — an off-by-one there would silently change the
+    ranking without producing NaNs.
+    """
+    dist = get_imperfect_distribution()
+    y = np.array([1.5], dtype=np.float32)
+
+    key = f"pseudospherical_alpha_{alpha}"
+    got = compute_scoring_rules(dist, y)[key]
+    ref = _reference_pseudospherical(dist.probas, dist.bin_edges, float(y[0]), alpha)
+
+    assert math.isclose(got, ref, rel_tol=1e-6, abs_tol=1e-9), (
+        f"pseudospherical (α={alpha}) = {got:.9f} does not match reference "
+        f"{ref:.9f}"
+    )
+
+
+def test_pseudospherical_spherical_identity():
+    """At α = 2 the score is the affine image of the spherical score f(y)/‖f‖₂.
+
+    This is the defining special case: with the Gneiting–Raftery normalisation
+    (1/(α-1)=1 and offset −1 at α=2) the negated reported value must equal
+    ``f(y) / sqrt(∫ f² dt) − 1``.
+    """
+    dist = get_imperfect_distribution()
+    y = np.array([1.5], dtype=np.float32)
+
+    reported = compute_scoring_rules(dist, y)["pseudospherical_alpha_2.0"]
+
+    f, w_eff = _reference_unified_density(dist.probas, dist.bin_edges)
+    f = np.asarray(f, dtype=float).reshape(-1)
+    edges = np.asarray(dist.bin_edges, dtype=float)
+    y_bin = int(np.clip(np.searchsorted(edges[1:], float(y[0])), 0, len(f) - 1))
+    spherical = float(f[y_bin]) / math.sqrt(float((f ** 2 * w_eff).sum()))
+
+    # reported is the negated (loss-form) score; at α=2 that is (spherical − 1).
+    assert math.isclose(-reported, spherical - 1.0, rel_tol=1e-6, abs_tol=1e-9), (
+        f"α=2 pseudospherical should equal spherical score minus one "
+        f"{spherical - 1.0:.9f}, got {-reported:.9f}"
+    )
+
+
+@pytest.mark.parametrize("alpha", PSEUDOS_ALPHAS)
+def test_pseudospherical_is_scale_invariant(alpha):
+    """Scaling the forecast density f → c·f leaves the score unchanged.
+
+    Scale invariance is the hallmark of the ratio form: the c^{α-1} in the
+    numerator cancels the c^{α-1} the norm contributes.  We emulate an unnormalised
+    forecast by scaling the raw probabilities; the metrics module renormalises
+    internally, so an implementation that failed to cancel the scale would move
+    the score.
+    """
+    dist = get_imperfect_distribution()
+    y = np.array([1.5], dtype=np.float32)
+    key = f"pseudospherical_alpha_{alpha}"
+
+    base = compute_scoring_rules(dist, y)[key]
+
+    scaled = DistributionPrediction(
+        probas=(np.asarray(dist.probas, dtype=np.float32) * 5.0),
+        bin_edges=dist.bin_edges,
+        bin_midpoints=dist.bin_midpoints,
+        mean=dist.mean,
+    )
+    scaled_score = compute_scoring_rules(scaled, y)[key]
+
+    assert math.isclose(base, scaled_score, rel_tol=1e-6, abs_tol=1e-9), (
+        f"pseudospherical (α={alpha}) is not scale-invariant: "
+        f"{base:.9f} vs {scaled_score:.9f}"
+    )
+
+
+def test_pseudospherical_is_empirically_proper():
+    """The expected pseudospherical score is minimised at the true forecast.
+
+    Data ~ N(0, 1).  Only the true (μ=0, σ=1) forecast should attain the lowest
+    mean (negated) pseudospherical score among the candidates, and this must
+    hold for *every* reported order α simultaneously.
+
+    The candidate distributions and the targets do not depend on α, and a single
+    ``compute_scoring_rules`` call already returns every ``pseudospherical_alpha_*``
+    key at once.  So the full pipeline is run just **once per candidate** (not
+    once per candidate *and* order) and every reported α is then checked against
+    the same cached scores — this is the property-preserving speed-up over the
+    old per-α parametrisation, which re-ran the whole pipeline for each order.
+
+    Uses the same small 300-sample / 61-bin grid as
+    ``test_crts_is_empirically_proper``: the propriety margin is stable well
+    below 1500 samples, so the coarser grid keeps a clear margin while avoiding
+    the expensive full-resolution ``compute_scoring_rules`` call.
+    """
+    rng = np.random.default_rng(0)
+    y = rng.normal(0.0, 1.0, size=300).astype(np.float32)
+    edges = np.linspace(-6.0, 6.0, 61, dtype=np.float64)
+
+    candidates = {
+        "true(0,1)": (0.0, 1.0),
+        "shift(0.5,1)": (0.5, 1.0),
+        "narrow(0,0.6)": (0.0, 0.6),
+        "wide(0,1.6)": (0.0, 1.6),
+    }
+
+    # One full pipeline evaluation per candidate; all α keys come back together.
+    all_scores = {}
+    for name, (mu, sigma) in candidates.items():
+        dist = _gaussian_histogram_distribution(mu, sigma, edges, len(y))
+        all_scores[name] = compute_scoring_rules(dist, y)
+
+    for alpha in PSEUDOS_ALPHAS:
+        key = f"pseudospherical_alpha_{alpha}"
+        scores = {name: all_scores[name][key] for name in candidates}
+
+        best = min(scores, key=scores.get)
+        assert best == "true(0,1)", (
+            f"pseudospherical (α={alpha}) is not proper: expected the true "
+            f"forecast to win, got {best}. Scores: "
+            + ", ".join(f"{n}={v:.4f}" for n, v in scores.items())
+        )
+        runner_up = min(v for n, v in scores.items() if n != "true(0,1)")
+        assert scores["true(0,1)"] < runner_up, (
+            f"True forecast should strictly beat the runner-up (α={alpha}): "
+            f"true={scores['true(0,1)']:.4f} vs runner-up={runner_up:.4f}"
+        )
+
+
+# ============================================================================
+# Pseudospherical: direct-kernel sweep over a broad range of orders α
+# ============================================================================
+#
+# The production path only exercises the three reported orders (1.5, 2.0, 3.0).
+# The tests below drive ``compute_pseudospherical_scores`` *directly* on a
+# controlled piecewise-constant density so the closed form and the structural
+# properties (bounded loss, perfect-forecast optimum) are pinned across a much
+# wider α grid — including orders close to 1 (where the ratio form is most
+# fragile) and large orders — without depending on any histogram plumbing.
+
+# Broad sweep: near-1, the reported values, and well above the spherical order.
+_PSEUDOS_ALPHA_SWEEP = [1.01, 1.05, 1.2, 1.5, 2.0, 3.0, 5.0]
+
+
+def _make_density_terms(f, w):
+    """Build the ``(g_y, density_integral)`` pair the kernel consumes.
+
+    ``f`` is a per-bin density (shape ``(1, n_bins)``), ``w`` the matching bin
+    widths.  ``density_integral(power)`` returns ``∫ f^power dt = Σ_k f_k^power
+    w_k`` per sample, exactly as the production ``_density_terms`` closure does.
+    """
+    f_t = torch.as_tensor(f, dtype=torch.float64).reshape(1, -1)
+    w_t = torch.as_tensor(w, dtype=torch.float64).reshape(1, -1)
+
+    def density_integral(power):
+        return (f_t.clamp(min=0.0).pow(power) * w_t).sum(dim=-1)
+
+    return f_t, density_integral
+
+
+def _pseudospherical_kernel(f, w, y_bin, alpha, eps=1e-10):
+    """Run the module kernel for one density and order, returning the scalar loss."""
+    f_t, density_integral = _make_density_terms(f, w)
+    g_y = f_t[:, y_bin]                                  # f(y): value in the y-bin
+    out = compute_pseudospherical_scores.__wrapped__(
+        g_y, [alpha], density_integral=density_integral, eps=eps,
+    )
+    return out[f"pseudospherical_alpha_{alpha}"]
+
+
+@pytest.mark.parametrize("alpha", _PSEUDOS_ALPHA_SWEEP)
+def test_pseudospherical_kernel_matches_closed_form(alpha):
+    """Kernel equals ``−1/(α−1)·[ f(y)^{α−1} / (∫f^α)^{(α−1)/α} − 1 ]`` for any α.
+
+    Independent scalar re-derivation on a fixed, deliberately non-uniform
+    density and bin grid.  Sweeping α from 1.01 to 5.0 catches an exponent
+    mistake — e.g. ``(α−1)/α`` vs ``1/α`` on the norm, or the ``1/(α−1)`` affine
+    factor — that would stay hidden at the single spherical order α = 2.
+    """
+    f = np.array([0.2, 1.3, 0.5, 0.8, 0.1])
+    w = np.array([0.5, 0.4, 0.7, 0.3, 1.1])
+    y_bin = 1                                            # target lands in bin 1
+
+    got = _pseudospherical_kernel(f, w, y_bin, alpha)
+
+    g_y = f[y_bin]
+    norm_alpha = float((f ** alpha * w).sum())
+    denom = norm_alpha ** ((alpha - 1.0) / alpha)
+    ratio = g_y ** (alpha - 1.0) / denom
+    ref = -((ratio - 1.0) / (alpha - 1.0))               # negated -> loss
+
+    assert math.isclose(got, ref, rel_tol=1e-9, abs_tol=1e-12), (
+        f"pseudospherical kernel (α={alpha}) = {got:.12f} != closed form "
+        f"{ref:.12f}"
+    )
+
+
+@pytest.mark.parametrize("alpha", _PSEUDOS_ALPHA_SWEEP)
+def test_pseudospherical_loss_is_bounded_and_finite(alpha):
+    """The reported loss is finite and worst at an out-of-support target.
+
+    Unlike the log score, the ratio form has a *bounded* point term
+    ``f(y)^{α−1}`` that → 0 as ``f(y) → 0``, so an out-of-support target yields
+    the largest (worst) but still finite loss ``1/(α−1)`` rather than +∞.  Any
+    in-support target places positive density at ``y`` and so scores strictly
+    better (a strictly smaller loss).  This pins the boundedness and
+    support-insensitivity of the ratio form across every order in the sweep.
+
+    (Note the loss is *not* guaranteed ≤ 0 at the densest bin: the affine
+    ``−1/(α−1)·[(f(y)/‖f‖_α)^{α−1} − 1]`` is only non-positive once
+    ``f(y) ≥ ‖f‖_α``, which need not hold for a nearly-flat density at small α.
+    Boundedness and the strict in-support advantage are the properties that
+    hold universally, so those are what we assert.)
+    """
+    f = np.array([0.1, 0.9, 1.4, 0.6, 0.2])
+    w = np.array([0.6, 0.5, 0.4, 0.5, 1.0])
+
+    # Any in-support target has positive density -> finite loss.
+    dense_bin = int(np.argmax(f))
+    best_loss = _pseudospherical_kernel(f, w, dense_bin, alpha)
+    assert np.isfinite(best_loss), (
+        f"α={alpha}: in-support loss must be finite, got {best_loss}"
+    )
+
+    # Worst case: an out-of-support target (f(y)=0) -> finite, equals 1/(α−1).
+    f_oos = np.concatenate([f, [0.0]])                   # extra empty catch-all bin
+    w_oos = np.concatenate([w, [1.0]])
+    worst_loss = _pseudospherical_kernel(f_oos, w_oos, len(f), alpha)
+    assert np.isfinite(worst_loss), (
+        f"α={alpha}: out-of-support loss must be finite, got {worst_loss}"
+    )
+    assert math.isclose(worst_loss, 1.0 / (alpha - 1.0), rel_tol=1e-9), (
+        f"α={alpha}: out-of-support loss should be the maximum 1/(α−1)="
+        f"{1.0/(alpha-1.0):.6f}, got {worst_loss:.6f}"
+    )
+    # The out-of-support target is strictly the worst: any positive density at
+    # the target strictly lowers the loss below the 1/(α−1) ceiling.
+    assert worst_loss > best_loss, (
+        f"α={alpha}: out-of-support ({worst_loss:.4f}) must be strictly worse "
+        f"than the densest-bin target ({best_loss:.4f})"
+    )
+
+
+@pytest.mark.parametrize("alpha", _PSEUDOS_ALPHA_SWEEP)
+def test_pseudospherical_kernel_is_empirically_proper(alpha):
+    """Averaged over draws from the true density, the true forecast wins.
+
+    A minimal, plumbing-free propriety check straight on the kernel: sample bin
+    indices from a reference PMF, then compare the mean loss of the true density
+    against a shifted and an over-dispersed competitor.  Proper ⇒ the truth has
+    the lowest mean loss at every order in the sweep.
+    """
+    rng = np.random.default_rng(1)
+    w = np.full(21, 0.5)                                 # uniform grid, width 0.5
+    centre = 10
+
+    def gaussian_density(mu_bin, sigma_bins):
+        idx = np.arange(len(w))
+        d = np.exp(-0.5 * ((idx - mu_bin) / sigma_bins) ** 2)
+        f = d / (d * w).sum()                            # normalise ∫ f w = 1
+        return f
+
+    true_f = gaussian_density(centre, 3.0)
+    # Draw targets from the true PMF (mass = f_k w_k).
+    pmf = true_f * w
+    pmf = pmf / pmf.sum()
+    y_bins = rng.choice(len(w), size=400, p=pmf)
+
+    candidates = {
+        "true": gaussian_density(centre, 3.0),
+        "shifted": gaussian_density(centre + 2, 3.0),
+        "over-dispersed": gaussian_density(centre, 5.0),
+    }
+
+    mean_loss = {}
+    for name, f in candidates.items():
+        losses = [_pseudospherical_kernel(f, w, int(k), alpha) for k in y_bins]
+        mean_loss[name] = float(np.mean(losses))
+
+    best = min(mean_loss, key=mean_loss.get)
+    assert best == "true", (
+        f"α={alpha}: pseudospherical kernel not proper — expected 'true' to "
+        f"win, got '{best}'. Mean losses: "
+        + ", ".join(f"{n}={v:.5f}" for n, v in mean_loss.items())
+    )

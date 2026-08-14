@@ -28,7 +28,7 @@ import torch
 from scoringbench.metrics import (
     _interval,
     compute_cde_loss,
-    compute_crls,
+    compute_crts,
     compute_dpd_scores,
     compute_energy_score_histogram_corrected,
     compute_pit_ks,
@@ -63,11 +63,10 @@ def _energy_kernel(dtype):
     return force_precision(dtype)(compute_energy_score_histogram_corrected.__wrapped__)
 
 
-def _crps(kernel, mids, widths, probas, y):
+def _crps(kernel, edges, probas, y):
     out = kernel(
         torch.as_tensor(probas[None, :], dtype=torch.float64),
-        torch.as_tensor(mids, dtype=torch.float64),
-        torch.as_tensor(widths, dtype=torch.float64),
+        torch.as_tensor(edges, dtype=torch.float64),
         torch.as_tensor([y], dtype=torch.float64),
         betas=[1.0],
     )
@@ -82,11 +81,11 @@ def test_crps_float32_corrupted_float64_correct():
     """Deterministic sharp, large-scale histogram: float32 cancellation corrupts
     CRPS (clamped to ~0) while float64 yields the correct large value; the
     shipped (decorated) function matches float64."""
-    _, mids, widths, probas = _uniform_histogram(scale=1.0e7, span=200.0, K=256)
+    edges, mids, widths, probas = _uniform_histogram(scale=1.0e7, span=200.0, K=256)
     y = 1.0e7  # target at the centre
 
-    crps_f32 = _crps(_energy_kernel(torch.float32), mids, widths, probas, y)
-    crps_f64 = _crps(_energy_kernel(torch.float64), mids, widths, probas, y)
+    crps_f32 = _crps(_energy_kernel(torch.float32), edges, probas, y)
+    crps_f64 = _crps(_energy_kernel(torch.float64), edges, probas, y)
 
     # float64 is correct and well away from zero (~16.7); float32 is badly wrong.
     assert crps_f64 > 1.0
@@ -96,8 +95,7 @@ def test_crps_float32_corrupted_float64_correct():
     # Production path takes float32 inputs but must compute in float64.
     crps_prod = compute_energy_score_histogram_corrected(
         torch.as_tensor(probas[None, :], dtype=torch.float32),
-        torch.as_tensor(mids, dtype=torch.float32),
-        torch.as_tensor(widths, dtype=torch.float32),
+        torch.as_tensor(edges, dtype=torch.float32),
         torch.as_tensor([y], dtype=torch.float32),
         betas=[1.0],
     )["energy_score_beta_1.0"]
@@ -120,11 +118,11 @@ def test_crps_random_sharp_histograms_float32_vs_float64():
         K = int(rng.integers(600, 1001))
         scale = float(10.0 ** rng.uniform(4.0, 7.0))
         span = float(rng.uniform(1.0, 100.0))
-        _, mids, widths, probas = _uniform_histogram(scale, span, K)
+        edges, mids, widths, probas = _uniform_histogram(scale, span, K)
         y = scale + float(rng.uniform(-span / 2.0, span / 2.0))
 
-        c32 = _crps(k32, mids, widths, probas, y)
-        c64 = _crps(k64, mids, widths, probas, y)
+        c32 = _crps(k32, edges, probas, y)
+        c64 = _crps(k64, edges, probas, y)
 
         assert c64 >= 0.0, f"float64 CRPS went negative: {c64}"
         diff = abs(c32 - c64)
@@ -173,8 +171,8 @@ def test_crps_float64_matches_independent_definition():
         y = scale + float(rng.uniform(-span / 2.0, span / 2.0))
 
         truth = _crps_by_definition(p, edges, y)
-        c64 = _crps(k64, mids, widths, p, y)
-        c32 = _crps(k32, mids, widths, p, y)
+        c64 = _crps(k64, edges, p, y)
+        c32 = _crps(k32, edges, p, y)
 
         # float64 reproduces the ground truth; float32 is corrupted (clamped ~0).
         assert truth > 1.0
@@ -320,7 +318,7 @@ def _make_inputs(dtype, scale=1.0e7, span=200.0, K=400, n=8, seed=0):
 
 def _m_energy_crps(I):
     return compute_energy_score_histogram_corrected.__wrapped__(
-        I["probas"], I["bin_mids"], I["bin_widths"], I["y"], betas=[1.0])
+        I["probas"], I["bin_edges"], I["y"], betas=[1.0])
 
 
 def _m_dpd(I):
@@ -333,9 +331,9 @@ def _m_wcrps(I):
         I["cdf"], I["bin_mids"], I["y"], I["n_samples"], I["n_bins"], I["device"], True)
 
 
-def _m_crls(I):
-    return {"crls": compute_crls.__wrapped__(
-        I["cdf"], I["bin_widths"], I["y_bin"], I["n_bins"], I["device"], I["eps"], True)}
+def _m_crts(I):
+    return compute_crts.__wrapped__(
+        I["cdf"], I["bin_edges"], I["y"], I["y_bin"], True)
 
 
 def _m_cde_loss(I):
@@ -364,25 +362,16 @@ def _m_sharpness(I):
     return {"sharpness": std.mean().item(), "dispersion": std.std(unbiased=False).item()}
 
 
-def _m_log_score(I):
-    """Inline log-score -log(density at y)."""
-    sel_p = I["probas"][I["ns_idx"], I["y_bin"]]
-    sel_w = I["bin_widths"][I["y_bin"]]
-    density = sel_p / sel_w.clamp(min=I["eps"])
-    return {"log_score": -torch.log(density.clamp(min=I["eps"])).mean().item()}
-
-
 # Registry of every metric in metrics.py (standalone kernels + inline rules).
 METRICS_LIST = [
     ("energy/crps", _m_energy_crps),
     ("dpd",         _m_dpd),
     ("wcrps",       _m_wcrps),
-    ("crls",        _m_crls),
+    ("crts",       _m_crts),
     ("cde_loss",    _m_cde_loss),
     ("pit_ks",      _m_pit_ks),
     ("interval",    _m_interval),
     ("sharpness",   _m_sharpness),
-    ("log_score",   _m_log_score),
 ]
 
 # "Sensible absolute amount": flag a metric as dtype-sensitive only when the
@@ -427,3 +416,167 @@ def test_all_metrics_dtype_sensitivity_report(capsys):
     assert any(n.startswith("energy/crps") for n in flagged_names)
     assert any(n.startswith("sharpness") for n in flagged_names)
 
+
+
+# ---------------------------------------------------------------------------
+# Internally-constructed tensors must adopt the working dtype, not the default
+# ---------------------------------------------------------------------------
+#
+# ``force_precision`` upcasts *arguments*.  Tensors a kernel builds for itself
+# are invisible to it, so a bare ``torch.full``/``torch.linspace``/``.float()``
+# silently pins that quantity to the global default dtype (float32) even on the
+# float64 path.  The damage is not a rounded last digit:
+#
+#   * ``_interval`` probes the CDF with ``torch.searchsorted``.  A float32 0.7 is
+#     really 0.699999988079071, so every row whose CDF crosses inside that ~1e-8
+#     window is assigned the neighbouring bin -- a whole bin-width error in the
+#     interval bounds.  This is what made ``interval_score_40`` disagree by
+#     ~1.3e-6 between the shared (argmax, exact double) and per-sample
+#     (searchsorted) branches on inputs that were bit-for-bit identical.
+#   * ``compute_quantile_wcrps`` both searchsorts on its alpha grid and subtracts
+#     it from the indicator, so a float32 grid caps the pinball loss's precision.
+#
+# These tests assert the invariant directly -- a float64 call must not create
+# float32 intermediates -- so the class of bug cannot come back unnoticed.
+
+
+# Factories read the *global* default dtype when no ``dtype=`` is passed, so each
+# of these is a place a float64 kernel can silently mint a float32 tensor.
+_TORCH_FACTORIES = ("full", "linspace", "tensor", "zeros", "ones", "arange")
+
+# ``Tensor.float()`` is a *method*, not a ``torch`` attribute, so patching the
+# factories above cannot see it -- verified: patching ``torch.full`` records
+# nothing for ``(x > 0).float()``.  It also ignores the receiver's dtype and is
+# float32 *by definition*, which is exactly why the ``compute_quantile_wcrps``
+# indicator leaked.  Intercept it explicitly or that edit stays untested.
+_TENSOR_METHODS = ("float",)
+
+
+def _assert_no_f32_tensor_created(fn):
+    """Run ``fn`` and return ``(origin, dtype)`` for every float tensor it builds.
+
+    Patches the ``torch`` factories *and* ``Tensor.float`` to record the dtype
+    each call produces, so we observe the *internals* rather than only the return
+    value -- an internal float32 step can round back into a float64 output and
+    hide there.
+    """
+    seen = []
+    originals = {}
+    method_originals = {}
+
+    def wrap(name, orig):
+        def patched(*args, **kwargs):
+            out = orig(*args, **kwargs)
+            if isinstance(out, torch.Tensor) and out.is_floating_point():
+                seen.append((name, out.dtype))
+            return out
+        return patched
+
+    try:
+        for name in _TORCH_FACTORIES:
+            originals[name] = getattr(torch, name)
+            setattr(torch, name, wrap(name, originals[name]))
+        for name in _TENSOR_METHODS:
+            method_originals[name] = getattr(torch.Tensor, name)
+            setattr(torch.Tensor, name, wrap(f"Tensor.{name}", method_originals[name]))
+        fn()
+    finally:
+        for name, orig in originals.items():
+            setattr(torch, name, orig)
+        for name, orig in method_originals.items():
+            setattr(torch.Tensor, name, orig)
+    return seen
+
+
+def test_interval_builds_no_float32_intermediates():
+    """The per-sample branch must probe a float64 CDF with float64 queries."""
+    I = _make_inputs(torch.float64)
+    n, K = I["n_samples"], I["n_bins"]
+    edges_2d = I["bin_edges"][None, :].expand(n, -1).contiguous()
+
+    created = _assert_no_f32_tensor_created(
+        lambda: _interval(0.60, I["cdf"], edges_2d, I["y"], n, K,
+                          I["device"], False, I["y_bin"], I["ns_idx"])
+    )
+    bad = [c for c in created if c[1] == torch.float32]
+    assert not bad, f"float32 tensors created on the float64 path: {bad}"
+
+
+def test_quantile_wcrps_builds_no_float32_intermediates():
+    """The alpha grid is searchsorted *and* arithmetic, so it must be float64."""
+    I = _make_inputs(torch.float64)
+    created = _assert_no_f32_tensor_created(
+        lambda: compute_quantile_wcrps(
+            I["cdf"], I["bin_mids"], I["y"], I["n_samples"], I["n_bins"],
+            I["device"], True)
+    )
+    bad = [c for c in created if c[1] == torch.float32]
+    assert not bad, f"float32 tensors created on the float64 path: {bad}"
+
+
+def _interval_branch_inputs(seed, n_bins, n, y_seed=7):
+    """A float64 histogram batch plus both spellings of its (identical) grid.
+
+    Returns the 1-D grid the ``shared`` branch takes and the exact 2-D broadcast
+    the per-sample branch takes, with a matching ``y_bin`` for each.
+    """
+    rng = np.random.default_rng(seed)
+    edges_1d = torch.as_tensor(np.linspace(-4.0, 4.0, n_bins + 1), dtype=torch.float64)
+    probas_np = rng.random((n, n_bins)) + 0.05
+    probas_np /= probas_np.sum(axis=1, keepdims=True)
+    cdf = torch.as_tensor(probas_np, dtype=torch.float64).cumsum(-1)
+    y = torch.as_tensor(np.random.default_rng(y_seed).uniform(-3.0, 3.0, n),
+                        dtype=torch.float64)
+    edges_2d = edges_1d[None, :].expand(n, -1).contiguous()
+    y_bin_1d = torch.searchsorted(
+        edges_1d[1:].contiguous(), y).clamp(0, n_bins - 1)
+    y_bin_2d = torch.searchsorted(
+        edges_2d[:, 1:].contiguous(), y.unsqueeze(1)).squeeze(1).clamp(0, n_bins - 1)
+    return dict(cdf=cdf, y=y, edges_1d=edges_1d, edges_2d=edges_2d,
+                y_bin_1d=y_bin_1d, y_bin_2d=y_bin_2d, n=n, n_bins=n_bins,
+                ns_idx=torch.arange(n), device=torch.device("cpu"))
+
+
+# ``seed=1544`` at ``n_bins=256``, coverage 80 (so the upper quantile is 0.90) is
+# not arbitrary: it was found by sweeping 24 000 (seed, coverage-level) pairs for
+# a batch whose CDF crosses a quantile level inside float32's ~6e-8
+# representation gap.  It is the *only* hit in that sweep, which is exactly why a
+# generic random histogram is not a regression test here -- the two branches
+# agree on almost every input, so the bug hid until TabPFN's tied border started
+# routing real runs down the per-sample path.  On this input the float32 probe
+# lands one bin over and the interval bound is wrong by a full bin width
+# (0.03125), moving the score from 6.4296875 to 6.421875 (rel 1.2e-3) -- three
+# orders of magnitude worse than the ~1e-6 discrepancy that first exposed the
+# leak.  The benign cases are kept as controls: they must pass either way, so a
+# failure there points at the branches themselves rather than at query dtype.
+_INTERVAL_BRANCH_CASES = [
+    pytest.param(1544, 256, 4, 80, id="float32-probe-crosses-bin"),
+    pytest.param(0, 256, 4, 40, id="benign-control-40"),
+    pytest.param(0, 256, 4, 80, id="benign-control-80"),
+]
+
+
+@pytest.mark.parametrize("seed,n_bins,n,cov_level", _INTERVAL_BRANCH_CASES)
+def test_interval_shared_and_per_sample_branches_agree_exactly(seed, n_bins, n, cov_level):
+    """Broadcasting a shared grid must not change the score.
+
+    ``shared`` picks the argmax inversion, ``not shared`` the searchsorted one.
+    Fed a 1-D grid and its own exact 2-D broadcast they describe the *same*
+    distribution, so the scores must agree to float64 rounding, not merely to
+    the bin resolution.
+    """
+    I = _interval_branch_inputs(seed, n_bins, n)
+    alpha = 1.0 - cov_level / 100.0
+
+    s_shared, c_shared = _interval(alpha, I["cdf"], I["edges_1d"], I["y"],
+                                   I["n"], I["n_bins"], I["device"], True,
+                                   I["y_bin_1d"], I["ns_idx"])
+    s_per, c_per = _interval(alpha, I["cdf"], I["edges_2d"], I["y"],
+                             I["n"], I["n_bins"], I["device"], False,
+                             I["y_bin_2d"], I["ns_idx"])
+
+    assert c_shared == pytest.approx(c_per, abs=0.0), (
+        f"coverage_{cov_level}: {c_shared} (shared) vs {c_per} (per-sample)")
+    assert s_shared == pytest.approx(s_per, rel=1e-12), (
+        f"interval_score_{cov_level}: {s_shared!r} (shared) vs {s_per!r} "
+        f"(per-sample); rel={abs(s_shared - s_per) / abs(s_per):.3e}")

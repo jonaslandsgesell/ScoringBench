@@ -24,6 +24,8 @@ from scoringbench.metrics import (
     compute_metrics,
     ENERGY_BETAS,
     DPD_BETAS,
+    CRTS_ALPHAS,
+    PSEUDOS_ALPHAS,
     COVERAGE_LEVELS,
 )
 
@@ -368,19 +370,15 @@ class TestDeltaDistribution:
         )
         assert r["crps"] == pytest.approx(expected_crps, rel=0.01)
 
-    def test_log_score(self, delta):
+    def test_crts_keys_present(self, delta):
         r = compute_scoring_rules(*delta)
-        # All the mass sits in the unit-width bin containing y, so f(y) = 1 and
-        # the log score is exactly 0 -- the best a histogram on this grid can do.
-        assert r["log_score"] == pytest.approx(0.0, abs=1e-6)
+        for a in CRTS_ALPHAS:
+            assert f"crts_alpha_{a}" in r, f"crts_alpha_{a} missing from results"
+            assert isinstance(r[f"crts_alpha_{a}"], float)
 
     def test_sharpness(self, delta):
         r = compute_scoring_rules(*delta)
         assert r["sharpness"] == pytest.approx(0.0, abs=1e-6)
-
-    def test_crls(self, delta):
-        r = compute_scoring_rules(*delta)
-        assert r["crls"] == pytest.approx(0.0, abs=1e-4)
 
     def test_wcrps_variants(self, delta):
         r = compute_scoring_rules(*delta)
@@ -418,18 +416,15 @@ class TestUniformDistribution:
         assert r["crps"] == pytest.approx(numerical_crps, rel=1e-2), \
             f"CRPS mismatch: function={r['crps']} vs numerical={numerical_crps}"
 
-    def test_log_score(self, uniform):
+    def test_crts_keys_present(self, uniform):
         r = compute_scoring_rules(*uniform)
-        assert r["log_score"] == pytest.approx(np.log(4), abs=1e-5)
+        for a in CRTS_ALPHAS:
+            assert f"crts_alpha_{a}" in r, f"crts_alpha_{a} missing from results"
+            assert isinstance(r[f"crts_alpha_{a}"], float)
 
     def test_sharpness(self, uniform):
         r = compute_scoring_rules(*uniform)
         assert r["sharpness"] == pytest.approx(np.sqrt(1.25), abs=1e-5)
-
-    def test_crls(self, uniform):
-        expected = -np.log(0.75) + np.log(2) + (-np.log(0.75))
-        r = compute_scoring_rules(*uniform)
-        assert r["crls"] == pytest.approx(expected, abs=1e-3)
 
     def test_coverage(self, uniform):
         r = compute_scoring_rules(*uniform)
@@ -498,10 +493,11 @@ class TestAsymmetricDistribution:
         )
         assert r["crps"] == pytest.approx(expected_crps, rel=0.01)
 
-    def test_log_score(self, asym):
+    def test_crts_keys_present(self, asym):
         r = compute_scoring_rules(*asym)
-        # y = 0.5 falls in the first (unit-width) bin, so f(y) = 0.7 / 1.
-        assert r["log_score"] == pytest.approx(-np.log(0.7), abs=1e-5)
+        for a in CRTS_ALPHAS:
+            assert f"crts_alpha_{a}" in r, f"crts_alpha_{a} missing from results"
+            assert isinstance(r[f"crts_alpha_{a}"], float)
 
     def test_sharpness(self, asym):
         r = compute_scoring_rules(*asym)
@@ -537,8 +533,8 @@ class TestPerSampleGrid:
     def test_returns_all_keys(self, persample):
         r = compute_scoring_rules(*persample)
         expected_keys = {
-            "crps", "log_score", "sharpness",
-            "crls", "cde_loss",
+            "crps", "sharpness",
+            "cde_loss",
             "pit_ks_stat", "pit_ks_pvalue",
             "wcrps_left", "wcrps_right", "wcrps_center",
             "dispersion",
@@ -547,6 +543,8 @@ class TestPerSampleGrid:
             expected_keys |= {f"coverage_{cov}", f"interval_score_{cov}"}
         expected_keys |= {f"energy_score_beta_{b}" for b in ENERGY_BETAS}
         expected_keys |= {f"dpd_beta_{b}" for b in DPD_BETAS}
+        expected_keys |= {f"crts_alpha_{a}" for a in CRTS_ALPHAS}
+        expected_keys |= {f"pseudospherical_alpha_{a}" for a in PSEUDOS_ALPHAS}
         assert expected_keys == set(r.keys())
 
 
@@ -564,7 +562,7 @@ class TestComputeMetrics:
         dist = _make_dist(probas, edges)
         m = compute_metrics(dist, y)
         assert "mae" in m and "rmse" in m and "r2" in m
-        assert "crps" in m and "log_score" in m
+        assert "crps" in m and "crts_alpha_1.01" in m
 
     def test_mean_used_for_point_metrics(self):
         edges = np.arange(5, dtype=float)
@@ -679,7 +677,7 @@ class TestTabPFNTranslation:
 
         wrapper = TabPFNWrapper.__new__(TabPFNWrapper)
         wrapper._torch = torch
-        wrapper._device = "cuda"
+        wrapper._device = "cuda" if torch.cuda.is_available() else "cpu"
         wrapper._model = MagicMock()
 
         logits = torch.tensor([[1.0, 2.0, 3.0, 0.5]])
@@ -708,7 +706,7 @@ class TestTabPFNTranslation:
 
         wrapper = TabPFNWrapper.__new__(TabPFNWrapper)
         wrapper._torch = torch
-        wrapper._device = "cuda"
+        wrapper._device = "cuda" if torch.cuda.is_available() else "cpu"
         wrapper._model = MagicMock()
 
         logits = torch.randn(5, 10)
@@ -728,7 +726,7 @@ class TestTabPFNTranslation:
 
         wrapper = TabPFNWrapper.__new__(TabPFNWrapper)
         wrapper._torch = torch
-        wrapper._device = "cuda"
+        wrapper._device = "cuda" if torch.cuda.is_available() else "cpu"
         wrapper._model = MagicMock()
 
         n_samples, n_bins = 10, 20
@@ -755,7 +753,7 @@ class TestTabPFNTranslation:
 
         wrapper = TabPFNWrapper.__new__(TabPFNWrapper)
         wrapper._torch = torch
-        wrapper._device = "cuda"
+        wrapper._device = "cuda" if torch.cuda.is_available() else "cpu"
         wrapper._model = MagicMock()
 
         logits = torch.tensor([[-100.0, -200.0, 0.0, -50.0]])
@@ -783,7 +781,7 @@ class TestFinetuneTabPFNTranslation:
 
         wrapper = FinetuneTabPFNWrapper.__new__(FinetuneTabPFNWrapper)
         wrapper._torch = torch
-        wrapper._device = "cuda"
+        wrapper._device = "cuda" if torch.cuda.is_available() else "cpu"
         wrapper._model = MagicMock()
 
         logits = torch.tensor([[0.0, 1.0, 2.0]])

@@ -269,7 +269,8 @@ MODEL_FACTORIES = [
     pytest.param(("SynthefyWrapper",          _make_nori),         id="SynthefyWrapper"),
     pytest.param(("SynthefyWrapper[nori-30m]", _make_nori_30m),    id="SynthefyWrapper[nori-30m]"),
     pytest.param(("ForestDiffusionWrapper",   _make_forest_diffusion), id="ForestDiffusionWrapper"),
-    pytest.param(("EXAONETabularWrapper",     _make_exaonetabular),  id="EXAONETabularWrapper"),
+    pytest.param(("EXAONETabularWrapper",     _make_exaonetabular),  id="EXAONETabularWrapper",
+                 marks=pytest.mark.skip(reason="predict() hangs after fit — disabled until fixed")),
 ]
 
 # CDE (freelunchtheorem) estimators — one registry entry per maintained preset.

@@ -231,8 +231,10 @@ def test_ecdf_grid_metrics_finite_on_discrete_draws():
     y = rng.choice(base, size=20)
     metrics = compute_metrics(dist, y)
     # Density/DPD-based scores are now computed for every prediction and must be
-    # finite even on heavy ties.
-    for key in ("crps", "log_score", "cde_loss"):
+    # finite even on heavy ties.  ``log_score`` was dropped from the metric set
+    # (it is sensitive to the reported support); ``dpd_beta_0.01`` is its
+    # support-insensitive stand-in and is covered by the ``dpd`` loop below.
+    for key in ("crps", "cde_loss"):
         assert np.isfinite(metrics[key]), f"{key} not finite: {metrics[key]}"
     for key, val in metrics.items():
         if key.startswith("dpd"):
