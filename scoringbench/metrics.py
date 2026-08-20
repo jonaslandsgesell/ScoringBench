@@ -161,10 +161,10 @@ def compute_dpd_scores(probas: torch.Tensor, bin_widths: torch.Tensor,
     # to cover y ensures f(y) is the genuine density value, not a floor.
     if density_integral is None:
         eps = 100 * torch.finfo(probas.dtype).eps
-        bw_safe = bw.clamp(min=eps)
+        _require_positive_widths(bw, eps, "compute_dpd_scores")
         def density_integral(power):
             # ∫ f_hist^{power} dt = ∑_k p_k^{power} / w_k^{power-1}
-            return (probas.pow(power) / bw_safe.pow(power - 1.0)).sum(dim=-1)
+            return (probas.pow(power) / bw.pow(power - 1.0)).sum(dim=-1)
 
     for beta in betas:
         if beta < 0:
@@ -1032,6 +1032,36 @@ def _crts_slab_integral(F_lo: torch.Tensor, F_hi: torch.Tensor,
     return (integral_term - point_term - offset) * width
 
 
+def _require_positive_widths(widths: torch.Tensor, eps: float, where: str) -> torch.Tensor:
+    """Assert the strictly-positive-width contract of the density path.
+
+    Every histogram reaching the density-based rules (``unified_bin_density``
+    and the ``density_integral is None`` fall-backs of DPD / CDE, plus the PIT
+    CDF interpolation) is produced by ``wrappers.base``, whose sanitiser
+    (``regrid_to_uniform`` / ``_extended_span``) guarantees each bin width is
+    strictly greater than ``EPS``.  A width ``<= eps`` here therefore signals a
+    broken invariant upstream, not a legitimate input: silently clamping it
+    would turn a collapsed bin into a huge-but-finite score that quietly
+    dominates a benchmark average.  We fail loudly instead so the bug is caught
+    at its source.
+
+    (Zero-width bins *are* valid for the energy score, where they encode a Dirac
+    point mass and are handled explicitly; that path does not call this guard.)
+
+    Returns ``widths`` unchanged when the contract holds.
+    """
+    bad = widths <= eps
+    if bool(bad.any()):
+        w_min = float(widths[bad].min())
+        raise ValueError(
+            f"{where}: bin width {w_min:.3e} <= eps ({eps:.3e}); the density "
+            "path requires strictly positive widths. This should have been "
+            "guaranteed by regrid_to_uniform in wrappers.base -- a non-positive "
+            "width here means the histogram was not sanitised upstream."
+        )
+    return widths
+
+
 @force_precision(torch.float64)
 def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx):
     """Compute PIT values and the Kolmogorov-Smirnov p-value vs. Uniform(0, 1).
@@ -1070,7 +1100,8 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
 
     # Cumulative mass strictly below the y-bin
     cdf_prev = cdf[ns_idx, y_bin] - p_y
-    frac = ((y - left_y) / w_y.clamp(min=eps)).clamp(0.0, 1.0)
+    _require_positive_widths(w_y, eps, "compute_pit_ks")
+    frac = ((y - left_y) / w_y).clamp(0.0, 1.0)
     pit = (cdf_prev + p_y * frac).clamp(0.0, 1.0)
 
     # y outside support -> clamp PIT to 0 / 1.
@@ -1096,14 +1127,15 @@ def unified_bin_density(probas, bin_widths, shared, eps):
     w_eff : (1, n_bins) or (n_samples, n_bins) width of each bin.
     """
     w_eff = bin_widths[None, :] if shared else bin_widths    # (1|n, n_bins)
-    f_bins = probas / w_eff.clamp(min=eps)
+    _require_positive_widths(w_eff, eps, "unified_bin_density")
+    f_bins = probas / w_eff
 
     # Renormalise so the density integrates to one: with f_k = p_k / w_k the
     # mass in bin k is f_k * w_k = p_k, so the normaliser is exactly sum_k p_k.
     # Reading it straight from ``probas`` (rather than reconstructing
-    # f_bins * w_eff) keeps Z consistent when a width is clamped: the clamp
-    # only ever inflates the numerator width, so f_bins * w_eff would understate
-    # the true mass for a sub-eps bin whereas sum_k p_k stays exact.
+    # f_bins * w_eff) is the exact mass and avoids re-deriving it from the
+    # density.  Widths are guaranteed > eps by the guard above, so the only
+    # clamp left is on Z, which guards against an all-zero PMF row.
     Z = probas.sum(dim=-1, keepdim=True)
     return f_bins / Z.clamp(min=eps), w_eff
 
@@ -1180,7 +1212,8 @@ def compute_cde_loss(probas, bin_widths, g_y, bw, shared, density_integral=None)
     """
     eps = 100*torch.finfo(probas.dtype).eps
     if density_integral is None:
-        term1 = (probas.pow(2) / bw.clamp(min=eps)).sum(dim=-1)  # ∫ g² dz
+        _require_positive_widths(bw, eps, "compute_cde_loss")
+        term1 = (probas.pow(2) / bw).sum(dim=-1)                 # ∫ g² dz
     else:
         term1 = density_integral(2.0)                            # ∫ g² dz
     term2 = 2.0 * g_y.clamp(min=eps)                         # 2·g(y)

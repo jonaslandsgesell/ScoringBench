@@ -285,7 +285,10 @@ def test_cde_loss_zero_prediction(device=torch.device("cpu")):
     
     cde = compute_cde_loss(probas, bin_widths, g_y, bw, shared=True)
     
-    # Zero probability at target should give a finite score (clamped density).
+    # Zero probability at target is a legitimate input: g(y)=0 gives a finite
+    # score.  Finiteness comes from the strictly positive bin widths (all 1.0
+    # here), not from any density clamp -- the density path now *requires*
+    # positive widths and raises otherwise.
     assert isinstance(cde, float)
     assert not math.isinf(cde)
 
