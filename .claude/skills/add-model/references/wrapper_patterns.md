@@ -1,12 +1,12 @@
 # Wrapper patterns for ScoringBench
 
-Every model is a single wrapper module at `scoringbench/wrappers/<model_key>.py`
+Every model is a single wrapper module at `scoringbench/univariate/wrappers/<model_key>.py`
 that produces a `DistributionPrediction`. This reference stays deliberately
 generic — **read the real files** for current signatures and details rather than
 trusting any snippet here:
 
 ```
-scoringbench/wrappers/
+scoringbench/univariate/wrappers/
   base.py              # DistributionPrediction, ProbabilisticWrapper (the contract)
   sample_based.py      # SampleBasedWrapper + the shared converters
   <model_key>.py       # <-- your new wrapper lives here
@@ -85,7 +85,7 @@ representation matches every other model.
 
 Read the current contents of each file before editing and match its style.
 
-- **`scoringbench/wrappers/__init__.py`** — add `("<ClassName>", "<model_key>")`
+- **`scoringbench/univariate/wrappers/__init__.py`** — add `("<ClassName>", "<model_key>")`
   to the lazy-import list and `"<ClassName>"` to `__all__`.
 - **`run_bench_regression.py`** — import `<ClassName>` and add one `MODELS` entry
   keyed by the unique, version-stamped `model_name`. The value is a zero-arg

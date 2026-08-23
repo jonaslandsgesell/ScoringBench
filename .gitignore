@@ -10,4 +10,5 @@ slurm_logs/
 # Generated/runtime artifacts
 datasets.json
 output_smoke/
+output_multivariate/
 MONITOR_DONE

@@ -12,16 +12,16 @@ can be benchmarked with proper scoring rules (CRPS, CRLS, Interval Score,
 Beta-Energy, …) and appear on the leaderboard.
 
 Every model is exposed through a **wrapper** in
-`scoringbench/wrappers/<file>.py` that subclasses `ProbabilisticWrapper` and emits a
+`scoringbench/univariate/wrappers/<file>.py` that subclasses `ProbabilisticWrapper` and emits a
 `DistributionPrediction` (a discretized predictive distribution). The wrapper is
-registered for lazy import in `scoringbench/wrappers/__init__.py`, then wired into the
+registered for lazy import in `scoringbench/univariate/wrappers/__init__.py`, then wired into the
 `MODELS` dict in `run_bench_regression.py` under a **unique, version-stamped model
 name** (the name becomes the on-disk results key and the leaderboard label).
 
 You typically touch **four files** and **add one wrapper module**:
 
-1. `scoringbench/wrappers/<model_key>.py` — new wrapper module
-2. `scoringbench/wrappers/__init__.py` — lazy-import registration + `__all__`
+1. `scoringbench/univariate/wrappers/<model_key>.py` — new wrapper module
+2. `scoringbench/univariate/wrappers/__init__.py` — lazy-import registration + `__all__`
 3. `run_bench_regression.py` — import the class and add a `MODELS` entry
 4. `requirements_models.txt` — declare the optional pip dependency
 5. `tests/wrapper/test_wrapper_integration.py` — add the model to the shared
@@ -41,7 +41,7 @@ missing or unclear):
 |---|---|---|
 | `ModelName` | `"NGBoost v0.5"` | Human-readable name of the method |
 | `model_name` (registry key) | `"ngboost_normal_v0_5"` | **UNIQUE, version-stamped** key used in `MODELS` and on disk. See "Naming rules" below. |
-| `model_key` (file/key) | `ngboost` | snake_case module name under `scoringbench/wrappers/` |
+| `model_key` (file/key) | `ngboost` | snake_case module name under `scoringbench/univariate/wrappers/` |
 | `ClassName` | `NGBoostWrapper` | CamelCase wrapper class, suffixed `Wrapper` |
 | `pip_package` | `"ngboost>=0.5.0"` | Pip install spec for `requirements_models.txt` |
 | `doc_url` | `"https://..."` | Documentation / GitHub / paper URL (optional) |
@@ -113,7 +113,7 @@ model now. Use them as a structural guide — adapt rather than copy.
 
 ## Step 3: Create the wrapper module
 
-Create `scoringbench/wrappers/<model_key>.py` following the way you picked in
+Create `scoringbench/univariate/wrappers/<model_key>.py` following the way you picked in
 Step 2. The full wrapper contract lives in `references/wrapper_patterns.md`; the
 essentials are: subclass the right base, keep the third-party import lazy,
 sanitize inputs/outputs, prefer the shared converters over hand-rolling
@@ -125,7 +125,7 @@ and expose hyperparameters as constructor args. Read `base.py` and
 
 ## Step 4: Register the wrapper for lazy import
 
-Edit [scoringbench/wrappers/__init__.py](scoringbench/wrappers/__init__.py):
+Edit [scoringbench/univariate/wrappers/__init__.py](scoringbench/univariate/wrappers/__init__.py):
 
 1. Add a `("<ClassName>", "<model_key>")` tuple to the `_OPTIONAL` list. The loop
    imports the class if its backing library is installed, else binds the name to
@@ -142,7 +142,7 @@ If your wrapper module exposes a presets/registry constant (like
 Edit [run_bench_regression.py](run_bench_regression.py) (and
 [run_benchmark.sbatch](run_benchmark.sbatch) if using a cluster):
 
-1. Add `<ClassName>` to the `from scoringbench.wrappers import (...)` block.
+1. Add `<ClassName>` to the `from scoringbench.univariate.wrappers import (...)` block.
 2. Add one `MODELS` entry keyed by the **unique, version-stamped `model_name`**
    from Step 0, whose value is a **zero-arg factory** (`lambda: <ClassName>(...)`)
    so each CV fold gets a fresh instance. For several configs, build a `dict_*`
@@ -179,7 +179,7 @@ confirm the new parametrization passes (or skips cleanly when uninstalled).
 ## Step 8: Smoke-test the wrapper
 
 Validate the wrapper in isolation first: on a small synthetic `(X, y)`, call
-`fit`, then `predict_distribution`, then `scoringbench.metrics.compute_metrics`,
+`fit`, then `predict_distribution`, then `scoringbench.univariate.metrics.compute_metrics`,
 and assert the metrics (e.g. `crps`) and `dist.mean()` are finite. Then run a
 fast end-to-end smoke test through the harness and confirm finite-metric parquet
 files appear under the smoke output dir:
@@ -204,7 +204,7 @@ their behalf without confirmation**:
    ```bash
    git clone --recurse-submodules https://github.com/jonaslandsgesell/ScoringBench.git
    ```
-2. **Add your custom wrapper with a unique name** — see `scoringbench/wrappers/`
+2. **Add your custom wrapper with a unique name** — see `scoringbench/univariate/wrappers/`
    and inherit `ProbabilisticWrapper` (Steps 3–7 above). The `model_name` key in
    `MODELS` must be unique and version-stamped (Step 0).
 3. **Run the benchmark** to produce raw per-(model, dataset) results:

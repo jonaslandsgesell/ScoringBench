@@ -25,11 +25,11 @@ sys.path.insert(0, str(project_root))
 
 import argparse
 
-from scoringbench import config as cfg
-from scoringbench.datasets import get_DATASETS_CONFIG, validate_datasets
-from scoringbench.runner import run_benchmark
-from scoringbench.utils import set_seed
-from scoringbench.wrappers import (
+from scoringbench.univariate import config as cfg
+from scoringbench.univariate.datasets import get_DATASETS_CONFIG, validate_datasets
+from scoringbench.univariate.runner import run_benchmark
+from scoringbench.univariate.utils import set_seed
+from scoringbench.univariate.wrappers import (
     SynthefyWrapper,
     TabPFNWrapper,
     FinetuneTabPFNWrapper,
@@ -53,9 +53,9 @@ from scoringbench.wrappers import (
     SurjectorsWrapper,
     EXAONETabularWrapper,
 )
-from scoringbench.wrappers.cde_wrapper import CDE_PRESETS
-from scoringbench.wrappers.flexcode_wrapper import FLEXCODE_PRESETS
-from scoringbench.wrappers.surjectors_wrapper import SURJECTORS_PRESETS
+from scoringbench.univariate.wrappers.cde_wrapper import CDE_PRESETS
+from scoringbench.univariate.wrappers.flexcode_wrapper import FLEXCODE_PRESETS
+from scoringbench.univariate.wrappers.surjectors_wrapper import SURJECTORS_PRESETS
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 

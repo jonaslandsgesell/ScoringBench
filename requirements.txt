@@ -7,3 +7,4 @@ pytest
 pyarrow
 autorank
 openml
+pyvinecopulib>=0.6  # synthetic multivariate source: explicit vine-copula construction
