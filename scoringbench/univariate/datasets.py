@@ -22,6 +22,21 @@ import openml
 CACHE_DIR = Path.home() / '.cache' / 'scoringbench' / 'datasets'
 
 
+# ---------------------------------------------------------------------------
+# Permanently skipped datasets (OpenML dataset ids)
+# ---------------------------------------------------------------------------
+# Datasets listed here are dropped from DATASETS_CONFIG unconditionally, so
+# they never reach the univariate runner nor the multivariate runner (which
+# reuses this same config via scoringbench.multivariate.datasets).
+#
+# 42572 Santander_transaction_value: ~4.5k rows x 4991 mostly-sparse/constant
+#   columns. RealMLP (TabArena HPO) hangs indefinitely on it, and several other
+#   models blow up on the feature count. Not worth the wall-clock.
+SKIPPED_OPENML_IDS = {
+    42572,  # Santander_transaction_value
+}
+
+
 def _ensure_cached(name: str, url: str, filename: str | None = None) -> Path:
     """Download a file and cache it locally.  Return path to cached file."""
     cache_dir = CACHE_DIR / name
@@ -611,6 +626,17 @@ def _build_datasets_config():
 
     if _removed_dups:
         print(f"⚠️  Found and removed {len(_removed_dups)} duplicate datasets (kept higher-priority sources)")
+
+    # --- Drop permanently skipped OpenML datasets ---
+    _skipped_ids = [
+        _ds for _ds in config
+        if _ds.get('source') == 'openml' and _ds.get('id') in SKIPPED_OPENML_IDS
+    ]
+    if _skipped_ids:
+        config = [_ds for _ds in config if _ds not in _skipped_ids]
+        for _ds in _skipped_ids:
+            print(f"⊘ Skipping {_ds['name']} (openml id {_ds['id']}) "
+                  f"- in SKIPPED_OPENML_IDS")
 
     print(f"✓ Datasets config ready: {len(config)} datasets (before validation)")
 
