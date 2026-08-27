@@ -73,6 +73,7 @@ class XGBLSSWrapper(ProbabilisticWrapper):
 
         y = np.asarray(y, dtype=float)
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
 
         # Get distribution
         dist = self._get_distribution()
@@ -131,4 +132,6 @@ class XGBLSSWrapper(ProbabilisticWrapper):
         
         # Get quantile predictions
         q = self._get_quantiles(X)
-        return quantiles_to_distribution(q, self._alphas, y_range=self._y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=self._y_range, train_range=self._y_train_range
+        )

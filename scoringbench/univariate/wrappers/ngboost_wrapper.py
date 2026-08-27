@@ -100,6 +100,7 @@ class NGBoostWrapper(ProbabilisticWrapper):
             raise ValueError("No valid (finite) training samples after sanitization")
 
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
         self._model.fit(X, y)
         return self
 
@@ -121,5 +122,6 @@ class NGBoostWrapper(ProbabilisticWrapper):
                 mean = None
 
         return quantiles_to_distribution(
-            q, self._alphas, mean=mean, y_range=self._y_range
+            q, self._alphas, mean=mean, y_range=self._y_range,
+            train_range=self._y_train_range,
         )

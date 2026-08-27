@@ -8,13 +8,24 @@ live in their own sub-modules:
     wrappers/tabicl.py                — TabICLWrapper
     wrappers/xgb_vector.py            — XGBVectorWrapper
     wrappers/synthefy.py              — SynthefyWrapper
+
+One source adapter per forecast type, each a thin front-end to the matching
+``DistributionPrediction`` constructor:
+
+    wrappers/quantile_based.py        — quantiles_to_distribution
+    wrappers/sample_based.py          — samples_to_distribution, SampleBasedWrapper
+    wrappers/density_based.py         — grid_density_to_distribution
 """
 
-from .base import DistributionPrediction, ProbabilisticWrapper
+from .base import (
+    DistributionPrediction,
+    DistributionPredictionView,
+    ProbabilisticWrapper,
+)
+from .density_based import grid_density_to_distribution  # noqa: F401
 from .quantile_based import quantiles_to_distribution  # noqa: F401
 from .sample_based import (  # noqa: F401
     SampleBasedWrapper,
-    grid_density_to_distribution,
     samples_to_distribution,
 )
 
@@ -42,7 +53,9 @@ _OPTIONAL = [
 ]
 for _name, _mod in _OPTIONAL:
     try:
-        _m = __import__(f"scoringbench.wrappers.{_mod}", fromlist=[_name])
+        _m = __import__(
+            f"scoringbench.univariate.wrappers.{_mod}", fromlist=[_name]
+        )
         globals()[_name] = getattr(_m, _name)
     except Exception:
         globals()[_name] = None
@@ -50,6 +63,7 @@ for _name, _mod in _OPTIONAL:
 __all__ = [
     "SynthefyWrapper",
     "DistributionPrediction",
+    "DistributionPredictionView",
     "ProbabilisticWrapper",
     "SampleBasedWrapper",
     "quantiles_to_distribution",

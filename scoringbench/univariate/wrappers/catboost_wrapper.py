@@ -65,13 +65,16 @@ class CatBoostQuantileWrapper(ProbabilisticWrapper):
             self._build_model()
         y = np.asarray(y, dtype=float)
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
         self._model.fit(X, y)
         return self
 
     def predict_distribution(self, X) -> DistributionPrediction:
         # q shape: (n_samples, n_quantiles)
         q = np.asarray(self._model.predict(X), dtype=float)
-        return quantiles_to_distribution(q, self._alphas, y_range=self._y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=self._y_range, train_range=self._y_train_range
+        )
 
     def predict(self, X) -> np.ndarray:
         q = np.asarray(self._model.predict(X), dtype=float)

@@ -35,6 +35,7 @@ def test_tabicl_wrapper_predict_distribution_conversion():
     w = TabICLWrapper.__new__(TabICLWrapper)
     # Use a small, test-friendly quantile grid
     w._ALPHAS = [0.25, 0.5, 0.75]
+    w._y_train_range = (0.0, 1.0)
 
     class Model:
         def predict(self, X_arr, output_type=None, alphas=None):
@@ -50,11 +51,12 @@ def test_tabicl_wrapper_predict_distribution_conversion():
     assert dist.probas.shape[0] == 2
 
     # TabICL uses the shared quantile->distribution mapping
-    # (``quantiles_to_distribution``): the predicted quantiles are the bin
-    # edges, so K levels give K-1 bins on a per-sample (2-D) grid.
+    # (``quantiles_to_distribution``): the predicted quantiles are used verbatim
+    # as the native edges, so K levels give K edges and K-1 bins on a
+    # per-sample (2-D) grid.
     n_bins = len(w._ALPHAS) - 1
     assert dist.probas.shape == (2, n_bins)
-    assert dist.bin_edges.shape == (2, n_bins + 1)
+    assert dist.bin_edges.shape == (2, len(w._ALPHAS))
     assert dist.bin_midpoints.shape == (2, n_bins)
 
     # Each row is a valid PMF on a non-decreasing grid.
@@ -69,6 +71,7 @@ def test_xgb_vector_wrapper_predicts_and_distribution():
     # synthetic midpoints / edges
     w._bin_midpoints = np.array([0.0, 1.0, 2.0, 3.0])
     w._bin_edges = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    w._y_train_range = (0.0, 1.0)
 
     class FakeModel:
         def predict(self, *args, **kwargs):
@@ -93,6 +96,7 @@ def test_xgb_quantile_vector_wrapper_predict_distribution():
     # __new__ bypasses __init__, so set the range that predict_distribution
     # forwards to quantiles_to_distribution (default is (0.0, 1.0)).
     w._y_range = (0.0, 1.0)
+    w._y_train_range = (0.0, 1.0)
 
     class FakeModel:
         def predict(self, *args, **kwargs):
@@ -105,6 +109,7 @@ def test_xgb_quantile_vector_wrapper_predict_distribution():
     dist = w.predict_distribution(X)
 
     assert isinstance(dist, DistributionPrediction)
+    # Nodes-as-edges: K levels -> K-1 bins, K edges.
     assert dist.probas.shape == (2, len(w._alphas) - 1)
     # bin_edges can be shared (1-D) or per-sample (2-D)
     expected_edges = len(w._alphas)

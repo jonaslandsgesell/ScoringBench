@@ -2,437 +2,260 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.interpolate import PchipInterpolator
 
-EPS = 100 * np.finfo(np.float64).eps
-
-# A point mass has no width, so a histogram has to invent one.  MIN_PAD is the
-# absolute floor near the origin; TIE_PAD_REL scales the invented width with the
-# row's own magnitude so it does not underflow at large coordinates.
-MIN_PAD = 1e-7
-TIE_PAD_REL = 1e-6
-
-
-# ---------------------------------------------------------------------------
-# Regridding
-# ---------------------------------------------------------------------------
-
-def regular_support(x, n_bins):
-    """Support ``(z_min, z_max)`` for a regular grid over the abscissae ``x``.
-
-    Both outputs have shape ``(rows, 1)``; ``x`` is ``(rows, m)`` sorted.
-
-    Tail extension
-    --------------
-    A quantile prediction stops at its outermost levels, so the mass below
-    ``alpha_0`` and above ``alpha_{K-1}`` has nowhere to live and the CDF never
-    reaches 0 or 1 inside the predicted range.  The convention here (TabICL's) is
-    to extend the support by one *local* spacing on each side -- the gap between
-    the two outermost abscissae -- so that ``C = 0`` / ``C = 1`` can be pinned at
-    the extended ends.  Reading the extension off the prediction's own outer
-    spacing keeps it scale free: a sharp row gets a narrow tail, a diffuse one a
-    wide tail, and no external length is imposed on the problem.
-
-    Degeneracy guard
-    ----------------
-    Two things can leave the span unusable, and both are handled by widening it
-    symmetrically around its own centre:
-
-    * **No support at all** -- every abscissa ties, so there is no outer spacing
-      to read and both ends coincide.
-    * **A span too thin to resolve** -- ``n_bins`` edges cut from the span must be
-      *representable*, so the span has to exceed ``n_bins`` ULP at its own
-      coordinate; far from the origin one ULP can dwarf an absolute pad and round
-      every interior edge onto its neighbour, reintroducing the zero-width bins
-      this module exists to remove.
-
-    The floor is therefore ``max(n_bins * ulp(x), |x| * TIE_PAD_REL, MIN_PAD)``:
-    representable at any magnitude, proportional to the row's own scale, and with
-    an absolute fallback near zero where the ULP argument says nothing.
-    """
-    left = np.maximum(x[:, 1:2] - x[:, 0:1], 0.0)
-    right = np.maximum(x[:, -1:] - x[:, -2:-1], 0.0)
-    z_min = x[:, 0:1] - left
-    z_max = x[:, -1:] + right
-
-    scale = np.maximum(np.abs(z_min), np.abs(z_max))
-    min_span = np.maximum(
-        np.maximum(n_bins * np.spacing(scale), scale * TIE_PAD_REL),
-        MIN_PAD,
-    )
-    short = (z_max - z_min) < min_span
-    if np.any(short):
-        mid = 0.5 * (z_min + z_max)
-        half = 0.5 * min_span
-        z_min = np.where(short, mid - half, z_min)
-        z_max = np.where(short, mid + half, z_max)
-    return z_min, z_max
-
-
-def _collapse_ties(x_row):
-    """Collapse tied abscissae; return ``(xs, order)`` for :func:`_monotone_cdf_at`.
-
-    ``xs`` are the sorted unique abscissae of ``x_row`` and ``order`` maps each
-    input node onto its slot in ``xs``.  Split out of :func:`_monotone_cdf_at` so
-    a *shared* abscissa row -- every sample resampled against one grid, as when a
-    natively-gridded model's borders are repaired -- pays for the sort once
-    instead of once per sample.
-    """
-    xs = np.unique(x_row)
-    return xs, np.searchsorted(xs, x_row)
-
-
-def _monotone_cdf_at(x_row, c_row, edges_row, collapsed=None):
-    """Evaluate a monotone CDF at ``edges_row`` with a shape-preserving cubic.
-
-    ``x_row`` is non-decreasing abscissae and ``c_row`` the matching
-    non-decreasing CDF values (both 1-D); ``edges_row`` are the query points.
-    ``collapsed`` optionally supplies a precomputed :func:`_collapse_ties`
-    result for ``x_row`` (identical output, just not recomputed per row).
-
-    Why PCHIP rather than linear interpolation
-    ------------------------------------------
-    A linear CDF makes the implied density piecewise *constant*, so a sharp mode
-    is flattened onto the bin holding it -- the density at the target is then
-    wrong even though the per-bin mass is right.  A monotone cubic (PCHIP) fits a
-    C1 curve through the same nodes without overshooting, so ``diff(C)`` follows
-    the true density's shape between the predicted levels while staying
-    non-negative.  Masses are the exact CDF increment at the bin edges,
-    ``C(e_{k+1}) - C(e_k)``, not a sampled derivative.
-    `tests/test_interpolation_scheme_selection.py` compares this against linear
-    and derivative-sampling variants and selects it.
-
-    Ties (atoms) are preserved
-    --------------------------
-    PCHIP needs *strictly* increasing abscissae, but a CDF read off quantiles /
-    histogram edges may repeat an ``x`` where an atom lives.  Each run of tied
-    abscissae is collapsed to its single coordinate carrying the run's *last* CDF
-    value -- exactly ``np.interp``'s "last matching node wins" rule -- so the
-    atom's whole jump is realised at that one coordinate and lands, undivided, in
-    the output bin ``searchsorted(edges[1:], y)`` would send a target on the atom
-    to.  With two or fewer distinct abscissae there is no cubic to fit and the
-    evaluation falls back to ``np.interp``.
-
-    Extreme coordinates
-    -------------------
-    PCHIP evaluates its cubic in the local variable ``t = x - x_i``, so ``t**3``
-    overflows to ``inf`` for spacings past ``~1e103`` and ``inf * 0.0 = nan``,
-    which the clip below silently turns into a flat PMF.  Rescaling ``x`` by a
-    power of two fixes it exactly -- the interpolant is equivariant in ``x`` and
-    ``np.ldexp`` only edits the exponent, so the result is bit-identical.
-
-    That normalises the overall magnitude but not the *ratio* of adjacent
-    spacings, and the node slopes ``dC / h_k`` still overflow when one gap
-    underflows against another (``[-1e-9, 0, 1e300]``).  No rescaling helps there,
-    so we fall back to a linear CDF: still monotone and mass-exact, forfeiting
-    only the density shape that
-    `tests/test_interpolation_scheme_selection.py` selects PCHIP for.
-    """
-    # np.unique returns the *sorted unique* abscissae; map each to the CDF value
-    # of the LAST input node at that abscissa so an atom's full jump is kept.
-    xs, order = _collapse_ties(x_row) if collapsed is None else collapsed
-    cs = np.zeros(xs.shape, dtype=np.float64)
-    cs[order] = c_row                    # later duplicates overwrite -> last wins
-    cs = np.maximum.accumulate(cs)       # guard monotonicity after the scatter
-
-    if xs.size < 3:
-        return np.interp(edges_row, xs, cs)
-
-    # Exponent-only rescaling, so the significands (and the cubic) are unchanged.
-    scale = np.max(np.abs(xs))
-    shift = np.frexp(scale)[1] if (np.isfinite(scale) and scale > 0.0) else 0
-    xs_s = np.ldexp(xs, -shift)
-    edges_s = np.ldexp(edges_row, -shift)
-
-    # The shift can round two adjacent abscissae together; PCHIP needs them strict.
-    if np.all(np.diff(xs_s) > 0.0):
-        try:
-            # Raise rather than let an inf/nan reach the clip as a plausible PMF.
-            with np.errstate(over="raise", invalid="raise", divide="raise"):
-                c = PchipInterpolator(xs_s, cs, extrapolate=True)(edges_s)
-            if not np.all(np.isfinite(c)):
-                raise FloatingPointError("non-finite PCHIP evaluation")
-        except (FloatingPointError, ValueError):
-            c = np.interp(edges_s, xs_s, cs)
-    else:
-        c = np.interp(edges_s, xs_s, cs)
-
-    # PCHIP is monotone on its nodes, but extrapolation past the ends can leave
-    # [0, 1]; clip so the differenced masses stay a valid PMF.
-    return np.clip(c, cs[0], cs[-1])
-
-
-def resample_cdf_to_regular_grid(x, y, n_bins, shared_x=False):
-    """Interpolate a CDF onto a regular grid; return ``(bin_edges, probas)``.
-
-    ``x`` is ``(rows, m)`` non-decreasing abscissae and ``y`` the matching
-    non-decreasing CDF values -- ``(rows, m)``, or ``(m,)`` when every row shares
-    the same levels.  ``x[:, 0]`` and ``x[:, -1]`` are taken as the support ends,
-    so the caller is responsible for having extended them (see
-    :func:`regular_support`) and for anchoring ``y`` at 0 and 1 there if it wants
-    the full unit of mass inside the grid.  Set ``shared_x=True`` only when every
-    row of ``x`` is identical; the returned edges are then 1-D.
-
-    ``n_bins + 1`` equally spaced edges span ``[x[:, 0], x[:, -1]]``; ``C`` is
-    interpolated there by :func:`_monotone_cdf_at` and forward-differenced into
-    bin masses.  Because ``C`` is monotone the differences are non-negative and
-    total mass is exactly ``C(x_last) - C(x_first)``; because they are taken at
-    the bin edges each mass is the exact increment ``C(edge_{k+1}) - C(edge_k)``.
-
-    ``shared_x=True`` promises every row of ``x`` is identical.  The edges depend
-    on ``x`` alone, so the output grid is genuinely shared too and is returned 1-D
-    to keep ``metrics.py`` on its shared-grid branch.
-    """
-    x = np.asarray(x, dtype=np.float64)
-    y = np.asarray(y, dtype=np.float64)
-    rows = x.shape[0]
-    y2 = np.broadcast_to(y, x.shape) if y.ndim == 1 else y
-
-    # With shared abscissae every row's edges coincide, so build the single row.
-    x_rows = x[0:1] if shared_x else x
-    z_min = x_rows[:, 0:1]
-    z_max = x_rows[:, -1:]
-
-    frac = np.linspace(0.0, 1.0, n_bins + 1)[None, :]
-    edges = z_min + (z_max - z_min) * frac
-    # linspace hits 0 and 1 exactly, but the affine map need not reproduce the
-    # endpoints bit for bit; pin them so the support is exactly as advertised.
-    edges[:, 0] = z_min[:, 0]
-    edges[:, -1] = z_max[:, 0]
-
-    # Round-off in the affine map can leave an interior edge a hair below its
-    # predecessor; a running max removes the resulting negative width.  Done in
-    # place so we do not allocate a second (rows, n_bins+1) copy.  Must precede
-    # the CDF evaluation so the masses are differenced at the *final* edges.
-    np.maximum.accumulate(edges, axis=-1, out=edges)
-
-    # A shared abscissa row has one tie structure; collapse it once, not per row.
-    collapsed = _collapse_ties(x[0]) if shared_x else None
-
-    probas = np.empty((rows, n_bins), dtype=np.float64)
-    for i in range(rows):
-        e_row = edges[0] if shared_x else edges[i]
-        c = _monotone_cdf_at(x[i], y2[i], e_row, collapsed=collapsed)
-        m = np.maximum(np.diff(c), 0.0)
-        s = m.sum()
-        probas[i] = m / s if s > 0.0 else 1.0 / n_bins
-
-    return (edges[0] if shared_x else edges), probas
-
-
-def cdf_nodes_to_regular_grid(x_nodes, c_nodes, n_bins, shared_x=False):
-    """Extend support, pin ``C = 0/1`` at the ends, resample onto a regular grid.
-
-    The one entry point every wrapper shares: given monotone CDF nodes
-    ``(x_nodes, c_nodes)`` -- ``(rows, m)``, or ``(m,)`` for a shared row -- it
-    extends the support by one local spacing (:func:`regular_support`), anchors
-    ``C = 0`` / ``C = 1`` on the extension so the grid holds the whole unit of
-    mass, and hands off to :func:`resample_cdf_to_regular_grid`.  Owning the
-    extend-and-anchor step here keeps every converter on the identical scheme and
-    off re-implementing it.
-
-    ``shared_x=True`` declares every row of ``x_nodes`` identical and is forwarded
-    to :func:`resample_cdf_to_regular_grid`, which then returns 1-D edges.  The
-    extension is read off ``x`` alone, so a shared input stays shared.
-    """
-    x = np.atleast_2d(np.asarray(x_nodes, dtype=np.float64))
-    rows = x.shape[0]
-    c = np.broadcast_to(np.asarray(c_nodes, dtype=np.float64), x.shape) if np.ndim(c_nodes) == 1 else np.asarray(c_nodes, dtype=np.float64)
-
-    # Shared abscissae extend identically, so extend the single row and broadcast
-    # the result back as a view instead of concatenating `rows` copies of it.
-    x_ext = x[0:1] if shared_x else x
-    z_min, z_max = regular_support(x_ext, n_bins)
-    xx = np.concatenate([z_min, x_ext, z_max], axis=-1)
-    if shared_x:
-        xx = np.broadcast_to(xx, (rows, xx.shape[-1]))
-    yy = np.concatenate([np.zeros((rows, 1)), c, np.ones((rows, 1))], axis=-1)
-    return resample_cdf_to_regular_grid(xx, yy, n_bins, shared_x=shared_x)
-
-
-def _is_regular(e, w):
-    """True when every row of ``e`` is a positive, uniform grid with widths ``w``.
-
-    Regularity is the *output* form of :func:`regrid_to_uniform`, so recognising
-    it is what makes the map idempotent: the wrappers that already interpolate
-    onto a regular grid themselves (``quantiles_to_distribution``,
-    ``samples_to_distribution``) pass straight through the container instead of
-    having their tails extended and their CDF resampled a second time.
-
-    The tolerance is set by the *edge coordinates*, not by the span.  A grid built
-    as ``z_min + (z_max - z_min) * k / n`` rounds each edge to the nearest double,
-    so a width can be off by a couple of ULP of the edges it is a difference of.
-    When a narrow grid sits far from the origin those ULP dwarf the span, so
-    comparing against the span alone would call the grid irregular and regrid it
-    forever.
-    """
-    if w.size == 0 or not np.all(w > 0.0):
-        return False
-    span = w.sum(axis=-1, keepdims=True)
-    target = span / w.shape[-1]
-    # Two edges per width, plus slack for the multiply and the divide above.
-    tol = 4.0 * np.spacing(np.abs(e).max(axis=-1, keepdims=True))
-    return bool(np.all(np.abs(w - target) <= tol))
-
-
-def regrid_to_uniform(bin_edges, probas):
-    """Re-express a PMF on a *regular* per-row grid; return ``(bin_edges, probas)``.
-
-    A quantile-edged prediction uses the predicted quantiles *as* bin edges, so a
-    target with repeated values makes edges coincide and bins collapse to
-    ``w_k = 0`` (>90% of them on some benchmark datasets), leaving the histogram
-    density ``p_k / w_k`` at 0/0.  Rather than shuffle width between neighbours,
-    the input is read as a CDF (``C_0 = 0``, ``C_j = sum(p_{<j})``, ``C_K = 1``)
-    and resampled onto a positive-width regular grid via
-    :func:`cdf_nodes_to_regular_grid`.  Mass is conserved and the bin count is
-    preserved, so no wrapper's resolution is silently changed.
-
-    Parameters
-    ----------
-    bin_edges : (n_bins+1,) or (n_samples, n_bins+1) array
-        Per-row edges.  Shape is preserved: a shared 1-D grid stays 1-D.
-    probas : (n_samples, n_bins) array
-        Per-row PMF.
-
-    Returns
-    -------
-    (bin_edges, probas)
-        ``bin_edges`` keeps the input's rank: the repaired edges depend on the
-        input edges alone, so one shared grid maps to one shared grid (1-D in,
-        1-D out -- see ``_sanitize_native_grid`` for why that matters).
-        An already-regular grid is returned untouched, making the map idempotent.
-    """
-    e_in = np.asarray(bin_edges, dtype=np.float64)
-    p_in = np.asarray(probas, dtype=np.float64)
-    if p_in.ndim == 1:
-        p_in = p_in[None, :]
-
-    shared = e_in.ndim == 1
-    e = e_in[None, :] if shared else e_in
-
-    n_bins = p_in.shape[1]
-    if n_bins == 0 or e.shape[-1] != n_bins + 1:
-        return bin_edges, probas
-
-    # An already-regular grid is a fixed point: returning it byte for byte makes
-    # the map idempotent, so wrappers that resample themselves are not resampled
-    # again and a shared grid stays on metrics.py's cheaper shared-grid branch.
-    w = np.diff(e, axis=-1)
-    if _is_regular(e, w):
-        return bin_edges, probas
-
-    rows = max(e.shape[0], p_in.shape[0])
-    # Keep a shared grid as one row instead of `rows` identical copies: cheaper in
-    # memory and much faster to score downstream.
-    e = np.array(e if shared else np.broadcast_to(e, (rows, n_bins + 1)), dtype=np.float64)
-    p = np.array(np.broadcast_to(p_in, (rows, n_bins)), dtype=np.float64)
-
-    # Monotone edges (a caller may hand over an unsorted row) and a normalized,
-    # non-negative PMF, so the interpolated C is monotone within [0, 1].
-    e = np.sort(e, axis=-1)
-    p = np.clip(np.nan_to_num(p, nan=0.0, posinf=0.0, neginf=0.0), 0.0, None)
-    tot = p.sum(axis=-1, keepdims=True)
-    p = np.where(tot > 0.0, p / np.where(tot > 0.0, tot, 1.0), 1.0 / n_bins)
-
-    # CDF at the input edges (C_0 = 0, ..., C_K = 1), then the shared
-    # extend-anchor-resample path.
-    c = np.concatenate([np.zeros((rows, 1)), np.cumsum(p, axis=-1)], axis=-1)
-    c[:, -1] = 1.0                                        # exact, not just to rounding
-    if shared:
-        # `e` is the one shared row; broadcast it back against the per-sample CDF
-        # rows as a *view* and tell the resampler the abscissae are shared, so it
-        # returns 1-D edges without ever allocating the (rows, n_bins+1) block.
-        e = np.broadcast_to(e, (rows, n_bins + 1))
-    return cdf_nodes_to_regular_grid(e, c, n_bins, shared_x=shared)
-
-
-def _has_positive_widths(bin_edges, probas):
-    """True when ``bin_edges`` forms a well-formed grid with every width > 0.
-
-    ``False`` for a malformed grid (edge count != bins + 1, or no bins), so the
-    caller hands those to :func:`regrid_to_uniform`, which returns them unchanged
-    -- the single "trust as-is" decision stays in one place.
-    """
-    e = np.asarray(bin_edges, dtype=np.float64)
-    n_bins = np.asarray(probas).shape[-1]
-    if n_bins == 0 or e.shape[-1] != n_bins + 1:
-        return False
-    # Require widths above EPS, not merely > 0: a genuinely positive but
-    # sub-EPS width would survive as-is here and reach the density metrics,
-    # where the width clamp then makes f_k = p_k / w_k inconsistent.  Widths in
-    # (0, EPS] are treated as degenerate and repaired by regrid_to_uniform,
-    # whose MIN_PAD span floor guarantees widths well above EPS.
-    return bool(np.all(np.diff(e, axis=-1) > EPS))
-
-
-def _sanitize_native_grid(bin_edges, probas):
-    """Zero-width guard for a model that emits its own histogram grid.
-
-    A natively-gridded model (``is_natively_gridded_model=True``, e.g. TabPFN's
-    bar-distribution borders) is trusted to emit positive-width bins -- even
-    *irregular* ones -- so a clean grid is returned as the *same objects* (byte
-    for byte) and never resampled.  Only when a border repeats (any number of
-    ties, giving one or more ``w_k = 0`` bins whose density ``p_k / w_k`` is
-    ``0/0``) does the grid fall back to :func:`regrid_to_uniform`, which reads
-    the PMF as a CDF and resamples it onto positive widths.
-
-    TabPFN's borders contain ties, so that repair runs on every real prediction;
-    it keeps a shared 1-D grid 1-D, which is much faster to score downstream.
-    """
-    if _has_positive_widths(bin_edges, probas):
-        return bin_edges, probas
-    return regrid_to_uniform(bin_edges, probas)
+from .resampling_grid import (
+    DistributionPredictionView,
+    interpolate_cdf_to_grid_with_equally_sized_bins,
+    cdf_nodes_to_native_PMF_grid,
+    quantiles_to_cdf_nodes,
+    resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid,
+    samples_to_cdf_nodes,
+)
 
 
 # ---------------------------------------------------------------------------
-# Container
+# Container: one prediction, two scoring-ready views
 # ---------------------------------------------------------------------------
+#
+# Metrics split into two families that need incompatible grids
+# (see ``tests/univariate/test_grid_robustness.py``):
+#
+# * GRID-ROBUST rules (CRPS, CRTS, energy, interval/coverage) are exact on the
+#   model's own grid, atoms and all -- the NATIVE view preserves sharpness.
+# * DENSITY-BASED rules (CDE loss, DPD, pseudospherical) read f = p_k / w_k,
+#   which diverges as w_k -> 0.  The RESAMPLED view puts every model on a
+#   shared-count grow-only grid so densities are comparable and atoms neutralised.
+#
+# Every prediction reduces to ONE lossless intermediate -- monotone CDF nodes
+# ``(cdf_support_point, cdf_levels)`` -- from which both views are derived DIRECTLY, with no
+# round-trip through an intermediate histogram.  The three sources
+# (multi-quantile, samples, grid-native histogram) differ only in how they
+# produce that intermediate and their native PMF grid; the classmethod constructors
+# below dispatch each to the shortest correct path.
+
 
 @dataclass
 class DistributionPrediction:
-    """Unified probabilistic prediction container.
+    """Mother container: one prediction, two scoring-ready views.
 
-    bin_edges / bin_midpoints may be 1-D (shared grid, same for every sample)
-    or 2-D (per-sample grid, e.g. when derived from per-sample quantiles).
-    metrics.py handles both cases.
+    Build it through a source-specific constructor -- :meth:`from_multi_quantile`,
+    :meth:`from_samples` or :meth:`from_histogram` -- so the lossless CDF-node
+    intermediate is captured and both views are derived directly from it.  The
+    dataclass fields are the NATIVE grid (a plain histogram); constructing the
+    class directly is still supported (tests do) and then the resampled view is
+    reconstructed from that histogram.
 
-    On construction the PMF is re-expressed on a *regular* per-sample grid by
-    ``regrid_to_uniform``, which interpolates the prediction's CDF onto that
-    grid.  Every consumer therefore sees strictly positive bin widths and no one
-    has to special-case atoms.  ``bin_midpoints`` is recomputed from the returned
-    edges so it always matches them in value and dimensionality.
+    * :attr:`native`    -- raw grid, atoms preserved; for grid-robust rules.
+    * :attr:`resampled` -- PCHIP-resampled onto the grow-only density grid;
+      for density rules.
 
-    is_natively_gridded_model marks models that already emit a fixed regular
-    histogram grid (TabPFN's Riemann-distribution borders).  Such a grid needs no
-    repair and resampling it could only blur it, so the regridding is skipped and
-    the model's own edges and PMF reach the metrics untouched.
+    ``train_range = (y_lo, y_hi)`` FLOORS the density grid; the support grows
+    outward per instance to the model's own hull so no tail mass is truncated.
 
-    is_sample_based flags predictions whose PMF was derived from conditional
-    draws.  It is informational only; metrics.py scores every prediction the same
-    way (the regular-grid PMF already gives a well-defined density).
+    ``is_grid_native`` does ONE mechanical thing: the :attr:`resampled` view is the
+    native PMF grid VERBATIM -- no PCHIP resample, no train-range widening.  Two
+    different kinds of head want that, for opposite reasons:
+
+    1. DISCRETIZED heads -- output already IS a PMF over borders fixed at fit time producing a prediction in 
+       class L1/L2 in https://arxiv.org/pdf/1608.06802v2: TabPFN's bar
+       distribution and ``XGBVectorWrapper``'s softmax over ``n_bins`` uniform
+       bins.  Here the grid is AUTHORITATIVE: it is the resolution the head
+       actually predicts at, so resampling would blur away real information.
+    2. CONTINUOUS-density heads -- ``CDEWrapper``, ``FlexCodeWrapper``,
+       ``SurjectorsWrapper``, via :func:`grid_density_to_distribution`.  These own
+       a predicted ``p(y|x)`` that can be evaluated ANYWHERE; the grid is merely where
+       the wrapper chose to sample it (``n_grid=200`` equally spaced points spanning
+       the padded train range). 
+
+    Quantile heads (``XGBQuantileVector``, CatBoost, NGBoost, TabICL, pytabkit,
+    XGBLSS, crepes, Exaone, Nori, ...) and sample heads are NOT grid-native: they
+    live in forecast family M1/M2 and do not guarantee to have forecasts in  L1/L2, so their implied density
+    may carry Dirac atoms (tied quantiles, repeated draws) that would blow up the
+    density based scoring rules (DPD, pseudospherical, CDE loss).  
+    We adapt the resampling approach by Izbicki 2026 to smooth potential dirac delta distribution atoms in the density forcasts that neutralises those atoms.
     """
-    probas: np.ndarray         # (n_samples, n_bins)  — PMF: mass per bin, sums to 1
-    bin_edges: np.ndarray      # (n_bins+1,) or (n_samples, n_bins+1)
-    bin_midpoints: np.ndarray  # (n_bins,)   or (n_samples, n_bins)
-    mean: np.ndarray           # (n_samples,)
-    is_sample_based: bool = False            # True when PMF came from conditional draws
-    is_natively_gridded_model: bool = False  # True when the model emits its own regular grid
+    probas: np.ndarray
+    bin_edges: np.ndarray
+    bin_midpoints: np.ndarray
+    mean: np.ndarray
+    train_range: tuple = field(kw_only=True)
+    is_sample_based: bool = False
+    # Number of equally-sized bins in the density (resampled) grid: the shared
+    # RESOLUTION (bin COUNT), common across every model so densities compare at
+    # one granularity; only the count is shared -- each grow-only SUPPORT is
+    # per-instance.
+    num_equally_sized_bins: int = 200
+    is_grid_native: bool = False
+    # The lossless CDF-node intermediate, when the prediction was built through a
+    # source constructor.  Present -> the resampled view PCHIPs these nodes
+    # directly; absent -> it is reconstructed from the native histogram.
+    cdf_nodes: object = field(default=None, kw_only=True)
 
     def __post_init__(self):
-        if self.is_natively_gridded_model:
-            # A model with its own grid is trusted, but a tied border would leave
-            # a zero-width (0/0-density) bin; the cheap guard leaves a clean grid
-            # untouched and only repairs when a tie actually appears.
-            self.bin_edges, self.probas = _sanitize_native_grid(self.bin_edges, self.probas)
-        else:
-            self.bin_edges, self.probas = regrid_to_uniform(self.bin_edges, self.probas)
-        # Regridding may promote a shared 1-D grid to a per-sample 2-D one;
-        # recompute the midpoints from the (possibly rewritten) edges so they
-        # stay consistent in both value and dimensionality.
-        self.bin_midpoints = 0.5 * (self.bin_edges[..., :-1] + self.bin_edges[..., 1:])
+        self._native: DistributionPredictionView | None = None
+        self._resampled: DistributionPredictionView | None = None
+        if self.train_range is None:
+            raise ValueError(
+                "DistributionPrediction.train_range is required and must be the "
+                "train-target range (y_lo, y_hi); got None. It is the FLOOR the "
+                "density grid grows outward from, per instance."
+            )
+        y_lo, y_hi = self.train_range
+        if not (np.isfinite(y_lo) and np.isfinite(y_hi) and y_hi > y_lo):
+            raise ValueError(
+                f"train_range must be a finite (y_lo, y_hi) with y_hi > y_lo; "
+                f"got {self.train_range!r}."
+            )
+
+    # -- source constructors ------------------------------------------------
+    @classmethod
+    def from_multi_quantile(cls, q, alphas, mean=None, *, train_range, **kw):
+        """From a per-sample quantile matrix ``q`` (n, K) at levels ``alphas``.
+
+        The quantile function is read as a CDF; its nodes are used DIRECTLY as
+        native bin edges (atoms preserved), and the SAME nodes feed the resampled
+        view.  No intermediate histogram.
+        """
+        cdf_support_point, cdf_levels = quantiles_to_cdf_nodes(q, alphas)
+        edges, probas = cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels)
+        mids = 0.5 * (edges[..., :-1] + edges[..., 1:])
+        out_mean = (probas * mids).sum(axis=-1) if mean is None else np.asarray(mean, float).reshape(-1)
+        return cls._from_native(edges, probas, out_mean, train_range,
+                                cdf_nodes=(cdf_support_point, cdf_levels), **kw)
+
+    @classmethod
+    def from_samples(cls, samples, n_bins=100, mean=None, *, train_range, **kw):
+        """From conditional draws ``samples`` (n_test, n_draws).
+
+        Each row's empirical CDF (strictly increasing, de-tied) is the lossless
+        intermediate: the native PMF grid bins it onto ``n_bins`` uniform bins (a
+        bounded grid -- the native energy score is O(n_bins^2)), and the resampled
+        view PCHIPs the SAME eCDF nodes.  No histogram round-trip.
+        """
+        samples = np.atleast_2d(np.asarray(samples, dtype=np.float64))
+        n_bins = max(int(n_bins), 1)
+        # Per-row eCDF nodes have different lengths, so keep them as a list and
+        # bin each to the shared native bin count.
+        node_rows = [samples_to_cdf_nodes(row) for row in samples]
+        edges = np.empty((samples.shape[0], n_bins + 1), dtype=np.float64)
+        probas = np.empty((samples.shape[0], n_bins), dtype=np.float64)
+        for i, (x, c) in enumerate(node_rows):
+            e, p = interpolate_cdf_to_grid_with_equally_sized_bins(x, c, n_bins)
+            edges[i], probas[i] = e[0], p[0]
+        out_mean = samples.mean(axis=1) if mean is None else np.asarray(mean, float).reshape(-1)
+        return cls._from_native(edges, probas, out_mean, train_range,
+                                cdf_nodes=node_rows, is_sample_based=True, **kw)
+
+    @classmethod
+    def from_histogram(cls, bin_edges, probas, mean=None, *, train_range,
+                       is_grid_native=False, **kw):
+        """From a model's OWN histogram ``(bin_edges, probas)``.
+
+        For grid-native heads (TabPFN bar distribution): the native PMF grid is the
+        histogram verbatim and the resampled view keeps it too.  ``mean`` defaults
+        to the PMF mean.
+        """
+        edges = np.asarray(bin_edges, dtype=np.float64)
+        probas = np.asarray(probas, dtype=np.float64)
+        mids = 0.5 * (edges[..., :-1] + edges[..., 1:])
+        out_mean = (probas * mids).sum(axis=-1) if mean is None else np.asarray(mean, float).reshape(-1)
+        return cls._from_native(edges, probas, out_mean, train_range,
+                                is_grid_native=is_grid_native, **kw)
+
+    @classmethod
+    def _from_native(cls, edges, probas, mean, train_range, **kw):
+        mids = 0.5 * (np.asarray(edges)[..., :-1] + np.asarray(edges)[..., 1:])
+        return cls(probas=probas, bin_edges=edges, bin_midpoints=mids,
+                   mean=mean, train_range=train_range, **kw)
+
+    # -- native view (grid-robust rules) ------------------------------------
+    @property
+    def native(self) -> DistributionPredictionView:
+        """The raw grid, VERBATIM -- atoms and all.
+
+        No repair is applied: a zero-width bin is a Dirac and the grid-robust
+        rules score it exactly.  Degenerate grids are neutralised only where it
+        matters, in the resampled view read by the width-dividing density rules.
+        """
+        if self._native is None:
+            edges = self.bin_edges
+            mids = self.bin_midpoints
+            self._native = DistributionPredictionView(
+                probas=self.probas, bin_edges=edges, bin_midpoints=mids,
+                mean=self.mean,
+                is_sample_based=self.is_sample_based,
+                is_grid_native=self.is_grid_native,
+            )
+        return self._native
+
+    # -- resampled view (density rules, grow-only grid) ---------------------
+    @property
+    def resampled(self) -> DistributionPredictionView:
+        """The density-rule view on the per-instance grow-only grid.
+
+        ``support_i = (min(train_lo, hull_lo_i), max(train_hi, hull_hi_i))`` -- the
+        prediction's own hull can only widen the train range, never shrink it.
+        Built from the stored CDF nodes when present (no histogram round-trip),
+        else from the native histogram; a grid-native PMF grid is kept verbatim
+        (scoring pads it to the observed target on its own).
+        """
+        if self._resampled is None:
+            y_lo, y_hi = self.train_range
+            n = self.num_equally_sized_bins
+            if self.is_grid_native:
+                edges, probas = self.bin_edges, self.probas
+            elif self.cdf_nodes is not None:
+                edges, probas = self._resample_stored_nodes(y_lo, y_hi, n)
+            else:
+                x, c = _histogram_to_cdf_nodes(self.bin_edges, self.probas)
+                edges, probas = resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(x, c, y_lo, y_hi, n)
+            edges = np.asarray(edges)
+            mids = 0.5 * (edges[..., :-1] + edges[..., 1:])
+            self._resampled = DistributionPredictionView(
+                probas=probas, bin_edges=edges, bin_midpoints=mids, mean=self.mean,
+                is_sample_based=self.is_sample_based, is_grid_native=self.is_grid_native,
+            )
+        return self._resampled
+
+    def _resample_stored_nodes(self, y_lo, y_hi, n):
+        """Resample the stored CDF nodes onto the grow-only grid.
+
+        Quantile nodes share one 2-D array (a tuple); sample nodes are a per-row
+        list of ragged eCDFs, resampled row by row (each onto the shared count).
+        """
+        nodes = self.cdf_nodes
+        if isinstance(nodes, tuple):                        # shared 2-D nodes
+            return resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(nodes[0], nodes[1], y_lo, y_hi, n)
+        edges = np.empty((len(nodes), n + 1), dtype=np.float64)
+        probas = np.empty((len(nodes), n), dtype=np.float64)
+        for i, (x, c) in enumerate(nodes):
+            e, p = resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(x, c, y_lo, y_hi, n)
+            edges[i] = e if np.ndim(e) == 1 else e[0]
+            probas[i] = p[0]
+        return edges, probas
+
+
+def _histogram_to_cdf_nodes(bin_edges, probas):
+    """Monotone CDF nodes ``(x, c)`` from a raw histogram -- the direct-construction
+    fallback (tests build ``DistributionPrediction`` without source nodes).
+
+    ``x`` are the sorted edges, ``c`` the cumulative mass (``c[0]=0``, ``c[-1]=1``).
+    Shape is preserved (shared 1-D grid -> 1-D ``x``).
+    """
+    e = np.asarray(bin_edges, dtype=np.float64)
+    p = np.asarray(probas, dtype=np.float64)
+    p2 = p[None, :] if p.ndim == 1 else p
+    rows, n_bins = p2.shape
+    p2 = np.clip(np.nan_to_num(p2, nan=0.0, posinf=0.0, neginf=0.0), 0.0, None)
+    tot = p2.sum(axis=-1, keepdims=True)
+    p2 = np.where(tot > 0.0, p2 / np.where(tot > 0.0, tot, 1.0), 1.0 / n_bins)
+    c = np.concatenate([np.zeros((rows, 1)), np.cumsum(p2, axis=-1)], axis=-1)
+    c[:, -1] = 1.0
+    x = np.sort(e, axis=-1)
+    return (x[0] if (e.ndim == 2 and e.shape[0] == 1) else x), c
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +268,20 @@ class ProbabilisticWrapper:
     Subclass and implement fit(), predict(), predict_distribution().
     If predict_distribution() is not yet supported, leave it raising
     NotImplementedError — cv.py will skip distributional metrics gracefully.
+
+    Every subclass's ``fit`` calls ``self._set_train_range(y)``.  Distribution
+    predictions then read ``self._y_train_range`` instead of receiving it from
+    the caller.
     """
+
+    _y_train_range: tuple[float, float] | None = None
+
+    def _set_train_range(self, y) -> tuple[float, float]:
+        """Capture the finite training-target range."""
+        arr = np.asarray(y.values if hasattr(y, "values") else y, dtype=float).reshape(-1)
+        arr = np.where(np.isfinite(arr), arr, np.nan)
+        self._y_train_range = (float(np.nanmin(arr)), float(np.nanmax(arr)))
+        return self._y_train_range
 
     def fit(self, X, y) -> "ProbabilisticWrapper":
         raise NotImplementedError
@@ -454,4 +290,10 @@ class ProbabilisticWrapper:
         raise NotImplementedError
 
     def predict_distribution(self, X) -> DistributionPrediction:
+        """Return the predictive distribution over the test rows.
+
+        The train-target range that seeds the grow-only density grid is read
+        from ``self._y_train_range`` (captured by ``fit`` via
+        :meth:`_set_train_range`); it is NOT threaded through the call.
+        """
         raise NotImplementedError

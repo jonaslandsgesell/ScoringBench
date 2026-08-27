@@ -32,6 +32,7 @@ class TabPFNWrapper(ProbabilisticWrapper):
         self._model = TabPFNRegressor(device=self._device, **kwargs)
 
     def fit(self, X, y) -> "TabPFNWrapper":
+        self._set_train_range(y)
         self._model.fit(X, y)
         return self
 
@@ -61,7 +62,8 @@ class TabPFNWrapper(ProbabilisticWrapper):
             bin_edges=bin_edges,
             bin_midpoints=bin_midpoints,
             mean=mean,
-            is_natively_gridded_model=True,
+            train_range=self._y_train_range,
+            is_grid_native=True,
         )
 
 
@@ -177,7 +179,9 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         from pathlib import Path
         
         # Import from local additional_models/tabpfn
-        repo_root = Path(__file__).resolve().parents[2]
+        # This file is <repo>/scoringbench/univariate/wrappers/tabpfn.py,
+        # so parents[3] is the repository root.
+        repo_root = Path(__file__).resolve().parents[3]
         local_additional_models = repo_root / "additional_models"
         
         if not local_additional_models.exists():
@@ -251,6 +255,7 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         )
 
     def fit(self, X, y) -> "FinetuneTabPFNWrapper":
+        self._set_train_range(y)
         self._model.fit(X, y)
         return self
 
@@ -274,12 +279,13 @@ class FinetuneTabPFNWrapper(ProbabilisticWrapper):
         probas = torch.softmax(logits, dim=-1).cpu().numpy()    # (n_samples, n_bins)
         mean = (probas * bin_midpoints[None, :]).sum(axis=-1)   # (n_samples,)
 
-        # Native histogram grid (see TabPFNWrapper.predict_distribution): skip the
-        # regridding so the criterion's borders reach the metrics untouched.
+        # The native view keeps the criterion's borders verbatim (atoms and all);
+        # only the density rules read the shared resampled view.
         return DistributionPrediction(
             probas=probas,
             bin_edges=bin_edges,
             bin_midpoints=bin_midpoints,
             mean=mean,
-            is_natively_gridded_model=True,
+            train_range=self._y_train_range,
+            is_grid_native=True,
         )

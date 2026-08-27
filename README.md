@@ -1,5 +1,5 @@
 ## Why this benchmark?
-Proper scoring rules have long been used to rigorously evaluate probabilistic forecasts, but their application has been largely confined to classification tasks. ScoringBench brings proper scoring rule based evaluation to **probabilistic regression** — an inherently continuous setting where models must predict full predictive distributions over real-valued targets.
+Proper scoring rules have long been used to rigorously evaluate probabilistic forecasts, but their application has been largely confined to classification tasks. ScoringBench is a Benchmark for **probabilistic regression** — an inherently continuous setting where models must predict full predictive distributions over real-valued targets.
 
 This matters because modern tabular foundation models (e.g., TabPFN, TabICL) natively output full probability distributions, not just point estimates. This means that practically useful quantities such as **prediction intervals, quantile estimates, and uncertainty bounds are readily extracted from those base models** — but existing benchmarks have no way to measure how well those distributional outputs are calibrated or sharp.
 
@@ -20,7 +20,6 @@ ScoringBench is a compact benchmarking suite for probabilistic regression on tab
 - `run_bench_regression.py`: run the univariate benchmark (all datasets, models, CV folds). Use `--lite` for a fast smoke test and `--output_dir` to change the output path.
 - `run_bench_regression_multivariate.py`: run the multivariate (d-dimensional target) benchmark. Defaults to writing `output_multivariate_d{d}_n{sample_size}/`. See the [Multivariate benchmark](#multivariate-benchmark-d-dimensional-targets) section.
 - `autorank_leaderboard.py`: compute statistical rankings with critical-difference diagrams; generates JSON data and LaTeX tables in `<output_dir>/figures/leaderboard/`. Use `--output_dir` to choose the input/output folder (default `output_3000`). Works for both univariate and multivariate outputs.
-- `plot_output.py`: generate summary and per-dataset tables/plots from benchmark outputs. Defaults are reasonable; use `--relative`, `--median`, or `--output` to customize.
 
 ## Related tools
 

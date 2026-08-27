@@ -75,6 +75,7 @@ class BARTWrapper(SampleBasedWrapper):
         X, y = X[valid], y[valid]
         if len(y) == 0:
             raise ValueError("No valid (finite) training samples after sanitization")
+        self._set_train_range(y)
 
         self._n_features = X.shape[1]
 

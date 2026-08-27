@@ -125,6 +125,8 @@ class XGBVectorWrapper(ProbabilisticWrapper):
         if len(y) == 0:
             raise ValueError("No valid (finite) training samples after sanitization")
 
+        self._set_train_range(y)
+
         # Uniform discretization over the observed range
         self._bin_edges = np.linspace(y.min(), y.max(), self.n_bins + 1)
         self._bin_midpoints = (self._bin_edges[:-1] + self._bin_edges[1:]) / 2
@@ -184,6 +186,8 @@ class XGBVectorWrapper(ProbabilisticWrapper):
             bin_edges=self._bin_edges,
             bin_midpoints=self._bin_midpoints,
             mean=mean,
+            train_range=self._y_train_range,
+            is_grid_native=True,
         )
 
 
@@ -230,6 +234,7 @@ class XGBQuantileVectorWrapper(ProbabilisticWrapper):
             raise ValueError("No valid (finite) training samples after sanitization")
         
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
 
         dtrain = xgb.DMatrix(X, label=y, missing=np.nan)
 
@@ -252,7 +257,9 @@ class XGBQuantileVectorWrapper(ProbabilisticWrapper):
         dtest = xgb.DMatrix(X)
         # q shape: (n_samples, n_bins)
         q = self._model.predict(dtest)
-        return quantiles_to_distribution(q, self._alphas, y_range=self._y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=self._y_range, train_range=self._y_train_range
+        )
 
     def predict(self, X) -> np.ndarray:
         # High-precision mean directly from quantile particles

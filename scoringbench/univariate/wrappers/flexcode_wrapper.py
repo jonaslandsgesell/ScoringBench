@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 from .base import DistributionPrediction, ProbabilisticWrapper
-from .sample_based import grid_density_to_distribution
+from .density_based import grid_density_to_distribution
 
 _REGRESSORS = {
     "xgboost": "XGBoost",
@@ -115,6 +115,7 @@ class FlexCodeWrapper(ProbabilisticWrapper):
             span = max(abs(hi), 1.0)
         pad = self.grid_pad * span
         self._y_range = (lo - pad, hi + pad)
+        self._set_train_range(y)
 
         model_cls = getattr(rm, _REGRESSORS[self.regressor])
         self._model = flexcode.FlexCodeModel(
@@ -132,7 +133,11 @@ class FlexCodeWrapper(ProbabilisticWrapper):
         X = self._sanitize_X(X)
         cdes, z_grid = self._model.predict(X, n_grid=self.n_grid)
         z_grid = np.asarray(z_grid, dtype=np.float64).reshape(-1)
-        return grid_density_to_distribution(z_grid, np.asarray(cdes, dtype=np.float64))
+        return grid_density_to_distribution(
+            z_grid, np.asarray(cdes, dtype=np.float64), train_range=self._y_train_range
+        )
 
     def predict(self, X) -> np.ndarray:
+        # .mean is grid-independent; the stored train range is a valid
+        # train_range placeholder for this internal point-prediction call.
         return self.predict_distribution(X).mean

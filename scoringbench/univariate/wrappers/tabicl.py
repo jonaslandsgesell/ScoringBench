@@ -13,7 +13,9 @@ from pathlib import Path
 # Prefer local checkout of `tabicl` when present in the workspace.
 # Compute repository root relative to this file and insert the local
 # `tabicl/src` directory at the front of `sys.path` if it exists.
-repo_root = Path(__file__).resolve().parents[2]
+# This file is <repo>/scoringbench/univariate/wrappers/tabicl.py,
+# so parents[3] is the repository root.
+repo_root = Path(__file__).resolve().parents[3]
 local_tabicl = repo_root / "tabicl" / "src"
 if local_tabicl.exists():
     sys.path.insert(0, str(local_tabicl))
@@ -41,6 +43,7 @@ class TabICLWrapper(ProbabilisticWrapper):
         self._ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
 
     def fit(self, X, y) -> "TabICLWrapper":
+        self._set_train_range(y)
         self._model.fit(X, y)
         return self
 
@@ -76,7 +79,7 @@ class TabICLWrapper(ProbabilisticWrapper):
         #    (CatBoost / XGB-quantile / NGBoost), so every quantile model is
         #    discretized identically.
         alphas = np.asarray(self._ALPHAS, dtype=float)
-        return quantiles_to_distribution(q, alphas)
+        return quantiles_to_distribution(q, alphas, train_range=self._y_train_range)
 
 class FinetuneTabICLWrapper(TabICLWrapper):
     """Wraps a finetuned TabICL regressor.

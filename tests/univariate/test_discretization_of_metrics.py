@@ -122,6 +122,7 @@ def make_discretized_distributions_batch(x_grids, mus, sigmas, n_samples_list):
                         bin_edges=x_grid_np.astype(np.float32),
                         bin_midpoints=bin_mids.astype(np.float32),
                         mean=mean_array,
+                        train_range=(float(np.asarray(x_grid_np).min()), float(np.asarray(x_grid_np).max())),
                     ),
                 )
 
@@ -178,6 +179,7 @@ def make_discretized_distribution(x_grid, mu, sigma, n_samples=10):
         bin_edges=bin_edges_array,
         bin_midpoints=bin_mids_array,
         mean=mean_array,
+        train_range=(float(np.asarray(bin_edges_array).min()), float(np.asarray(bin_edges_array).max())),
     )
 
 
@@ -515,6 +517,7 @@ def _compute_metrics_at_grid(n_pts, n_samples=30):
             bin_edges=x_grid.astype(np.float32),
             bin_midpoints=bin_mids.astype(np.float32),
             mean=mean_array,
+            train_range=(float(np.asarray(x_grid).min()), float(np.asarray(x_grid).max())),
         )
     
     dist_g = _create_varied_dist(base_mu=_MU_G, base_sigma=_SIGMA_G)
@@ -650,7 +653,10 @@ def test_energy_score_matches_monte_carlo_beta_formula(beta):
     y = mu + 0.5 * sigma
 
     # ScoringBench path: eCDF equiprobable de-tied grid -> histogram energy score.
-    dist = samples_to_distribution(samples, n_bins=200)
+    dist = samples_to_distribution(
+        samples, n_bins=200,
+        train_range=(float(samples.min()), float(samples.max())),
+    )
     sb = compute_scoring_rules(dist, y)
     sb_es = sb[f"energy_score_beta_{beta}"]
 
@@ -680,7 +686,10 @@ def test_energy_score_crps_equals_beta_1_monte_carlo():
     samples = rng.normal(loc=mu[:, None], scale=sigma[:, None], size=(n_test, n_draws))
     y = mu - 0.3 * sigma
 
-    dist = samples_to_distribution(samples, n_bins=200)
+    dist = samples_to_distribution(
+        samples, n_bins=200,
+        train_range=(float(samples.min()), float(samples.max())),
+    )
     scores = compute_scoring_rules(dist, y)
 
     mc_vals = np.array([

@@ -70,6 +70,7 @@ class EXAONETabularWrapper(ProbabilisticWrapper):
     def fit(self, X, y) -> "EXAONETabularWrapper":
         X_arr = np.asarray(X.values if hasattr(X, "values") else X, dtype=np.float64)
         y_arr = np.asarray(y.values if hasattr(y, "values") else y, dtype=np.float64).reshape(-1)
+        self._set_train_range(y_arr)
         self._model.fit(X_arr, y_arr)
         return self
 
@@ -95,7 +96,7 @@ class EXAONETabularWrapper(ProbabilisticWrapper):
 
         if n_rows == 0:
             empty = np.empty((0, levels.size), dtype=np.float64)
-            return quantiles_to_distribution(empty, levels)
+            return quantiles_to_distribution(empty, levels, train_range=self._y_train_range)
 
         # Reproduce the fitted, pooled ensemble forward pass, keeping the *raw*
         # quantile bank (members, rows, n_quantiles) instead of collapsing it to
@@ -129,7 +130,7 @@ class EXAONETabularWrapper(ProbabilisticWrapper):
         # noise / tau-crossing can flip neighbours; sort defensively per row.
         q = np.sort(q, axis=1)
 
-        return quantiles_to_distribution(q, levels)
+        return quantiles_to_distribution(q, levels, train_range=self._y_train_range)
 
     # ------------------------------------------------------------------
     def _member_quantiles(self, support_x, support_y, query_x, *, n_svd: int, seed: int):

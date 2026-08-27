@@ -92,6 +92,7 @@ def _gaussian_on_grid(lo, hi, bin_width=_BW, mu=0.0, sigma=1.0, truncate=None):
         bin_edges=edges[None, :].astype(np.float64),
         bin_midpoints=mids[None, :].astype(np.float64),
         mean=np.array([mu], dtype=np.float64),
+        train_range=(float(edges.min()), float(edges.max())),
     )
 
 
@@ -107,6 +108,7 @@ def _tile(dp, n):
         bin_edges=np.repeat(dp.bin_edges, n, axis=0),
         bin_midpoints=np.repeat(dp.bin_midpoints, n, axis=0),
         mean=np.repeat(dp.mean, n, axis=0),
+        train_range=dp.train_range,
     )
 
 

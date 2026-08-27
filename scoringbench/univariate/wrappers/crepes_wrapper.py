@@ -101,6 +101,7 @@ class CrepesWrapper(ProbabilisticWrapper):
 
         y = np.asarray(y, dtype=float)
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
 
         # Split into training and calibration sets
         X_train, X_cal, y_train, y_cal = train_test_split(
@@ -226,7 +227,9 @@ class CrepesWrapper(ProbabilisticWrapper):
             q = np.percentile(cpds, q=target_percentiles, axis=1).T  # (n_samples, n_quantiles)
         
         q = np.asarray(q, dtype=float)
-        return quantiles_to_distribution(q, self._alphas, y_range=self._y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=self._y_range, train_range=self._y_train_range
+        )
 
     def predict(self, X) -> np.ndarray:
         """Point predictions using the CREPES model.
@@ -240,7 +243,9 @@ class CrepesWrapper(ProbabilisticWrapper):
         Returns:
             Point predictions of shape (n_samples,).
         """
-        # Call predict_distribution to get the distribution object
+        # Call predict_distribution to get the distribution object. .mean is
+        # grid-independent, so the stored train range is a valid train_range
+        # placeholder for this internal point-prediction call.
         dist = self.predict_distribution(X)
         
         # Return the mean calculated by the distribution prediction

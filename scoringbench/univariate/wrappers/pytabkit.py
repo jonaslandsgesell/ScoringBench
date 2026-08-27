@@ -73,6 +73,7 @@ class PytabkitRealMLPWrapper(ProbabilisticWrapper):
     def fit(self, X, y) -> "PytabkitRealMLPWrapper":
         if self._model is None:
             self._build_model()
+        self._set_train_range(y)
         # scikit-learn style fit — let exceptions propagate.
         self._model.fit(X, y)
         return self
@@ -85,6 +86,9 @@ class PytabkitRealMLPWrapper(ProbabilisticWrapper):
         if raw.ndim == 2:
             # Model returned quantile predictions (n_samples, n_quantiles).
             # Derive a consistent point estimate via the distribution mean.
+            # .mean is grid-independent; the observed q hull is a valid
+            # train_range placeholder for this internal call.
+            cr = (float(raw.min()), float(raw.max()))
             return self.predict_distribution(X).mean
         return raw
 
@@ -193,7 +197,9 @@ class PytabkitRealMLPWrapper(ProbabilisticWrapper):
         # stored y_range at this point).
         finite = q[np.isfinite(q)]
         y_range = (float(finite.min()), float(finite.max())) if finite.size else (0.0, 1.0)
-        return quantiles_to_distribution(q, self._alphas, y_range=y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=y_range, train_range=self._y_train_range
+        )
 
 
 class PytabkitRealMLPHPOWrapper(PytabkitRealMLPWrapper):
@@ -269,6 +275,7 @@ class PytabkitTabMDWrapper(ProbabilisticWrapper):
     def fit(self, X, y) -> "PytabkitTabMDWrapper":
         if self._model is None:
             self._build_model()
+        self._set_train_range(y)
         # scikit-learn style fit — let exceptions propagate.
         self._model.fit(X, y)
         return self
@@ -281,6 +288,9 @@ class PytabkitTabMDWrapper(ProbabilisticWrapper):
         if raw.ndim == 2:
             # Model returned quantile predictions (n_samples, n_quantiles).
             # Derive a consistent point estimate via the distribution mean.
+            # .mean is grid-independent; the observed q hull is a valid
+            # train_range placeholder for this internal call.
+            cr = (float(raw.min()), float(raw.max()))
             return self.predict_distribution(X).mean
         return raw
 
@@ -389,7 +399,9 @@ class PytabkitTabMDWrapper(ProbabilisticWrapper):
         # stored y_range at this point).
         finite = q[np.isfinite(q)]
         y_range = (float(finite.min()), float(finite.max())) if finite.size else (0.0, 1.0)
-        return quantiles_to_distribution(q, self._alphas, y_range=y_range)
+        return quantiles_to_distribution(
+            q, self._alphas, y_range=y_range, train_range=self._y_train_range
+        )
 
 
 class PytabkitTabMHPOWrapper(PytabkitTabMDWrapper):

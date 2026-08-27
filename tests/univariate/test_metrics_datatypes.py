@@ -207,6 +207,7 @@ def test_pipeline_sharpness_and_finiteness_large_scale():
         bin_edges=edges,
         bin_midpoints=mids,
         mean=np.full(n, scale),
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
     y_true = np.full(n, scale)
 
@@ -250,6 +251,7 @@ def test_sharpness_and_dispersion_match_analytic_per_sample():
 
     dist = DistributionPrediction(
         probas=probas, bin_edges=edges, bin_midpoints=mids, mean=mids.mean(axis=1),
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
     out = compute_scoring_rules(dist, np.full(n, scale))
 

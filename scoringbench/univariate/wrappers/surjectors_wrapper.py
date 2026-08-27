@@ -19,7 +19,7 @@ from collections import namedtuple
 import numpy as np
 
 from .base import DistributionPrediction, ProbabilisticWrapper
-from .sample_based import grid_density_to_distribution
+from .density_based import grid_density_to_distribution
 
 # Canonical default hyperparameters per flow type. Single source of truth shared
 # by the benchmark's MODELS registration and the integration tests.
@@ -160,6 +160,7 @@ class SurjectorsWrapper(ProbabilisticWrapper):
         X, y = X[valid], y[valid]
         if len(y) == 0:
             raise ValueError("No valid (finite) training samples after sanitization")
+        self._set_train_range(y)
 
         # Standardize inputs/targets — essential for stable flow training.
         self._x_mean = X.mean(0, keepdims=True)
@@ -228,7 +229,12 @@ class SurjectorsWrapper(ProbabilisticWrapper):
         if self._params is None:
             raise RuntimeError("Model must be fitted before calling predict_distribution")
         dens = self._density_on_grid(X)
-        return grid_density_to_distribution(self._grid_o, dens)
+        return grid_density_to_distribution(
+            self._grid_o, dens, train_range=self._y_train_range
+        )
 
     def predict(self, X) -> np.ndarray:
+        # .mean is grid-independent; use the fitted target grid's hull as a
+        # valid train_range placeholder for this internal call.
+        cr = (float(self._grid_o.min()), float(self._grid_o.max()))
         return self.predict_distribution(X).mean

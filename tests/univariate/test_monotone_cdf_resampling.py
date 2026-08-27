@@ -1,10 +1,10 @@
 """Tests for the monotone-cubic (PCHIP) CDF resampler in ``base``.
 
-``resample_cdf_to_regular_grid`` reconstructs a density by evaluating the
-prediction's CDF on a regular grid and differencing it.  As of the interpolation
+``interpolate_cdf_to_grid_with_equally_sized_bins`` reconstructs a density by evaluating the
+prediction's CDF on a uniform grid and differencing it.  As of the interpolation
 selection study (`tests/test_interpolation_scheme_selection.py`) that evaluation
 uses a monotone shape-preserving cubic (PCHIP, "scheme C2") instead of a straight
-line, via :func:`_monotone_cdf_at`.
+line, via :func:`_evaluate_monotone_cdf`.
 
 Switching the interpolant must *not* weaken any invariant the metrics depend on,
 and must *add* the shape fidelity that motivated the change.  This module pins
@@ -23,21 +23,21 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from scoringbench.univariate.wrappers.base import (
-    _monotone_cdf_at,
-    resample_cdf_to_regular_grid,
+from scoringbench.univariate.wrappers.resampling_grid import (
+    _evaluate_monotone_cdf,
+    interpolate_cdf_to_grid_with_equally_sized_bins,
 )
 
 
 # ---------------------------------------------------------------------------
-# _monotone_cdf_at: the interpolant itself
+# _evaluate_monotone_cdf: the interpolant itself
 # ---------------------------------------------------------------------------
 
 def test_passes_through_the_cdf_nodes():
     """The cubic reproduces the CDF exactly at the abscissae it was fit to."""
     x = np.linspace(-3.0, 3.0, 13)
     c = norm.cdf(x)
-    got = _monotone_cdf_at(x, c, x)
+    got = _evaluate_monotone_cdf(x, c, x)
     np.testing.assert_allclose(got, c, atol=1e-12)
 
 
@@ -46,7 +46,7 @@ def test_is_monotone_between_nodes():
     x = np.linspace(-3.0, 3.0, 9)
     c = norm.cdf(x)
     fine = np.linspace(-3.0, 3.0, 500)
-    got = _monotone_cdf_at(x, c, fine)
+    got = _evaluate_monotone_cdf(x, c, fine)
     assert np.all(np.diff(got) >= -1e-12), "interpolated CDF is not monotone"
 
 
@@ -55,7 +55,7 @@ def test_clipped_to_the_node_range_under_extrapolation():
     x = np.linspace(0.0, 1.0, 6)
     c = np.linspace(0.0, 1.0, 6)
     q = np.array([-5.0, -1.0, 0.5, 2.0, 9.0])
-    got = _monotone_cdf_at(x, c, q)
+    got = _evaluate_monotone_cdf(x, c, q)
     assert got.min() >= c[0] - 1e-12
     assert got.max() <= c[-1] + 1e-12
 
@@ -69,7 +69,7 @@ def test_straight_line_cdf_stays_straight():
     x = np.linspace(-2.0, 4.0, 7)
     c = (x - x[0]) / (x[-1] - x[0])
     fine = np.linspace(-2.0, 4.0, 200)
-    got = _monotone_cdf_at(x, c, fine)
+    got = _evaluate_monotone_cdf(x, c, fine)
     expected = (fine - x[0]) / (x[-1] - x[0])
     np.testing.assert_allclose(got, expected, atol=1e-12)
 
@@ -79,7 +79,7 @@ def test_fewer_than_three_nodes_falls_back_to_linear():
     x = np.array([0.0, 2.0])
     c = np.array([0.0, 1.0])
     q = np.array([0.0, 0.5, 1.0, 2.0])
-    got = _monotone_cdf_at(x, c, q)
+    got = _evaluate_monotone_cdf(x, c, q)
     np.testing.assert_allclose(got, [0.0, 0.25, 0.5, 1.0], atol=1e-12)
 
 
@@ -93,12 +93,12 @@ def test_tied_abscissa_keeps_the_last_node_value():
     x = np.array([0.0, 1.0, 1.0, 2.0])
     c = np.array([0.0, 0.2, 0.8, 1.0])
     # Querying exactly at the tie must give the post-jump value (0.8).
-    got = _monotone_cdf_at(x, c, np.array([1.0]))
+    got = _evaluate_monotone_cdf(x, c, np.array([1.0]))
     assert got[0] == pytest.approx(0.8, abs=1e-12)
 
 
 # ---------------------------------------------------------------------------
-# resample_cdf_to_regular_grid: the invariants must survive the new interpolant
+# interpolate_cdf_to_grid_with_equally_sized_bins: the invariants must survive the new interpolant
 # ---------------------------------------------------------------------------
 
 def _resample_normal(n_levels=41, n_bins=40, loc=0.0, scale=1.0):
@@ -109,11 +109,11 @@ def _resample_normal(n_levels=41, n_bins=40, loc=0.0, scale=1.0):
     z_min, z_max = q[0] - left, q[-1] + right
     x = np.concatenate([[z_min], q, [z_max]])[None, :]
     y = np.concatenate([[0.0], alphas, [1.0]])
-    return resample_cdf_to_regular_grid(x, y, n_bins)
+    return interpolate_cdf_to_grid_with_equally_sized_bins(x, y, n_bins)
 
 
 def test_masses_are_valid_pmf():
-    """Non-negative masses summing to 1, on a strictly positive regular grid."""
+    """Non-negative masses summing to 1, on a strictly positive uniform grid."""
     edges, probas = _resample_normal()
     assert np.all(probas >= 0.0)
     np.testing.assert_allclose(probas.sum(axis=-1), 1.0, atol=1e-12)
@@ -137,33 +137,54 @@ def test_mass_is_the_cdf_increment_over_the_bin():
     x = np.concatenate([[z_min], q, [z_max]])
     y = np.concatenate([[0.0], alphas, [1.0]])
 
-    edges, probas = resample_cdf_to_regular_grid(x[None, :], y, n_bins)
+    edges, probas = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins)
     # Reconstruct the CDF the resampler used and difference it independently.
-    c_edges = _monotone_cdf_at(x, y, edges[0])
+    c_edges = _evaluate_monotone_cdf(x, y, edges[0])
     expected = np.maximum(np.diff(c_edges), 0.0)
     expected = expected / expected.sum()
     np.testing.assert_allclose(probas[0], expected, atol=1e-12)
 
 
-def test_atom_lands_whole_in_one_bin():
-    """A CDF jump at a repeated abscissa is credited to a single output bin."""
+# n_bins chosen so the atom at x = 1.0 always falls ON a grid edge; otherwise the
+# bin containing it straddles the atom and carries mass from above it too.
+@pytest.mark.parametrize("n_bins", [4, 8, 16, 40, 200])
+def test_atom_mass_is_credited_at_or_below_its_abscissa(n_bins):
+    """The CDF value at an atom survives the resample, at every resolution.
+
+    The atom is NOT kept undivided -- the resampled view smooths it on purpose
+    (see ``_evaluate_monotone_cdf``) -- but the cumulative mass at the atom must stay
+    exact, since that is what ``searchsorted(edges[1:], y)`` scores against.
+    """
     # Support [0, 4]; an atom of mass 0.6 sits at x = 1.0.
     x = np.array([0.0, 1.0, 1.0, 4.0])
     y = np.array([0.0, 0.2, 0.8, 1.0])
-    edges, probas = resample_cdf_to_regular_grid(x[None, :], y, n_bins=4)
+    edges, probas = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins=n_bins)
 
-    e = edges[0]
-    k = int(np.searchsorted(e[1:], 1.0).clip(0, 3))
-    assert probas[0, k] >= 0.6 - 1e-9, "atom mass leaked out of its bin"
-    # Everything at or below the atom is accounted for by bins up to k.
+    k = int(np.searchsorted(edges[0][1:], 1.0).clip(0, n_bins - 1))
     assert probas[0, : k + 1].sum() == pytest.approx(0.8, abs=1e-9)
+
+
+def test_resampled_view_smears_an_atom():
+    """The jump is spread on purpose, so the density rules see a finite p/w.
+
+    A bin holding the whole 0.6 undivided would hand the width-dividing rules an
+    unbounded density -- exactly what the resampled view exists to prevent.
+    """
+    x = np.array([0.0, 1.0, 1.0, 4.0])
+    y = np.array([0.0, 0.2, 0.8, 1.0])
+    edges, probas = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins=200)
+
+    k = int(np.searchsorted(edges[0][1:], 1.0).clip(0, 199))
+    assert probas[0, k] < 0.05, "the atom should be smeared, not concentrated"
+    assert probas[0].max() < 0.05
+    assert int((probas[0] > 1e-12).sum()) > 50
 
 
 def test_uniform_cdf_reconstructs_flat_density():
     """A straight-line CDF gives equal masses -- no cubic-induced ripple."""
     x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
     y = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
-    _, probas = resample_cdf_to_regular_grid(x[None, :], y, n_bins=8)
+    _, probas = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins=8)
     np.testing.assert_allclose(probas[0], 1.0 / 8, atol=1e-12)
 
 
@@ -182,7 +203,7 @@ def test_pchip_density_beats_piecewise_constant_on_a_smooth_truth():
     x = np.concatenate([[z_min], q, [z_max]])
     y = np.concatenate([[0.0], alphas, [1.0]])
 
-    edges, probas_pchip = resample_cdf_to_regular_grid(x[None, :], y, n_bins)
+    edges, probas_pchip = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins)
     e = edges[0]
     mids = 0.5 * (e[:-1] + e[1:])
     w = np.diff(e)

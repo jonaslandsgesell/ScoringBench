@@ -27,6 +27,23 @@ from scoringbench.univariate.wrappers.sample_based import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _train_range(values: np.ndarray) -> tuple[float, float]:
+    """A valid shared grid range for a block of draws / quantiles.
+
+    ``DistributionPrediction`` requires a finite ``(y_lo, y_hi)`` with
+    ``y_hi > y_lo``.  These unit tests only exercise the grid/mass structure --
+    they never compare models -- so the global finite min/max of the block is a
+    fine range; the guard widens it when every value ties so ``y_hi > y_lo``.
+    """
+    finite = np.asarray(values, dtype=np.float64)
+    finite = finite[np.isfinite(finite)]
+    lo = float(finite.min()) if finite.size else 0.0
+    hi = float(finite.max()) if finite.size else 1.0
+    if hi <= lo:
+        hi = lo + 1.0
+    return (lo, hi)
+
+
 def _make_data(n_train=400, n_test=120, n_features=5, seed=0):
     rng = np.random.default_rng(seed)
     Xtr = rng.normal(size=(n_train, n_features))
@@ -77,6 +94,7 @@ def _assert_learns(dist: DistributionPrediction, y_test: np.ndarray):
     baseline = DistributionPrediction(
         probas=probas, bin_edges=grid, bin_midpoints=mids,
         mean=np.full(len(y_test), float(np.mean(y_test))),
+        train_range=(float(np.asarray(grid).min()), float(np.asarray(grid).max())),
     )
     base_crps = compute_metrics(baseline, y_test)["crps"]
     assert crps < base_crps, f"CRPS {crps:.3f} not better than baseline {base_crps:.3f}"
@@ -87,45 +105,50 @@ def _assert_learns(dist: DistributionPrediction, y_test: np.ndarray):
 # ---------------------------------------------------------------------------
 
 def test_quantiles_to_distribution_shapes():
-    # K levels still span K - 1 bins, but the edges are a regular grid over the
-    # tail-extended support, not the quantiles themselves.
+    # Nodes-as-edges: the quantile values ARE the bin edges (no invented tail),
+    # with the end CDF values pinned to C = 0 / C = 1.  K levels therefore give
+    # K edges and K - 1 bins, and the masses are diff(alphas) renormalised to 1.
     alphas = np.array([0.25, 0.5, 0.75])
     q = np.array([[0.0, 1.0, 2.0], [1.0, 1.5, 4.0]])
-    dist = quantiles_to_distribution(q, alphas)
+    dist = quantiles_to_distribution(q, alphas, train_range=_train_range(q))
     assert dist.probas.shape == (2, len(alphas) - 1)
     assert dist.bin_edges.shape == (2, len(alphas))
     np.testing.assert_allclose(dist.probas.sum(axis=1), 1.0)
 
-    widths = np.diff(dist.bin_edges, axis=1)
-    assert np.all(widths > 0.0)
-    np.testing.assert_allclose(widths[:, 0], widths[:, 1], rtol=1e-12)
-    # Support: one local spacing beyond the outermost quantiles on each side.
-    np.testing.assert_allclose(dist.bin_edges[:, 0], q[:, 0] - (q[:, 1] - q[:, 0]))
-    np.testing.assert_allclose(dist.bin_edges[:, -1], q[:, -1] + (q[:, -1] - q[:, -2]))
+    # Edges are the quantiles verbatim -- no tail extension.
+    np.testing.assert_allclose(dist.bin_edges, np.sort(q, axis=1), rtol=1e-12)
+    # Masses are diff(alphas) renormalised, independent of the quantile values.
+    d = np.diff(np.sort(alphas))
+    expected = d / d.sum()
+    np.testing.assert_allclose(dist.probas, np.broadcast_to(expected, dist.probas.shape), rtol=1e-12)
+    # Support is exactly the quantile hull -- no invented tail either side.
+    np.testing.assert_allclose(dist.bin_edges[:, 0], q[:, 0])
+    np.testing.assert_allclose(dist.bin_edges[:, -1], q[:, -1])
 
 
 def test_samples_to_distribution_recovers_mean():
     rng = np.random.default_rng(1)
     samples = rng.normal(loc=3.0, scale=1.0, size=(4, 5000))
-    dist = samples_to_distribution(samples, n_bins=99)
+    dist = samples_to_distribution(samples, n_bins=99, train_range=_train_range(samples))
     _validate_distribution(dist, 4)
     np.testing.assert_allclose(dist.mean, 3.0, atol=0.1)
 
 
 # ---------------------------------------------------------------------------
-# eCDF -> regular grid: explicit guarantee tests
+# eCDF -> uniform grid: explicit guarantee tests
 #
-# The representation must PROVABLY avoid the failure mode that makes a histogram
-# density (mass / width) ill-defined: a zero-width bin, where mass / width blows
-# up.  A *regular* grid rules that out by construction -- every width is
-# ``span / n_bins`` -- which is the whole reason the eCDF is resampled instead of
-# being read off the draws' own quantiles.
+# The native PMF grid is the draws' own hull cut into ``n_bins`` EQUAL-WIDTH bins,
+# so every bin has width ``span / n_bins`` -- strictly positive whenever the
+# draws are not all identical.  A row whose draws are ALL identical is a genuine
+# point mass: its hull collapses and the native PMF grid becomes a Dirac (zero-width
+# bins) rather than being widened by an invented, arbitrary pad.  That is the
+# correct native representation of an atom -- CRPS and the CDF-based rules score
+# a Dirac exactly -- and the density rules read ``.resampled`` (which always has
+# positive width from ``train_range``) instead of this grid.
 #
-# The trade is that a bin may now be empty (an atom's mass lands wholly in the
-# one bin containing it, leaving its neighbours dry).  That costs nothing,
-# because ``is_sample_based=True`` already tells metrics.py to skip the
-# density-based rules: a finite set of draws does not pin down a pointwise
-# density anyway.  CRPS and the CDF-based rules are unaffected.
+# The trade is that a bin may be empty (an atom's mass lands wholly in the one
+# bin containing it, leaving its neighbours dry).  That is fine: the mass is a
+# valid PMF summing to 1, and no density rule reads this grid directly.
 #
 # These tests exercise pathological *discrete / heavily tied* draws -- the case
 # that collapsed the old adaptive quantile grid -- across a range of n_bins.
@@ -144,17 +167,30 @@ _TIED_ROWS = [
 
 @pytest.mark.parametrize("n_bins", [2, 10, 50, 100, 257])
 @pytest.mark.parametrize("row_idx", range(len(_TIED_ROWS)))
-def test_ecdf_grid_no_zero_width_bins(row_idx, n_bins):
-    """No zero-width bins for arbitrary tied / discrete draws, for any n_bins."""
+def test_ecdf_grid_bins_positive_unless_the_draws_are_all_identical(row_idx, n_bins):
+    """Equal-width bins are strictly positive unless the draws all coincide.
+
+    The native PMF grid is the draws' hull cut into ``n_bins`` equal bins, so widths
+    are positive whenever the hull is non-degenerate.  An all-identical row is a
+    point mass whose hull collapses; its native PMF grid is a Dirac (zero-width bins)
+    -- the correct atom representation, not an invented pad.
+    """
     row = _TIED_ROWS[row_idx][None, :]
-    dist = samples_to_distribution(row, n_bins=n_bins)
+    dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
 
     assert dist.bin_edges.shape == (1, n_bins + 1)
     widths = np.diff(dist.bin_edges, axis=1)
     assert np.all(np.isfinite(widths))
-    assert np.all(widths > 0.0), (
-        f"zero-width bin for row {row_idx}, n_bins={n_bins}: min width {widths.min():.3e}"
-    )
+    assert np.all(widths >= 0.0)
+    if np.unique(row).size > 1:
+        assert np.all(widths > 0.0), (
+            f"zero-width bin for non-degenerate row {row_idx}, n_bins={n_bins}: "
+            f"min width {widths.min():.3e}"
+        )
+    else:  # all draws identical -> Dirac: the whole hull collapses to a point.
+        assert np.all(widths == 0.0), (
+            f"all-identical row {row_idx} should collapse to a Dirac"
+        )
 
 
 @pytest.mark.parametrize("n_bins", [2, 10, 50, 100, 257])
@@ -164,22 +200,22 @@ def test_ecdf_grid_is_regular_and_holds_all_the_mass(row_idx, n_bins):
 
     Empty bins are *allowed* here (that is the equal-width trade), so the
     guarantee is non-negativity plus exact total mass, not positivity: the eCDF
-    is anchored at ``C = 0`` / ``C = 1`` on the extended support, so no mass
-    leaks off the grid however heavily the draws tie.
+    is anchored at ``C = 0`` / ``C = 1`` at the extreme draws, so no mass leaks
+    off the grid however heavily the draws tie.  A fully-degenerate (all
+    identical) row collapses to a Dirac: every width is exactly 0 and one bin
+    carries all the mass, which is still uniform (target span/n = 0) and valid.
     """
     row = _TIED_ROWS[row_idx][None, :]
-    dist = samples_to_distribution(row, n_bins=n_bins)
+    dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
 
     assert dist.probas.shape == (1, n_bins)
     assert np.all(dist.probas >= 0.0), f"negative mass: {dist.probas.min():.3e}"
     np.testing.assert_allclose(dist.probas.sum(axis=1), 1.0, rtol=1e-12, atol=1e-12)
 
     # Regularity is checked in *absolute* terms against the resolution of the
-    # edge coordinates, not as a relative spread of the widths.  For the fully
-    # degenerate rows the support collapses to the minimum pad (~1e-6) while the
-    # edges still sit at coordinate ~1, so a 1-ULP rounding of the linspace is a
-    # large *fraction* of a width while being the smallest representable error
-    # there is.  This is the same tolerance model ``_is_regular`` uses.
+    # edge coordinates, not as a relative spread of the widths.  For a
+    # degenerate row the hull collapses (target width 0) and every edge sits at
+    # the single draw value, so the deviation is 0 to within a linspace ULP.
     edges = dist.bin_edges
     widths = np.diff(edges, axis=1)
     target = (edges[:, -1] - edges[:, 0]) / n_bins
@@ -202,7 +238,7 @@ def test_ecdf_grid_mass_lands_where_the_draws_are(row_idx, n_bins):
     mass must together account for essentially all of it.
     """
     row = _TIED_ROWS[row_idx][None, :]
-    dist = samples_to_distribution(row, n_bins=n_bins)
+    dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
     edges, probas = dist.bin_edges[0], dist.probas[0]
 
     # Interior draws (the outermost ones sit on a bin boundary by construction).
@@ -223,7 +259,7 @@ def test_ecdf_grid_metrics_finite_on_discrete_draws():
     # 20 test points, 100 draws each, only ~5 unique values -> heavy ties.
     base = np.array([-3.0, -1.0, 0.0, 2.0, 4.0])
     samples = rng.choice(base, size=(20, 100))
-    dist = samples_to_distribution(samples, n_bins=64)
+    dist = samples_to_distribution(samples, n_bins=64, train_range=_train_range(samples))
     _validate_distribution(dist, 20)
 
     # y lands exactly on the atoms (the worst case for a fixed-width histogram,
@@ -244,7 +280,7 @@ def test_ecdf_grid_metrics_finite_on_discrete_draws():
 def test_ecdf_grid_edges_bracket_support():
     """Edges span the observed support (outer bins padded, never inverted)."""
     row = np.array([[2.0, 2.0, 2.0, 5.0, 9.0, 9.0]])
-    dist = samples_to_distribution(row, n_bins=8)
+    dist = samples_to_distribution(row, n_bins=8, train_range=_train_range(row))
     edges = dist.bin_edges[0]
     assert edges[0] <= 2.0 < 9.0 <= edges[-1]
     assert np.all(np.diff(edges) > 0.0)
@@ -260,7 +296,7 @@ def test_ecdf_grid_energy_score_nonzero_on_tied_draws():
     # 5 unique values, tied so an adaptive quantile grid collapses interior bins.
     base = np.array([0.0, 0.0, 0.0, 10.0, 10.0])
     samples = np.tile(base, (8, 20))            # (8, 100), heavy ties
-    dist = samples_to_distribution(samples, n_bins=50)
+    dist = samples_to_distribution(samples, n_bins=50, train_range=_train_range(samples))
     y = np.full(8, 3.0)                          # y away from the atoms
     metrics = compute_metrics(dist, y)
 

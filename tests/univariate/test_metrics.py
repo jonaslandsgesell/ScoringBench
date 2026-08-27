@@ -41,7 +41,7 @@ def test_distribution_prediction_container():
     bin_mids = np.array([0.25, 0.75])
     mean = np.array([0.25, 0.8])
 
-    dist = DistributionPrediction(probas=probas, bin_edges=bin_edges, bin_midpoints=bin_mids, mean=mean)
+    dist = DistributionPrediction(probas=probas, bin_edges=bin_edges, bin_midpoints=bin_mids, mean=mean, train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())))
 
     assert dist.probas.shape == (2, 2)
     assert dist.bin_edges.shape[0] == 3
@@ -72,6 +72,7 @@ def _make_dist_shared(probas_row, bin_edges, n_samples):
         bin_edges=bin_edges.astype(np.float32),
         bin_midpoints=bin_mids.astype(np.float32),
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
 
@@ -150,6 +151,7 @@ def test_wcrps_left_dominated_when_distribution_right_of_truth_nonshared():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids.astype(np.float32),
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     res = compute_scoring_rules(dist, y_true)
 
@@ -208,6 +210,7 @@ def test_wcrps_analytical_uniform_distribution():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
     res = compute_scoring_rules(dist, y_true)
@@ -258,6 +261,7 @@ def test_wcrps_analytical_single_bin():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
     res = compute_scoring_rules(dist, y_true)
@@ -324,6 +328,7 @@ def test_wcrps_exact_values_with_epsilon():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
     res = compute_scoring_rules(dist, y_true)
@@ -430,6 +435,7 @@ def test_energy_score_beta_1_gaussian_single_sample():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids.astype(np.float32),
         mean=mean_val,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     
     y_true = np.array([y_obs], dtype=np.float32)
@@ -515,6 +521,7 @@ def test_energy_score_beta_1_gaussian_multiple_samples():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean_vals,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     
     res = compute_scoring_rules(dist, y_true)
@@ -579,6 +586,7 @@ def test_energy_score_beta_1_gaussian_edge_cases():
             bin_edges=bin_edges,
             bin_midpoints=bin_mids.astype(np.float32),
             mean=mean_val,
+            train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
         )
         
         y_true = np.array([y_obs], dtype=np.float32)
@@ -635,6 +643,7 @@ def test_pit_ks_uniform_when_truth_drawn_from_predictive():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids.astype(np.float32),
         mean=(probas @ bin_mids).astype(np.float64),
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     res = compute_scoring_rules(dist, y_true)
 
@@ -669,6 +678,7 @@ def test_pit_ks_rejects_when_predictive_is_miscalibrated():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids.astype(np.float32),
         mean=(probas @ bin_mids).astype(np.float64),
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     res = compute_scoring_rules(dist, y_true)
 

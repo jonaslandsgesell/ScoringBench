@@ -33,7 +33,7 @@ CACHE_DIR = Path.home() / '.cache' / 'scoringbench' / 'datasets'
 #   columns. RealMLP (TabArena HPO) hangs indefinitely on it, and several other
 #   models blow up on the feature count. Not worth the wall-clock.
 SKIPPED_OPENML_IDS = {
-    42572,  # Santander_transaction_value
+    42572,  # Santander_transaction_value taking too long to run
 }
 
 

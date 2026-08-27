@@ -82,8 +82,15 @@ def _gaussian_histogram():
 
 @pytest.fixture(scope="module")
 def gauss_result():
-    """Run compute_scoring_rules once on the Gaussian histogram (shared grid)."""
-    edges, mids, p, f, w = _gaussian_histogram()
+    """Run compute_scoring_rules once on the Gaussian histogram (shared grid).
+
+    Density-rule references (``f``, ``w``, ``ky``) are rebuilt from the
+    ``dist.resampled`` view — the shared common grid the density rules actually
+    score on — not the fine native PMF grid.  Reconstructing on the native PMF grid was
+    the old contract; density rules now resample onto the common grid first, so
+    references built from the native PMF grid diverge from the returned values.
+    """
+    edges, mids, p, _f_native, _w_native = _gaussian_histogram()
     probas = np.tile(p, (_N_SAMPLES, 1)).astype(np.float64)
     y = np.full(_N_SAMPLES, _Y, dtype=np.float64)
     dist = DistributionPrediction(
@@ -91,11 +98,21 @@ def gauss_result():
         bin_edges=edges.astype(np.float64),
         bin_midpoints=mids.astype(np.float64),
         mean=np.full(_N_SAMPLES, _MU),
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
     res = compute_scoring_rules(dist, y)
-    # attach the reconstructed density pieces for density-rule references
-    ky = int(np.searchsorted(edges[1:], _Y).clip(0, _N_BINS - 1))
-    return res, {"edges": edges, "f": f, "w": w, "ky": ky}
+
+    # Density-rule references are built on the resampled (common) grid: exactly
+    # the grid density rules score on. Reconstruct the normalised piecewise-
+    # constant density the same way ``unified_bin_density`` does.
+    rg = dist.resampled
+    rg_edges = np.asarray(rg.bin_edges, dtype=np.float64)
+    rg_p = np.asarray(rg.probas, dtype=np.float64)[0]
+    w = np.diff(rg_edges)
+    f = rg_p / w
+    f = f / (f * w).sum()  # normalise exactly like unified_bin_density
+    ky = int(np.searchsorted(rg_edges[1:], _Y).clip(0, len(w) - 1))
+    return res, {"edges": rg_edges, "f": f, "w": w, "ky": ky}
 
 
 # --------------------------------------------------------------------------- #

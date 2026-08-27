@@ -3,10 +3,10 @@
 Why this module exists
 ----------------------
 ``quantiles_to_distribution`` (and every wrapper that goes through
-``base.regrid_to_uniform``) turns a per-sample quantile grid ``q(alpha)`` into a
-regularly-binned PMF by reading ``(q, alpha)`` as a CDF and resampling it onto a
-regular grid.  *How* that CDF is interpolated between the predicted levels is a
-free choice, and it is the choice this file pins down.
+``base.anchor_cdf_limits_to_0_and_1``) turns a per-sample quantile grid ``q(alpha)``
+into a regularly-binned PMF by reading ``(q, alpha)`` as a CDF and resampling it
+onto a uniform grid.  *How* that CDF is interpolated between the predicted levels
+is a free choice, and it is the choice this file pins down.
 
 The candidates, each mapping ``(q, alphas)`` to a density on a common grid:
 

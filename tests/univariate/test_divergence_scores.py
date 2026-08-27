@@ -36,10 +36,12 @@ def _reference_unified_density(probas, bin_edges):
         f_k = [F(x_{k+1}) - F(x_k)] / w_k = p_k / w_k
 
     with ``w_k`` the bin's own width.  ``w_k = 0`` would make that 0/0, but the
-    grid never reaches the metrics in that state: ``DistributionPrediction``
-    re-expresses the PMF on a regular grid at construction time (see
-    ``wrappers.base.regrid_to_uniform``), so every width here is positive and
-    the reference needs no special case.  The result is renormalised so that
+    grid never reaches the metrics in that state: density rules score on
+    ``DistributionPrediction.resampled``, the grow-only grid built by
+    ``resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid``, so every width here is
+    positive and the reference needs no special case.  Callers therefore pass
+    ``dist.resampled.probas`` / ``dist.resampled.bin_edges`` here, not the raw
+    native PMF grid.  The result is renormalised so that
     ``∑_k f_k w_k = 1``, which for an exact PMF is already true.
 
     Both terms of a two-term rule must be functionals of this *same* ``f`` for
@@ -111,6 +113,7 @@ def get_simple_distribution():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
 
@@ -134,6 +137,7 @@ def get_perfect_prediction_distribution(bin_idx=0):
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=np.array([bin_mids[bin_idx]], dtype=np.float64),
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
     
     y_true = np.array([bin_mids[bin_idx]], dtype=np.float32)
@@ -155,6 +159,7 @@ def get_imperfect_distribution():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=np.array([1.5], dtype=np.float64),
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
 
@@ -205,6 +210,7 @@ class TestDPDExactValues:
             return DistributionPrediction(
                 probas=probas, bin_edges=edges, bin_midpoints=mids,
                 mean=(probas * mids).sum(axis=1),
+                train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
             )
 
         key = f"dpd_beta_{beta}"
@@ -283,12 +289,15 @@ class TestLimitBehavior:
 
         metrics = compute_scoring_rules(dist, y_true)
 
-        probas = dist.probas[0]
+        # Density rules score on the shared common grid, not the raw native
+        # grid, so the reference must read the same resampled histogram.
+        rg = dist.resampled
+        probas = np.asarray(rg.probas)[0]
         y = float(y_true[0])
 
         for beta in DPD_BETAS:
             key = f"dpd_beta_{beta}"
-            ref = reference_dpd_score(probas, dist.bin_edges, y, beta)
+            ref = reference_dpd_score(probas, rg.bin_edges, y, beta)
             # Both sides evaluate the same closed form, so only float summation
             # order separates them; the tolerance is deliberately generous.
             assert math.isclose(metrics[key], ref, rel_tol=1e-4, abs_tol=1e-6), (
@@ -323,6 +332,7 @@ class TestEdgeCasesAndRobustness:
             bin_edges=bin_edges,
             bin_midpoints=bin_mids,
             mean=np.array([1.5], dtype=np.float64),
+            train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
         )
         y_true = np.array([0.5], dtype=np.float32)
         metrics = compute_scoring_rules(dist, y_true)
@@ -385,6 +395,7 @@ def _gaussian_histogram_distribution(mu, sigma, edges, n_rows):
         bin_edges=edges.astype(np.float32),
         bin_midpoints=mids.astype(np.float32),
         mean=(p @ mids),
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
 
 
@@ -514,7 +525,9 @@ def test_pseudospherical_matches_reference(alpha):
 
     key = f"pseudospherical_alpha_{alpha}"
     got = compute_scoring_rules(dist, y)[key]
-    ref = _reference_pseudospherical(dist.probas, dist.bin_edges, float(y[0]), alpha)
+    # Density rules score on the shared common grid; build the reference there.
+    rg = dist.resampled
+    ref = _reference_pseudospherical(rg.probas, rg.bin_edges, float(y[0]), alpha)
 
     assert math.isclose(got, ref, rel_tol=1e-6, abs_tol=1e-9), (
         f"pseudospherical (α={alpha}) = {got:.9f} does not match reference "
@@ -534,9 +547,11 @@ def test_pseudospherical_spherical_identity():
 
     reported = compute_scoring_rules(dist, y)["pseudospherical_alpha_2.0"]
 
-    f, w_eff = _reference_unified_density(dist.probas, dist.bin_edges)
+    # Density rules score on the shared common grid; build f there.
+    rg = dist.resampled
+    f, w_eff = _reference_unified_density(rg.probas, rg.bin_edges)
     f = np.asarray(f, dtype=float).reshape(-1)
-    edges = np.asarray(dist.bin_edges, dtype=float)
+    edges = np.asarray(rg.bin_edges, dtype=float)
     y_bin = int(np.clip(np.searchsorted(edges[1:], float(y[0])), 0, len(f) - 1))
     spherical = float(f[y_bin]) / math.sqrt(float((f ** 2 * w_eff).sum()))
 
@@ -568,6 +583,7 @@ def test_pseudospherical_is_scale_invariant(alpha):
         bin_edges=dist.bin_edges,
         bin_midpoints=dist.bin_midpoints,
         mean=dist.mean,
+        train_range=(float(np.asarray(dist.bin_edges).min()), float(np.asarray(dist.bin_edges).max())),
     )
     scaled_score = compute_scoring_rules(scaled, y)[key]
 

@@ -44,6 +44,17 @@ from .wrappers import DistributionPrediction
 
 logger = logging.getLogger(__name__)
 
+
+@functools.lru_cache(maxsize=1)
+def _compute_device() -> torch.device:
+    """The device every scoring rule runs on, resolved ONCE per process.
+
+    ``torch.cuda.is_available()`` queries the CUDA driver, which is far from free
+    when it is called on every scoring call (it was called three times per call).
+    The answer cannot change within a process, so cache it.
+    """
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Energy score β values reported as additional metrics
 ENERGY_BETAS = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5, 1.7, 1.8, 1.9]
 DPD_BETAS = [0.01, 0.2, 0.5, 1.0]  # β values for Density Power Divergence scoring rule; 0.01 chosen to avoid log-score support sensitivity
@@ -55,10 +66,69 @@ CRTS_ALPHAS = [1.01, 1.2, 1.5, 2.0]
 # Orders α for Good's (1971) pseudospherical score.  α = 2 is the classical
 # spherical score.  All must be > 1 (α → 1 is the support-sensitive log score).
 PSEUDOS_ALPHAS = [1.5, 2.0, 3.0]
-DPD_BASED_KEYS = ("cde_loss", *[f"dpd_beta_{b}" for b in DPD_BETAS], *[f"crts_alpha_{a}" for a in CRTS_ALPHAS])
 # Central coverage levels (%) reported via coverage_{level} / interval_score_{level};
 # the corresponding significance level is alpha = 1 - level/100.
 COVERAGE_LEVELS = [20, 40, 60, 80, 90, 95]
+
+# ---------------------------------------------------------------------------
+# Grid robustness classification  (see tests/univariate/test_grid_robustness.py)
+# ---------------------------------------------------------------------------
+# Whether a rule can be gamed by shrinking the reported support depends on
+# whether it reads the predictive *density* f or only the predictive *CDF* F.
+#
+# DENSITY_BASED_KEYS evaluate f pointwise at y.  On a histogram f(y) = p_k / w_k
+# is unbounded as w_k -> 0, so for a forecast that is uniform on a window of
+# width eps around y these rules diverge at an analytically exact rate:
+#     DPD_beta      = eps^-beta - (1 + 1/beta) eps^-beta = -eps^-beta / beta
+#     PseudoS_alpha = -(eps^-((alpha-1)/alpha) - 1) / (alpha - 1)
+# Against a *continuous* target that divergence is exactly offset in expectation
+# by the P(y outside window) -> 1 misses, so the rules are proper and the limit
+# is harmless.  Against a target with ATOMS, P(y = c) > 0 survives eps -> 0,
+# there is no density for the rule to be proper with respect to, and a model
+# that both (a) places an atom on the lattice and (b) chooses its own grid earns
+# an unbounded reward.  Discreteness alone is not enough and a free grid alone is
+# not enough; the exploit needs both.  Fixing a shared evaluation grid of width h
+# caps f at 1/h and hence caps these rules at the finite plateau above with
+# eps := h, which is what makes them safe for benchmark use.
+DENSITY_BASED_KEYS = (
+    "cde_loss",
+    *[f"dpd_beta_{b}" for b in DPD_BETAS],
+    *[f"pseudospherical_alpha_{a}" for a in PSEUDOS_ALPHAS],
+)
+# GRID_ROBUST_KEYS read only F, which is bounded in [0, 1] by construction.  A
+# collapsing support drives them to their perfect-forecast value (0 for the
+# CRPS/CRTS/energy/interval family) instead of to -inf, so they cannot be gamed
+# by grid choice and stay comparable across models with different native PMF grids.
+#
+# Empirically verified with the free-grid spike attack against atom targets
+# (eps 1e-1 -> 1e-4, |value ratio|; see tests/univariate/_classify_metrics.py):
+#   density  : cde_loss/dpd_beta_1.0 ~1000x, dpd_beta_0.5 ~32x, pseudoS_3.0
+#              ~127x; dpd_beta_0.2/0.01 grow only ~4x/~1x at eps=1e-4 but STILL
+#              diverge analytically as eps^-0.2 / eps^-0.01 (slow, exactly like
+#              energy_score_beta_0.1), so ALL dpd_beta_* are density-based.
+#   robust   : crps/crts/energy/interval all collapse toward 0.
+GRID_ROBUST_KEYS = (
+    "crps",
+    *[f"crts_alpha_{a}" for a in CRTS_ALPHAS],
+    *[f"energy_score_beta_{b}" for b in ENERGY_BETAS],
+    *[f"interval_score_{c}" for c in COVERAGE_LEVELS],
+    "wcrps_left",
+    "wcrps_right",
+    "wcrps_center",
+)
+# BOUNDED_DIAGNOSTIC_KEYS are not scoring rules but summary diagnostics.  Under a
+# collapsing support they stay bounded (coverage_* -> 1, pit_ks_stat -> 0.5,
+# sharpness/dispersion/wcrps_* -> 0), so they cannot be gamed either; they are
+# split out only because they are not part of the leaderboard's proper-score
+# aggregate.  Together the three tuples must cover every key that
+# ``compute_scoring_rules`` returns (asserted in the test suite).
+BOUNDED_DIAGNOSTIC_KEYS = (
+    "sharpness",
+    "dispersion",
+    "pit_ks_stat",
+    "pit_ks_pvalue",
+    *[f"coverage_{c}" for c in COVERAGE_LEVELS],
+)
 
 # Number of (chunk, n_bins, n_bins) intermediates held concurrently by the
 # disjoint-slab branch of uniform_slab_pairwise_distance (the closed form keeps
@@ -427,44 +497,33 @@ def compute_energy_score_histogram_corrected(
 
         return results
 
-def compute_scoring_rules(dist: DistributionPrediction, y_true: np.ndarray) -> dict:
-    """Compute all distributional scoring rules from a DistributionPrediction using PyTorch.
+def _score_one_view(view, y_true: np.ndarray, compute_density: bool,
+                    compute_grid_robust: bool = True) -> dict:
+    """Score a single grid view (native or resampled) with the PyTorch backend.
 
-    Returns keys: crps, sharpness, dispersion,
-                  coverage_90, interval_score_90,
-                  coverage_95, interval_score_95,
-                  crts_alpha_{1.01,1.2,1.5,2.0},
-                  wcrps_left, wcrps_right, wcrps_center,
-                  energy_score_beta_{0.5,1.0,1.5,2.0},
-                  dpd_beta_{0.01,0.2,0.5,1.0}.
+    ``compute_density`` gates the DENSITY_BASED_KEYS block: the native view never
+    needs it (density rules are meaningless on an atom-bearing grid and are read
+    off the resampled view instead), so skipping it there avoids the most
+    expensive per-bin density tensors.
 
-    Notes
-    -----
-    Before scoring, the bin grid is extended with zero-mass bins (via
-    ``pad_to_common_grid``) so that every target y is interior to the
-    integration domain.  This ensures that a model cannot improve its score
-    by reporting a narrower support: the CDF values in the padded region are
-    forced to 0 (left tail) and 1 (right tail), which is the correct value
-    for a model that assigns zero mass there.
+    ``compute_grid_robust`` gates the GRID_ROBUST + BOUNDED_DIAGNOSTIC block
+    (energy score, CRTS, interval/coverage, wCRPS, PIT, sharpness/dispersion).
+    The ``auto`` path reads those off the NATIVE view and keeps only the density
+    keys from the resampled one, so computing them there is pure waste -- and it
+    is the dominant cost (the energy score alone is ``O(rows · n_bins²)``).
     """
-    # Compute every scoring rule in float64 (enforced by @force_precision on
-    # _compute_scoring_rules_torch).  Several rules form differences of large,
-    # nearly-equal terms (variance E[X²] - E[X]², CRPS term1 - term2,
-    # CDE ∫g² - 2g(y)); float32 cancellation there breaks guarantees such as
-    # variance >= 0 / CRPS >= 0.
-    # Build tensors on the compute device *first*, then let force_precision
-    # upcast in-place
-    _device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    probas     = torch.as_tensor(dist.probas,        device=_device)
-    bin_edges  = torch.as_tensor(dist.bin_edges,     device=_device)
-    bin_mids   = torch.as_tensor(dist.bin_midpoints, device=_device)
+    _device    = _compute_device()
+    probas     = torch.as_tensor(view.probas,        device=_device)
+    bin_edges  = torch.as_tensor(view.bin_edges,     device=_device)
+    bin_mids   = torch.as_tensor(view.bin_midpoints, device=_device)
     y          = torch.as_tensor(np.array(y_true, dtype=float), device=_device)  # np.array copies -> writable tensor
     shared     = bin_edges.ndim == 1
 
-    logger.debug(
-        "compute_scoring_rules: n_samples=%d  n_bins=%d  shared=%s",
-        probas.shape[0], probas.shape[1], shared,
-    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "  view: n_samples=%d  n_bins=%d  shared=%s  density=%s  grid_robust=%s",
+            probas.shape[0], probas.shape[1], shared, compute_density, compute_grid_robust,
+        )
 
     # Extend each sample's grid to cover target y with zero-mass bins.
     # This must happen *before* _compute_scoring_rules_torch so that every
@@ -479,10 +538,78 @@ def compute_scoring_rules(dist: DistributionPrediction, y_true: np.ndarray) -> d
     )
 
     t0 = time.perf_counter()
-    result = _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared)
-    logger.debug("  torch backend      %.4fs (device=%s)",
-                 time.perf_counter() - t0,
-                 "cuda" if torch.cuda.is_available() else "cpu")
+    result = _compute_scoring_rules_torch(
+        probas, bin_edges, bin_mids, y, shared, compute_density=compute_density,
+        compute_grid_robust=compute_grid_robust,
+        is_grid_native=view.is_grid_native,
+    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("  torch backend      %.4fs (device=%s)",
+                     time.perf_counter() - t0, _device)
+    return result
+
+
+def compute_scoring_rules(
+    dist: DistributionPrediction,
+    y_true: np.ndarray,
+    representation: str = "auto",
+) -> dict:
+    """Compute all distributional scoring rules from a DistributionPrediction.
+
+    Two grid representations of the prediction are scored differently
+    (see ``tests/univariate/test_grid_robustness.py`` for why):
+
+    * GRID_ROBUST rules (crps, crts_*, energy_score_*, interval_score_*,
+      coverage_*, wcrps_*) and the BOUNDED diagnostics read only the CDF / exact
+      slab geometry, so they are scored on the model's NATIVE grid where atoms
+      are preserved and the model's sharpness is not blurred away.
+    * DENSITY_BASED rules (cde_loss, dpd_beta_*, pseudospherical_alpha_*) read
+      f = p/w, which is unbounded as w -> 0.  They are only comparable once every
+      model is on ONE shared grid, so they are scored on the REGRIDDED (common)
+      view.
+
+    Parameters
+    ----------
+    representation :
+        * ``"auto"`` (default): grid-robust + diagnostics from ``dist.native``,
+          density rules from ``dist.resampled``; merged.  This is the benchmark
+          setting.
+        * ``"native"``: score ``dist.native`` only; DENSITY_BASED_KEYS are NOT
+          returned (they are undefined on an atom-bearing grid).
+        * ``"resampled"``: score ``dist.resampled`` only; ALL keys returned on
+          the common grid (used to prove the two paths agree for grid-robust
+          rules when the input is already regular).
+
+    Notes
+    -----
+    Before scoring, each view's grid is extended with zero-mass bins (via
+    ``pad_to_common_grid``) so that every target y is interior to the integration
+    domain and a model cannot improve its score by reporting a narrower support.
+    """
+    if representation not in ("auto", "native", "resampled"):
+        raise ValueError(
+            f"representation must be 'auto', 'native' or 'resampled', got {representation!r}"
+        )
+
+    if representation == "resampled":
+        # Everything on the common grid, density rules included.
+        return _score_one_view(dist.resampled, y_true, compute_density=True)
+
+    if representation == "native":
+        # Grid-robust + diagnostics only; density rules are undefined here.
+        native = _score_one_view(dist.native, y_true, compute_density=False)
+        return {k: v for k, v in native.items() if k not in DENSITY_BASED_KEYS}
+
+    # "auto": route each family to the representation it is provably correct on.
+    # Each view computes ONLY the family it contributes: the native view skips
+    # the density rules, the resampled view skips the grid-robust ones (whose
+    # results would be discarded by the merge below anyway).
+    native = _score_one_view(dist.native, y_true, compute_density=False)
+    resampled = _score_one_view(dist.resampled, y_true, compute_density=True,
+                                compute_grid_robust=False)
+    result = {k: v for k, v in native.items() if k not in DENSITY_BASED_KEYS}
+    for k in DENSITY_BASED_KEYS:
+        result[k] = resampled[k]
     return result
 
 
@@ -545,9 +672,9 @@ def pad_to_common_grid(
     probas : (n_samples, n_bins) tensor
         PMF (probability mass per bin, sums to 1 per row).
     bin_edges : (n_bins+1,) or (n_samples, n_bins+1) tensor
-        Bin edges.  After ``regrid_to_uniform`` the grid is uniform per row,
-        so the bin width is constant and can be read off ``bin_edges[..., 1] -
-        bin_edges[..., 0]``.
+        Bin edges.  On the resampled (grow-only) grid the bins are uniform per
+        row, so the bin width is constant and can be read off ``bin_edges[..., 1]
+        - bin_edges[..., 0]``.
     bin_mids : (n_bins,) or (n_samples, n_bins) tensor
         Bin midpoints.  Recomputed from the padded edges on return.
     y : (n_samples,) tensor
@@ -1037,8 +1164,9 @@ def _require_positive_widths(widths: torch.Tensor, eps: float, where: str) -> to
 
     Every histogram reaching the density-based rules (``unified_bin_density``
     and the ``density_integral is None`` fall-backs of DPD / CDE, plus the PIT
-    CDF interpolation) is produced by ``wrappers.base``, whose sanitiser
-    (``regrid_to_uniform`` / ``_extended_span``) guarantees each bin width is
+    CDF interpolation) is produced by ``wrappers.base``, whose grow-only
+    resampler (``resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid``) guarantees each bin
+    width is
     strictly greater than ``EPS``.  A width ``<= eps`` here therefore signals a
     broken invariant upstream, not a legitimate input: silently clamping it
     would turn a collapsed bin into a huge-but-finite score that quietly
@@ -1048,6 +1176,12 @@ def _require_positive_widths(widths: torch.Tensor, eps: float, where: str) -> to
     (Zero-width bins *are* valid for the energy score, where they encode a Dirac
     point mass and are handled explicitly; that path does not call this guard.)
 
+    GRID-NATIVE views are the ONE legitimate exception and never reach this
+    guard: their resampled view IS the model's own fixed grid, verbatim, so a
+    collapsed bin is a genuine Dirac of the forecast rather than a resampling
+    bug -- see ``unified_bin_density``, which routes them to an atom-aware
+    branch instead.
+
     Returns ``widths`` unchanged when the contract holds.
     """
     bad = widths <= eps
@@ -1056,8 +1190,8 @@ def _require_positive_widths(widths: torch.Tensor, eps: float, where: str) -> to
         raise ValueError(
             f"{where}: bin width {w_min:.3e} <= eps ({eps:.3e}); the density "
             "path requires strictly positive widths. This should have been "
-            "guaranteed by regrid_to_uniform in wrappers.base -- a non-positive "
-            "width here means the histogram was not sanitised upstream."
+            "guaranteed by the resampled grow-only grid in wrappers.base -- a "
+            "non-positive width here means the histogram was not sanitised upstream."
         )
     return widths
 
@@ -1100,8 +1234,27 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
 
     # Cumulative mass strictly below the y-bin
     cdf_prev = cdf[ns_idx, y_bin] - p_y
-    _require_positive_widths(w_y, eps, "compute_pit_ks")
-    frac = ((y - left_y) / w_y).clamp(0.0, 1.0)
+
+    # Position of y WITHIN its bin, as a fraction in [0, 1].
+    #
+    # Positive-width bins: the histogram density is uniform on the bin, so the
+    # CDF rises linearly and ``frac = (y - left) / w``.
+    #
+    # Zero-width bins are ATOMS: a target can land exactly on a Dirac (e.g. a
+    # bar-distribution border or a repeated quantile), giving ``w_y = 0`` and a
+    # ``0/0`` interpolation.  The CDF is a step there, so a single ``frac`` is
+    # ill-defined; we use the mid-CDF convention ``frac = 1/2`` -- the mean of
+    # the left and right CDF limits.  This is the (non-randomised) PIT for a
+    # discrete component (Czado et al. 2009): for a calibrated atom it is the
+    # unbiased choice and keeps every PIT value finite and in [0, 1], instead of
+    # raising on an otherwise legitimate atom-on-target case.
+    atom = w_y <= eps
+    safe_w = torch.where(atom, torch.ones_like(w_y), w_y)
+    frac = torch.where(
+        atom,
+        torch.full_like(w_y, 0.5),
+        ((y - left_y) / safe_w).clamp(0.0, 1.0),
+    )
     pit = (cdf_prev + p_y * frac).clamp(0.0, 1.0)
 
     # y outside support -> clamp PIT to 0 / 1.
@@ -1118,37 +1271,80 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
 
 
 @force_precision(torch.float64)
-def unified_bin_density(probas, bin_widths, shared, eps):
+def unified_bin_density(probas, bin_widths, shared, eps, is_grid_native=False):
     """Piecewise-constant density on bin grid: f_k = p_k / w_k.
-    
+
+    Zero-width bins and why ``is_grid_native`` exempts them
+    ------------------------------------------------------
+    For a RESAMPLED grid every width is strictly positive by construction (the
+    grow-only resampler lays out ``n_bins`` equal bins over a non-degenerate
+    support), so ``w_k <= eps`` there is a broken invariant and
+    ``_require_positive_widths`` fails loudly.
+
+    A GRID-NATIVE forecast never goes through that resampler: its resampled view
+    IS its own fixed grid, verbatim (``DistributionPrediction.resampled``).
+    TabPFN's bar-distribution borders, for instance, are placed at quantiles of
+    the training targets, so a discrete / rounded / tied target column collapses
+    consecutive borders and produces ``w_k == 0`` -- a legitimate property of the
+    data, not a bug.  Such a bin is a **Dirac atom**, and ``p_k / w_k`` is
+    genuinely ``+inf`` there; clamping the width would invent a huge-but-finite
+    density that dominates any benchmark average.
+
+    We therefore score the CONTINUOUS PART of the mixed distribution: atoms get
+    ``f_k = 0`` and are excluded from the normaliser, so ``∫ f dt = 1`` over the
+    positive-width bins and ``∫ f^power dt`` stays finite.  A target landing on
+    an atom reads ``f(y) = 0``, which is exactly the convention the rules already
+    use for out-of-support targets: for DPD's ``β > 0`` the point term
+    ``f(y)^β`` is 0, and the pseudospherical point term ``f(y)^{α-1}`` with
+    ``α > 1`` is 0 too -- both finite and worst-case, never ``inf`` or ``nan``.
+    (The energy score, CRPS and CRTS keep the atom exactly; they are read off the
+    native view, which is never touched here.)
+
     Returns
     -------
     f_bins : (n_samples, n_bins) density value of each bin.
     w_eff : (1, n_bins) or (n_samples, n_bins) width of each bin.
     """
     w_eff = bin_widths[None, :] if shared else bin_widths    # (1|n, n_bins)
-    _require_positive_widths(w_eff, eps, "unified_bin_density")
-    f_bins = probas / w_eff
+
+    if not is_grid_native:
+        _require_positive_widths(w_eff, eps, "unified_bin_density")
+        f_bins = probas / w_eff
+        keep = None
+    else:
+        # Dirac atoms of the model's own grid: density 0, excluded from the mass
+        # that the continuous part is normalised against (see docstring).
+        atom = w_eff <= eps
+        safe_w = torch.where(atom, torch.ones_like(w_eff), w_eff)
+        f_bins = torch.where(atom, torch.zeros_like(probas), probas / safe_w)
+        keep = ~atom
 
     # Renormalise so the density integrates to one: with f_k = p_k / w_k the
-    # mass in bin k is f_k * w_k = p_k, so the normaliser is exactly sum_k p_k.
+    # mass in bin k is f_k * w_k = p_k, so the normaliser is exactly sum_k p_k
+    # (restricted to the non-atom bins when atoms were dropped above).
     # Reading it straight from ``probas`` (rather than reconstructing
     # f_bins * w_eff) is the exact mass and avoids re-deriving it from the
-    # density.  Widths are guaranteed > eps by the guard above, so the only
-    # clamp left is on Z, which guards against an all-zero PMF row.
-    Z = probas.sum(dim=-1, keepdim=True)
+    # density.  Every surviving width is > eps, so the only clamp left is on Z,
+    # which guards against an all-zero PMF row (or an all-atom forecast).
+    masked = probas if keep is None else probas * keep
+    Z = masked.sum(dim=-1, keepdim=True)
     return f_bins / Z.clamp(min=eps), w_eff
 
 
-def _density_terms(probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps):
+def _density_terms(probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps,
+                   is_grid_native=False):
     """Build (g_y, density_integral) pair from unified_bin_density.
-    
+
+    ``is_grid_native`` is forwarded to :func:`unified_bin_density`, which then
+    treats zero-width bins as Dirac atoms instead of rejecting them.
+
     Returns
     -------
     g_y : (n_samples,) pointwise density f(y).
     density_integral : callable(power) -> (n_samples,) integral of f^power.
     """
-    f_bins, w_eff = unified_bin_density(probas, bin_widths, shared, eps)
+    f_bins, w_eff = unified_bin_density(probas, bin_widths, shared, eps,
+                                        is_grid_native=is_grid_native)
     g_y = f_bins.gather(1, y_bin.unsqueeze(1)).squeeze(1)
 
     def density_integral(power):
@@ -1222,7 +1418,8 @@ def compute_cde_loss(probas, bin_widths, g_y, bw, shared, density_integral=None)
 
 
 @force_precision(torch.float64)
-def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared):
+def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute_density=True,
+                                 compute_grid_robust=True, is_grid_native=False):
     """All scoring rules computed on GPU (or CPU) via PyTorch tensors.
 
     Note: `probas` are PMF values (probability mass per bin), i.e. for each
@@ -1230,6 +1427,25 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared):
     To obtain a density at a bin midpoint divide by the bin width:
     density_k = p_k / w_k. Integrating densities over the grid then
     recovers 1: ∑_k density_k * w_k = 1.
+
+    ``compute_density`` gates the DENSITY_BASED_KEYS block (cde_loss, dpd_beta_*,
+    pseudospherical_alpha_*).  When ``False`` those keys are omitted from the
+    returned dict and the expensive per-bin density tensors are never built --
+    the native (grid-robust) branch sets this, since density rules are only
+    meaningful on the shared resampled grid.
+
+    ``compute_grid_robust`` gates the mirror-image block: GRID_ROBUST_KEYS
+    (energy score, CRPS, CRTS, interval scores, wCRPS) plus the
+    BOUNDED_DIAGNOSTIC_KEYS (sharpness, dispersion, PIT, coverage).  When
+    ``False`` those keys are omitted and the ``O(rows · n_bins²)`` pairwise
+    distance matrices behind the energy score are never built -- the resampled
+    branch of the ``auto`` path sets this, since it contributes only the density
+    keys and the grid-robust ones are read off the native view.
+
+    ``is_grid_native`` marks a forecast whose density grid is the model's OWN
+    fixed grid (never resampled), where a zero-width bin is a legitimate Dirac
+    atom rather than a broken invariant.  It is forwarded to the density block
+    only; see :func:`unified_bin_density`.
 
     Inputs are float64 tensors (upcast by ``@force_precision``); here we only
     move them onto the compute device.
@@ -1258,12 +1474,6 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared):
             bin_edges[:, 1:].contiguous(), y.unsqueeze(1)
         ).squeeze(1).clamp(0, n_bins - 1)
 
-    # ---- Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17) ----
-    qwcrps_result = compute_quantile_wcrps(cdf, bin_mids, y, n_samples, n_bins, device, shared)
-    wcrps_left   = qwcrps_result["wcrps_left"]
-    wcrps_right  = qwcrps_result["wcrps_right"]
-    wcrps_center = qwcrps_result["wcrps_center"]
-
     # ---- DPD scores, incl. dpd_beta_0.01 and cde_loss (β=1) ----
     # Reading all off one call keeps them exactly consistent.  The density
     # terms (``f_bins`` / ``g_y`` / the ``density_integral`` closure) are each a
@@ -1281,7 +1491,8 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared):
         # the pseudospherical scores (Good 1971) so ratio and difference rules
         # share one f and stay mutually consistent.
         g_y, density_integral = _density_terms(
-            probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps
+            probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps,
+            is_grid_native=is_grid_native,
         )
         dpd = compute_dpd_scores(probas, bin_widths, g_y,
                                  betas=sorted({*DPD_BETAS, 1.0}),
@@ -1293,66 +1504,86 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared):
         )
         return dpd, pseudos
 
-    all_dpd, pseudos_scores = _dpd_block()
-    dpd_scores = {f"dpd_beta_{b}": all_dpd[f"dpd_beta_{b}"] for b in DPD_BETAS}
-    cde_loss = all_dpd["dpd_beta_1.0"]
+    # Density rules are only computed when asked for.  On the grid-robust
+    # (native) branch this block is skipped entirely: its density f = p/w is
+    # meaningless on an atom-bearing grid, and the rules are read off the
+    # resampled (common-grid) view instead.
+    if compute_density:
+        all_dpd, pseudos_scores = _dpd_block()
+        dpd_scores = {f"dpd_beta_{b}": all_dpd[f"dpd_beta_{b}"] for b in DPD_BETAS}
+        cde_loss = all_dpd["dpd_beta_1.0"]
+    else:
+        pseudos_scores = {}
+        dpd_scores = {}
+        cde_loss = None
 
-    # ---- Sharpness & Dispersion (Tran et al. 2020) ----
-    # Sharpness: mean of per-sample predictive std.  Dispersion: std of the
-    # per-sample predictive std.  Scoped so the (n_samples, n_bins) products
-    # ``probas * mids`` / ``probas * mids²`` are freed as soon as the two scalars
-    # are read out.
-    def _sharpness_dispersion():
-        mean_  = (probas * mids).sum(dim=-1)
-        var_   = ((probas * mids.pow(2)).sum(dim=-1) - mean_.pow(2)).clamp(min=0)
-        std_per_sample = var_.sqrt()                          # (n_samples,)
-        # Use unbiased=False to avoid torch warning when n_samples is small
-        return std_per_sample.mean().item(), std_per_sample.std(unbiased=False).item()
+    # Grid-robust rules + bounded diagnostics.  Skipped wholesale on the
+    # resampled branch of the ``auto`` path, which keeps only the density keys;
+    # the energy score inside is the single most expensive term in the suite.
+    def _grid_robust_block():
+        # ---- Sharpness & Dispersion (Tran et al. 2020) ----
+        # Sharpness: mean of per-sample predictive std.  Dispersion: std of the
+        # per-sample predictive std.  Scoped so the (n_samples, n_bins) products
+        # ``probas * mids`` / ``probas * mids²`` are freed as soon as the two
+        # scalars are read out.
+        def _sharpness_dispersion():
+            mean_  = (probas * mids).sum(dim=-1)
+            var_   = ((probas * mids.pow(2)).sum(dim=-1) - mean_.pow(2)).clamp(min=0)
+            std_per_sample = var_.sqrt()                          # (n_samples,)
+            # Use unbiased=False to avoid torch warning when n_samples is small
+            return std_per_sample.mean().item(), std_per_sample.std(unbiased=False).item()
 
-    sharpness, dispersion = _sharpness_dispersion()
+        sharpness, dispersion = _sharpness_dispersion()
 
-    # ---- Interval scores (shared path: vectorised; non-shared: searchsorted) ----
-    # Coverage levels (%) from COVERAGE_LEVELS; significance alpha = 1 - level/100.
-    interval_results = {}
+        # ---- Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17) ----
+        qwcrps = compute_quantile_wcrps(cdf, bin_mids, y, n_samples, n_bins, device, shared)
 
-    for cov_level in COVERAGE_LEVELS:
-        alpha = 1.0 - cov_level / 100.0
-        is_alpha, cov_alpha = _interval(alpha, cdf, bin_edges, y, n_samples, n_bins, device, shared, y_bin, ns_idx)
-        interval_results[f"coverage_{cov_level}"] = cov_alpha
-        interval_results[f"interval_score_{cov_level}"] = is_alpha
+        # ---- Interval scores (shared path: vectorised; non-shared: searchsorted) ----
+        # Coverage levels (%) from COVERAGE_LEVELS; alpha = 1 - level/100.
+        interval_results = {}
+        for cov_level in COVERAGE_LEVELS:
+            alpha = 1.0 - cov_level / 100.0
+            is_alpha, cov_alpha = _interval(alpha, cdf, bin_edges, y, n_samples, n_bins,
+                                            device, shared, y_bin, ns_idx)
+            interval_results[f"coverage_{cov_level}"] = cov_alpha
+            interval_results[f"interval_score_{cov_level}"] = is_alpha
 
-    # Every beta is computed independently inside
-    # ``compute_energy_score_histogram_corrected`` (its per-beta result does not
-    # depend on which other betas are requested), so a single batched call is
-    # bit-identical to the per-beta calls -- and CRPS is exactly the β=1.0 energy
-    # score, so we read it off here instead of paying for a second full pass over
-    # the (chunk, n_bins, n_bins) distance matrices.
-    energy_all = compute_energy_score_histogram_corrected(
-        probas, bin_edges, y, betas=ENERGY_BETAS
-    )
-    energy_scores = [energy_all[f"energy_score_beta_{beta}"] for beta in ENERGY_BETAS]
-    crps = energy_all["energy_score_beta_1.0"]
+        # Every beta is computed independently inside
+        # ``compute_energy_score_histogram_corrected`` (its per-beta result does
+        # not depend on which other betas are requested), so a single batched
+        # call is bit-identical to the per-beta calls -- and CRPS is exactly the
+        # β=1.0 energy score, so we read it off here instead of paying for a
+        # second full pass over the (chunk, n_bins, n_bins) distance matrices.
+        energy_all = compute_energy_score_histogram_corrected(
+            probas, bin_edges, y, betas=ENERGY_BETAS
+        )
 
-    # ---- CRTS (replaces CRLS; uses binary α-Tsallis integrand vs. log-score) ----
-    # No gap args: the grid is already padded so tails fall inside catch-all bins.
-    crts_scores = compute_crts(cdf, bin_edges, y, y_bin, shared)
+        # ---- CRTS (replaces CRLS; binary α-Tsallis integrand vs. log-score) ----
+        # No gap args: the grid is padded so tails fall inside catch-all bins.
+        crts_scores = compute_crts(cdf, bin_edges, y, y_bin, shared)
 
-    # ---- PIT KS test (Dawid 1984; Diebold et al. 1998) ----
-    pit_ks = compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
+        # ---- PIT KS test (Dawid 1984; Diebold et al. 1998) ----
+        pit_ks = compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
 
-    return {
-        "crps":              crps,
-        "sharpness":         sharpness,
-        "dispersion":        dispersion,
-        **interval_results,
-        **crts_scores,
-        "cde_loss":          cde_loss,
-        "pit_ks_stat":       pit_ks["pit_ks_stat"],
-        "pit_ks_pvalue":     pit_ks["pit_ks_pvalue"],
-        "wcrps_left":        wcrps_left,
-        "wcrps_right":       wcrps_right,
-        "wcrps_center":      wcrps_center,
-        **{f"energy_score_beta_{b}": v for b, v in zip(ENERGY_BETAS, energy_scores)},
-        **dpd_scores,
-        **pseudos_scores,
-    }
+        return {
+            "crps":          energy_all["energy_score_beta_1.0"],
+            "sharpness":     sharpness,
+            "dispersion":    dispersion,
+            **interval_results,
+            **crts_scores,
+            "pit_ks_stat":   pit_ks["pit_ks_stat"],
+            "pit_ks_pvalue": pit_ks["pit_ks_pvalue"],
+            "wcrps_left":    qwcrps["wcrps_left"],
+            "wcrps_right":   qwcrps["wcrps_right"],
+            "wcrps_center":  qwcrps["wcrps_center"],
+            **{f"energy_score_beta_{b}": energy_all[f"energy_score_beta_{b}"]
+               for b in ENERGY_BETAS},
+        }
+
+    result = _grid_robust_block() if compute_grid_robust else {}
+    # Density rules only when requested (skipped on the grid-robust native branch).
+    if compute_density:
+        result["cde_loss"] = cde_loss
+        result.update(dpd_scores)
+        result.update(pseudos_scores)
+    return result

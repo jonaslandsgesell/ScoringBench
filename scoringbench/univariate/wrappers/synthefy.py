@@ -63,6 +63,7 @@ class SynthefyWrapper(ProbabilisticWrapper):
         if self.CTX_CAP and len(yn) > self.CTX_CAP:
             keep = np.random.default_rng(0).choice(len(yn), self.CTX_CAP, replace=False)
             Xn, yn = Xn[keep], yn[keep]
+        self._set_train_range(yn)
         self._model.fit(Xn, yn)
         return self
 
@@ -81,5 +82,6 @@ class SynthefyWrapper(ProbabilisticWrapper):
         probas = np.full((n, K - 1), 1.0 / (K - 1))  # uniform mass between quantiles
         mean = np.asarray(full["mean"], dtype=np.float64)
         return DistributionPrediction(
-            probas=probas, bin_edges=edges, bin_midpoints=mids, mean=mean
+            probas=probas, bin_edges=edges, bin_midpoints=mids, mean=mean,
+            train_range=self._y_train_range,
         )

@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 
 from .base import DistributionPrediction, ProbabilisticWrapper
-from .sample_based import grid_density_to_distribution
+from .density_based import grid_density_to_distribution
 
 _ESTIMATORS = {
     "MDN": "MixtureDensityNetwork",
@@ -135,6 +135,7 @@ class CDEWrapper(ProbabilisticWrapper):
 
         self._ndim_x = X.shape[1]
         self._y_range = (float(y.min()), float(y.max()))
+        self._set_train_range(y)
 
         self._build_model(self._ndim_x)
         self._model.fit(X, y.reshape(-1, 1))
@@ -167,7 +168,7 @@ class CDEWrapper(ProbabilisticWrapper):
         X = self._sanitize_X(X)
         grid = self._grid()
         dens = self._density_on_grid(X, grid)  # (n, G)
-        return grid_density_to_distribution(grid, dens)
+        return grid_density_to_distribution(grid, dens, train_range=self._y_train_range)
 
     def predict(self, X) -> np.ndarray:
         return self.predict_distribution(X).mean

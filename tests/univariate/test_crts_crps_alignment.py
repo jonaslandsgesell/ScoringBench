@@ -73,6 +73,7 @@ def _make_dist(bin_edges, probas):
         bin_edges=edges,
         bin_midpoints=mids.astype(np.float32),
         mean=mean,
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
 
 
@@ -147,10 +148,12 @@ def test_crts_alpha2_matches_independent_crps(name):
     """crts_alpha_2.0 must equal the independent fine-grid CRPS reference.
 
     ``DistributionPrediction`` resamples every input histogram onto its own
-    regular grid (``regrid_to_uniform``); for coarse, non-uniform inputs that
-    resampling *changes* the distribution.  The fine-grid reference must
+    resampled grow-only grid
+    (``resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid``); for coarse,
+    non-uniform inputs that resampling *changes* the distribution.  The fine-grid
+    reference must
     therefore integrate the SAME distribution the pipeline scores — i.e. the
-    regridded ``dist.bin_edges``/``dist.probas`` — otherwise a coarse skewed
+    resampled ``dist.bin_edges``/``dist.probas`` — otherwise a coarse skewed
     grid produces a spurious mismatch that has nothing to do with the CRTS
     quadrature under test.
     """
@@ -451,6 +454,7 @@ def test_crts_batch_consistency():
         bin_edges=edges.astype(np.float32),
         bin_midpoints=mids.astype(np.float32),
         mean=mean,
+        train_range=(float(np.asarray(edges).min()), float(np.asarray(edges).max())),
     )
     m_batch = compute_scoring_rules(dist, ys)
 

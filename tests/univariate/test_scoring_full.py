@@ -71,6 +71,7 @@ def _make_dist(probas, bin_edges, bin_midpoints=None, mean=None):
     return DistributionPrediction(
         probas=probas, bin_edges=bin_edges,
         bin_midpoints=bin_midpoints, mean=mean,
+        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
     )
 
 
@@ -688,6 +689,7 @@ class TestTabPFNTranslation:
             "logits": logits, "criterion": criterion,
         }
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((1, 2)))
 
         expected_probas = torch.softmax(logits, dim=-1).numpy()
@@ -717,6 +719,7 @@ class TestTabPFNTranslation:
             "logits": logits, "criterion": criterion,
         }
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((5, 3)))
         assert_allclose(dist.probas.sum(axis=1), 1.0, atol=1e-6)
 
@@ -738,6 +741,7 @@ class TestTabPFNTranslation:
             "logits": logits, "criterion": criterion,
         }
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((n_samples, 4)))
 
         assert dist.probas.shape == (n_samples, n_bins)
@@ -764,6 +768,7 @@ class TestTabPFNTranslation:
             "logits": logits, "criterion": criterion,
         }
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((1, 1)))
         assert not np.any(np.isnan(dist.probas))
         assert_allclose(dist.probas.sum(axis=1), 1.0, atol=1e-6)
@@ -792,6 +797,7 @@ class TestFinetuneTabPFNTranslation:
             "logits": logits, "criterion": criterion,
         }
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((1, 2)))
 
         expected_probas = torch.softmax(logits, dim=-1).numpy()
@@ -825,6 +831,7 @@ class TestXGBTranslation:
         ])
         wrapper._get_probs = lambda X: known_probas
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((2, 3)))
 
         expected_mean = (known_probas * wrapper._bin_midpoints[None, :]).sum(axis=-1)
@@ -844,6 +851,7 @@ class TestXGBTranslation:
 
         wrapper._get_probs = lambda X: np.full((3, 5), 0.2)
 
+        wrapper._y_train_range = (0.0, 1.0)
         dist = wrapper.predict_distribution(np.zeros((3, 2)))
         assert_allclose(dist.probas, 0.2, atol=1e-6)
 
