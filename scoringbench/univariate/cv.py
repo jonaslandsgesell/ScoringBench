@@ -49,10 +49,19 @@ def run_fold(
     - transform on X_test (apply train statistics)
     This ensures no data leakage from test to train via imputation statistics.
 
+    Timing keys
+    -----------
+    ``train_time`` is the END-TO-END cost, ``fit_time + predict_time``. It is not
+    a fit-only stopwatch, because in-context learners (e.g. Mitra-2) do their
+    training inside ``predict``: a fit-only number reports them as effectively
+    free and makes them incomparable to eager models. ``fit_time`` and
+    ``predict_time`` are reported alongside so the split stays recoverable.
+
     Returns {model_name: {mae, rmse, r2, crps, sharpness,
                           coverage_90, interval_score_90,
                           coverage_95, interval_score_95,
-                          crts_alpha_{1.01,...,2.0}, train_time}}
+                          crts_alpha_{1.01,...,2.0},
+                          fit_time, predict_time, train_time}}
     """
     # Impute missing values (learn from train, apply to both train and test)
     if X_train.isna().sum().sum() > 0 or X_test.isna().sum().sum() > 0:
@@ -79,15 +88,27 @@ def run_fold(
         try:
             model: ProbabilisticWrapper = factory()
 
-            t0 = time.time()
+            # Timing is split by PHASE and reported as both parts plus a total
+            #
+            # perf_counter is monotonic: it measures elapsed wall time and is
+            # immune to system-clock adjustments, unlike time.time(). The
+            # factory() construction above is deliberately outside the window.
+            t0 = time.perf_counter()
             model.fit(X_train, y_train)
-            elapsed = time.time() - t0
+            fit_time = time.perf_counter() - t0
 
+            t1 = time.perf_counter()
             try:
                 dist = model.predict_distribution(X_test)
+                predict_time = time.perf_counter() - t1
                 metrics = compute_metrics(dist, y_test_np)
             except NotImplementedError:
+                # predict_distribution bailed out; the fallback point predict is
+                # the real inference work, so time THAT (the aborted call above
+                # raised before doing anything, so nothing is double-counted).
+                t1 = time.perf_counter()
                 y_pred = model.predict(X_test)
+                predict_time = time.perf_counter() - t1
                 metrics = compute_point_metrics(y_test_np, y_pred)
                 for key in (
                     "crps", "sharpness",
@@ -101,7 +122,9 @@ def run_fold(
                 ):
                     metrics[key] = None
 
-            metrics["train_time"] = elapsed
+            metrics["fit_time"] = fit_time
+            metrics["predict_time"] = predict_time
+            metrics["train_time"] = fit_time + predict_time
 
             del model
             gc.collect()
@@ -123,6 +146,8 @@ def run_fold(
                 "error": str(e),
                 "error_type": type(e).__name__,
                 "train_time": None,
+                "fit_time": None,
+                "predict_time": None,
             }
             
             # Still try to clear memory even on error

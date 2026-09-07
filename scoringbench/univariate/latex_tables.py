@@ -24,6 +24,8 @@ def write_latex_tables(root: str, rows: List[dict]) -> None:
         ('mae', ['mae']),
         ('rmse', ['rmse']),
         ('r2', ['r2', 'r_squared']),
+        ('fit_time', ['fit_time']),
+        ('predict_time', ['predict_time']),
         ('train_time', ['train_time', 'time', 'train_time_seconds']),
     ]
 

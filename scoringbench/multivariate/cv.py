@@ -70,23 +70,34 @@ def run_fold(
         try:
             model: MultivariateWrapper = factory()
 
-            # perf_counter is monotonic: it measures elapsed wall time for the
-            # fit only (factory() construction above is excluded) and is immune
-            # to system-clock adjustments, unlike time.time().
+            # Timing is split by PHASE and reported as both parts plus a total.
+            # ``train_time`` is the END-TO-END cost and ``fit_time`` /
+            # ``predict_time`` keep the split visible.
+            #
+            # perf_counter is monotonic: it measures elapsed wall time and is
+            # immune to system-clock adjustments.
             t0 = time.perf_counter()
             model.fit(X_train, Y_train)
-            elapsed = time.perf_counter() - t0
+            fit_time = time.perf_counter() - t0
 
+            t1 = time.perf_counter()
             try:
                 pred = model.predict_ensemble(X_test)
+                predict_time = time.perf_counter() - t1
                 metrics = compute_metrics(pred, y_test_np)
             except NotImplementedError:
+                # predict_ensemble bailed out before doing work; the fallback
+                # point predict is the real inference cost, so time that.
+                t1 = time.perf_counter()
                 y_pred = np.asarray(model.predict(X_test), dtype=np.float64)
+                predict_time = time.perf_counter() - t1
                 metrics = compute_point_metrics(y_test_np, y_pred)
                 for key in SCORING_RULE_KEYS:
                     metrics[key] = None
 
-            metrics["train_time"] = elapsed
+            metrics["fit_time"] = fit_time
+            metrics["predict_time"] = predict_time
+            metrics["train_time"] = fit_time + predict_time
 
             del model
             gc.collect()
@@ -109,6 +120,8 @@ def run_fold(
                 "error": str(e),
                 "error_type": type(e).__name__,
                 "train_time": None,
+                "fit_time": None,
+                "predict_time": None,
             }
             try:
                 gc.collect()
