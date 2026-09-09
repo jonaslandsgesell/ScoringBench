@@ -36,6 +36,7 @@ from .sample_based import (  # noqa: F401
 _OPTIONAL = [
     ("SynthefyWrapper", "synthefy"),
     ("TabPFNWrapper", "tabpfn"), ("FinetuneTabPFNWrapper", "tabpfn"),
+    ("TabDPTWrapper", "tabdpt"),
     ("TabICLWrapper", "tabicl"), ("FinetuneTabICLWrapper", "tabicl"),
     ("XGBVectorWrapper", "xgb_vector"), ("XGBQuantileVectorWrapper", "xgb_vector"),
     ("XGBLSSWrapper", "xgblss_wrapper"), ("CatBoostQuantileWrapper", "catboost_wrapper"),
@@ -50,6 +51,7 @@ _OPTIONAL = [
     ("FlexCodeWrapper", "flexcode_wrapper"),
     ("SurjectorsWrapper", "surjectors_wrapper"),
     ("EXAONETabularWrapper", "exaonetabular_wrapper"),
+    ("MitraFinetuneWrapper", "mitra_finetune_wrapper"),
 ]
 for _name, _mod in _OPTIONAL:
     try:
@@ -59,6 +61,12 @@ for _name, _mod in _OPTIONAL:
         globals()[_name] = getattr(_m, _name)
     except Exception:
         globals()[_name] = None
+
+# Pure-python helper (no heavy deps): resolve the Mitra-2 checkpoint directory.
+try:
+    from .mitra_finetune_wrapper import resolve_mitra2_checkpoint  # noqa: F401
+except Exception:
+    resolve_mitra2_checkpoint = None  # type: ignore[assignment]
 
 __all__ = [
     "SynthefyWrapper",
@@ -71,6 +79,7 @@ __all__ = [
     "grid_density_to_distribution",
     "TabPFNWrapper",
     "FinetuneTabPFNWrapper",
+    "TabDPTWrapper",
     "TabICLWrapper",
     "FinetuneTabICLWrapper",
     "XGBVectorWrapper",
@@ -90,4 +99,6 @@ __all__ = [
     "FlexCodeWrapper",
     "SurjectorsWrapper",
     "EXAONETabularWrapper",
+    "MitraFinetuneWrapper",
+    "resolve_mitra2_checkpoint",
 ]

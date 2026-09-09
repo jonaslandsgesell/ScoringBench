@@ -35,6 +35,7 @@ from scoringbench.univariate.wrappers import (
     FinetuneTabPFNWrapper,
     FinetuneTabICLWrapper,
     TabICLWrapper,
+    TabDPTWrapper,
     XGBVectorWrapper,
     XGBQuantileVectorWrapper,
     XGBLSSWrapper,
@@ -52,6 +53,8 @@ from scoringbench.univariate.wrappers import (
     FlexCodeWrapper,
     SurjectorsWrapper,
     EXAONETabularWrapper,
+    MitraFinetuneWrapper,
+    resolve_mitra2_checkpoint,
 )
 from scoringbench.univariate.wrappers.cde_wrapper import CDE_PRESETS
 from scoringbench.univariate.wrappers.flexcode_wrapper import FLEXCODE_PRESETS
@@ -197,10 +200,30 @@ MODELS = {
         eval_metric="mse",
         random_state=0,
         verbose=True,
-        # # # max_data_size=100 #only for datasets which otherwise OOM with 48GB VRAM, potentially with just 1 estimator
+        # # #max_data_size=100 #only for datasets which otherwise OOM with 48GB VRAM, potentially with just 1 estimator
     ),
     "tabiclv2": lambda: TabICLWrapper(),
+    "tabdptv1_3": lambda: TabDPTWrapper(n_ensembles=8),
     "exaonetabular": lambda: EXAONETabularWrapper(device="cuda:0"),
+    "finetune_mitra2_steps_50": lambda: MitraFinetuneWrapper(
+        checkpoint_dir=resolve_mitra2_checkpoint(),
+        device="cuda",
+        num_bag_folds=8,
+        time_limit=3600,
+        ft_steps=50,
+        mem_usage_ratio=float("inf"),
+    ),
+    "mitra2": lambda: MitraFinetuneWrapper(
+        checkpoint_dir=resolve_mitra2_checkpoint(),
+        device="cuda",
+        num_bag_folds=8,
+        ft_steps=0,
+        # AutoGluon's host-RAM guard estimates each Mitra child at ~8 GB and
+        # raises NotEnoughMemoryError on memory-tight boxes, aborting the model
+        # (raise_on_model_failure=True). Disable the check (the recipe exposes
+        # no lever for it); the in-context forward pass itself fits in RAM.
+        mem_usage_ratio=float("inf"),
+    ),
     "crepes_tabiclv2": lambda: CrepesWrapper(
         # Use raw TabICL regressor from the tabicl package as base_model
         base_model=__import__("tabicl").TabICLRegressor(),
