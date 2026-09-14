@@ -165,7 +165,7 @@ dict_surjectors_models = {
 
 #Hint: comment models out which you do not want to run locally
 MODELS = {
-    "causilo_v1_0_1": lambda: CausiloWrapper(),
+    "causilo_v1": lambda: CausiloWrapper(),
     "nori": lambda: SynthefyWrapper(),
     "nori_30m": lambda: SynthefyWrapper(model="nori-30m"),
     f"tabpfn_realv2_5": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["realv2_5"], ignore_pretraining_limits=True),
