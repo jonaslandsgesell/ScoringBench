@@ -122,6 +122,12 @@ def _make_tabicl():
     return TabICLWrapper(device=_cuda_or_cpu())
 
 
+def _make_causilo():
+    pytest.importorskip("causilo", minversion="1.0.1")
+    from scoringbench.univariate.wrappers.causilo import CausiloWrapper
+    return CausiloWrapper(device=_cuda_or_cpu())
+
+
 def _make_tabdpt():
     """TabDPT v1.3 regressor — native bar-distribution probabilistic head.
 
@@ -296,6 +302,7 @@ def _make_mitra():
 # Each param is a (name, factory) tuple so the fixture can log the name
 # without relying on pytest internals that differ across scopes.
 MODEL_FACTORIES = [
+    pytest.param(("CausiloWrapper", _make_causilo), id="CausiloWrapper"),
     pytest.param(("XGBVectorWrapper",        _make_xgb_vector),   id="XGBVectorWrapper"),
     pytest.param(("XGBQuantileVectorWrapper", _make_xgb_quantile), id="XGBQuantileVectorWrapper"),
     pytest.param(("TabPFNWrapper",            _make_tabpfn),       id="TabPFNWrapper"),

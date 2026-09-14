@@ -6,6 +6,7 @@ xgboost>=1.7.0
 catboost>=1.0.0
 tabpfn
 tabicl
+causilo==1.0.1
 pytabkit
 crepes
 xgboostlss

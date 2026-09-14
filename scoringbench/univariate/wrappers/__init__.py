@@ -34,6 +34,7 @@ from .sample_based import (  # noqa: F401
 # loads without every competitor's stack installed. Only the models actually
 # referenced in MODELS need their library at run time.
 _OPTIONAL = [
+    ("CausiloWrapper", "causilo"),
     ("SynthefyWrapper", "synthefy"),
     ("TabPFNWrapper", "tabpfn"), ("FinetuneTabPFNWrapper", "tabpfn"),
     ("TabDPTWrapper", "tabdpt"),
@@ -69,6 +70,7 @@ except Exception:
     resolve_mitra2_checkpoint = None  # type: ignore[assignment]
 
 __all__ = [
+    "CausiloWrapper",
     "SynthefyWrapper",
     "DistributionPrediction",
     "DistributionPredictionView",
