@@ -35,6 +35,7 @@ from scoringbench.univariate.wrappers import (
     FinetuneTabPFNWrapper,
     FinetuneTabICLWrapper,
     TabICLWrapper,
+    TabLDMWrapper,
     CausiloWrapper,
     TabDPTWrapper,
     XGBVectorWrapper,
@@ -205,6 +206,7 @@ MODELS = {
         # # #max_data_size=100 #only for datasets which otherwise OOM with 48GB VRAM, potentially with just 1 estimator
     ),
     "tabiclv2": lambda: TabICLWrapper(),
+    "tabldm_v1": lambda: TabLDMWrapper(),
     "tabdptv1_3": lambda: TabDPTWrapper(n_ensembles=8),
     "exaonetabular": lambda: EXAONETabularWrapper(device="cuda:0"),
     "finetune_mitra2_steps_50": lambda: MitraFinetuneWrapper(

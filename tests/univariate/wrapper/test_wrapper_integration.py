@@ -122,6 +122,18 @@ def _make_tabicl():
     return TabICLWrapper(device=_cuda_or_cpu())
 
 
+def _make_tabldm():
+    """Xiaomi-TabLDM regressor — in-context multi-quantile head.
+
+    Downloads the checkpoint from the Hugging Face Hub on first use. Uses the
+    plain in-context path (``enhance_candidates=False``, the default) so
+    distributional quantile output is available.
+    """
+    pytest.importorskip("tabldm")
+    from scoringbench.univariate.wrappers.tabldm import TabLDMWrapper
+    return TabLDMWrapper(device=_cuda_or_cpu())
+
+
 def _make_causilo():
     pytest.importorskip("causilo", minversion="1.0.1")
     from scoringbench.univariate.wrappers.causilo import CausiloWrapper
@@ -308,6 +320,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabPFNWrapper",            _make_tabpfn),       id="TabPFNWrapper"),
     pytest.param(("TabDPTWrapper",            _make_tabdpt),       id="TabDPTWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
+    pytest.param(("TabLDMWrapper",            _make_tabldm),       id="TabLDMWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),
     pytest.param(("CatBoostQuantileWrapper",  _make_catboost_quantile), id="CatBoostQuantileWrapper"),
     pytest.param(("CrepesWrapper",            _make_crepes),         id="CrepesWrapper"),
