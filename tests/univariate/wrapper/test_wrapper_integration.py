@@ -116,6 +116,18 @@ def _make_tabpfn():
     return TabPFNWrapper(model_path="tabpfn-v2.5-regressor-v2.5_real.ckpt" if os.path.exists("tabpfn-v2.5-regressor-v2.5_real.ckpt") else None)
 
 
+def _make_tabpfn_v3_5():
+    pytest.importorskip("tabpfn")
+    from scoringbench.univariate.wrappers.tabpfn import TabPFNWrapper
+    return TabPFNWrapper(model_version="v3.5")
+
+
+def _make_tabpfn_v3_5_fast():
+    pytest.importorskip("tabpfn")
+    from scoringbench.univariate.wrappers.tabpfn import TabPFNWrapper
+    return TabPFNWrapper(model_version="v3.5-fast")
+
+
 def _make_tabicl():
     pytest.importorskip("tabicl")
     from scoringbench.univariate.wrappers.tabicl import TabICLWrapper
@@ -318,6 +330,8 @@ MODEL_FACTORIES = [
     pytest.param(("XGBVectorWrapper",        _make_xgb_vector),   id="XGBVectorWrapper"),
     pytest.param(("XGBQuantileVectorWrapper", _make_xgb_quantile), id="XGBQuantileVectorWrapper"),
     pytest.param(("TabPFNWrapper",            _make_tabpfn),       id="TabPFNWrapper"),
+    pytest.param(("TabPFNWrapper[v3.5]",      _make_tabpfn_v3_5),      id="TabPFNWrapper[v3.5]"),
+    pytest.param(("TabPFNWrapper[v3.5-fast]", _make_tabpfn_v3_5_fast), id="TabPFNWrapper[v3.5-fast]"),
     pytest.param(("TabDPTWrapper",            _make_tabdpt),       id="TabDPTWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
     pytest.param(("TabLDMWrapper",            _make_tabldm),       id="TabLDMWrapper"),

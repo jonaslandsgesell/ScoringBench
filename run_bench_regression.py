@@ -172,6 +172,8 @@ MODELS = {
     f"tabpfn_realv2_5": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["realv2_5"], ignore_pretraining_limits=True),
     f"tabpfn_v2_6": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["v2_6"], ignore_pretraining_limits=True),
     f"tabpfn_v3": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["v3"], ignore_pretraining_limits=True),
+    "tabpfn_v3_5": lambda: TabPFNWrapper(model_version="v3.5", ignore_pretraining_limits=True),
+    "tabpfn_v3_5_fast": lambda: TabPFNWrapper(model_version="v3.5-fast", ignore_pretraining_limits=True),
     **dict_finetuned_tabpfn_models,
     "finetune_tabpfn_realv2_5_mse": lambda: FinetuneTabPFNWrapper(
         device="cuda",
