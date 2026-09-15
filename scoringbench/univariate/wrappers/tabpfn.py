@@ -14,7 +14,23 @@ class TabPFNWrapper(ProbabilisticWrapper):
     bar-distribution output (logits + borders) via output_type='full'.
     """
 
-    def __init__(self, device=None, **kwargs):
+    def __init__(self, device=None, model_version=None, **kwargs):
+        """Wrap a ``TabPFNRegressor``.
+
+        Parameters
+        ----------
+        device : str | None
+            Torch device; defaults to CUDA when available, else CPU.
+        model_version : str | tabpfn.constants.ModelVersion | None
+            When given, build the regressor via
+            ``TabPFNRegressor.create_default_for_version(model_version)``
+            (e.g. ``"v3.5"``/``ModelVersion.V3_5`` or
+            ``"v3.5-fast"``/``ModelVersion.V3_5_FAST``). When ``None`` the
+            regressor is built directly from ``kwargs`` (legacy behaviour,
+            e.g. passing an explicit ``model_path``).
+        **kwargs
+            Forwarded to the underlying ``TabPFNRegressor``.
+        """
         import torch
         import sys
         
@@ -29,7 +45,17 @@ class TabPFNWrapper(ProbabilisticWrapper):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self._device = device
-        self._model = TabPFNRegressor(device=self._device, **kwargs)
+
+        if model_version is not None:
+            # Resolve string aliases ("v3.5-fast") to the ModelVersion enum.
+            from tabpfn.constants import ModelVersion
+            if isinstance(model_version, str):
+                model_version = ModelVersion(model_version)
+            self._model = TabPFNRegressor.create_default_for_version(
+                model_version, device=self._device, **kwargs
+            )
+        else:
+            self._model = TabPFNRegressor(device=self._device, **kwargs)
 
     def fit(self, X, y) -> "TabPFNWrapper":
         self._set_train_range(y)
