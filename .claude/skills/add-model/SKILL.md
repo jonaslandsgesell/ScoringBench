@@ -1,6 +1,6 @@
 ---
 name: add-model
-description: Add a new probabilistic regression model to the ScoringBench benchmark. Use this skill whenever the user wants to integrate a new tabular probabilistic-regression model into ScoringBench — even if they just say "add X model", "integrate X", "support X", or "wrap X for the benchmark". Creates the ProbabilisticWrapper subclass, registers it for lazy import, wires it into the MODELS registry in run_bench_regression.py under a UNIQUE, version-stamped model name, and documents how to run, rank, and submit results. Reads existing similar wrappers for inspiration and optionally fetches a documentation URL to understand the new model's API.
+description: Add a new probabilistic regression model to the ScoringBench benchmark. Use this skill whenever the user wants to integrate a new tabular probabilistic-regression model into ScoringBench — even if they just say "add X model", "integrate X", "support X", or "wrap X for the benchmark". Creates the ProbabilisticWrapper subclass, registers it for lazy import, wires it into the MODELS registry in scoringbench/univariate/models.py under a UNIQUE, version-stamped model name, and documents how to run, rank, and submit results. Reads existing similar wrappers for inspiration and optionally fetches a documentation URL to understand the new model's API.
 argument-hint: <ModelName> [<pip-package>] [<doc-url>]
 user-invocable: true
 ---
@@ -15,14 +15,14 @@ Every model is exposed through a **wrapper** in
 `scoringbench/univariate/wrappers/<file>.py` that subclasses `ProbabilisticWrapper` and emits a
 `DistributionPrediction` (a discretized predictive distribution). The wrapper is
 registered for lazy import in `scoringbench/univariate/wrappers/__init__.py`, then wired into the
-`MODELS` dict in `run_bench_regression.py` under a **unique, version-stamped model
+`MODELS` dict in `scoringbench/univariate/models.py` under a **unique, version-stamped model
 name** (the name becomes the on-disk results key and the leaderboard label).
 
 You typically touch **four files** and **add one wrapper module**:
 
 1. `scoringbench/univariate/wrappers/<model_key>.py` — new wrapper module
 2. `scoringbench/univariate/wrappers/__init__.py` — lazy-import registration + `__all__`
-3. `run_bench_regression.py` — import the class and add a `MODELS` entry
+3. `scoringbench/univariate/models.py` — import the class and add a `MODELS` entry
 4. `requirements_models.txt` — declare the optional pip dependency
 5. `tests/wrapper/test_wrapper_integration.py` — add the model to the shared
    integration suite
@@ -57,7 +57,7 @@ key in `MODELS`, the folder under `output/raw/<model_name>/`, the aggregated
 - **It MUST be unique.** Reusing an existing key silently overwrites another
   model's results and corrupts the leaderboard ledger. Before choosing a name,
   list the existing keys and confirm there is no collision:
-  - `grep -oE '"[a-z0-9_.]+":\s*lambda' run_bench_regression.py` (and check the
+  - `grep -oE '"[a-z0-9_.]+":\s*lambda' scoringbench/univariate/models.py` (and check the
     `dict_*` comprehensions for templated keys), and
   - `ls output/raw/` to see names that already have committed results.
 - **It MUST encode the version** of the model/checkpoint/library (e.g.
@@ -133,14 +133,14 @@ Edit [scoringbench/univariate/wrappers/__init__.py](scoringbench/univariate/wrap
 2. Add `"<ClassName>"` to `__all__`.
 
 If your wrapper module exposes a presets/registry constant (like
-`CDE_PRESETS`), also import it where `run_bench_regression.py` consumes it.
+`CDE_PRESETS`), also import it where `scoringbench/univariate/models.py` consumes it.
 
 ---
 
 ## Step 5: Wire the model into the MODELS registry
 
-Edit [run_bench_regression.py](run_bench_regression.py) (and
-[run_benchmark.sbatch](run_benchmark.sbatch) if using a cluster):
+Edit [scoringbench/univariate/models.py](scoringbench/univariate/models.py) — the
+front script `run_bench_regression.py` just imports `MODELS` from there:
 
 1. Add `<ClassName>` to the `from scoringbench.univariate.wrappers import (...)` block.
 2. Add one `MODELS` entry keyed by the **unique, version-stamped `model_name`**
@@ -245,7 +245,7 @@ Reproducibility checklist to include in the PR description:
 
 Summarize what was created/edited:
 - the new wrapper module and which of the three ways it uses,
-- the registration edits in `__init__.py` and `run_bench_regression.py`,
+- the registration edits in `__init__.py` and `scoringbench/univariate/models.py`,
 - the integration-test entry added under `tests/wrapper`,
 - the chosen `model_name` (and why it is unique + version-stamped),
 - the dependency added to `requirements_models.txt`,

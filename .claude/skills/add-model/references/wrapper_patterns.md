@@ -87,7 +87,7 @@ Read the current contents of each file before editing and match its style.
 
 - **`scoringbench/univariate/wrappers/__init__.py`** — add `("<ClassName>", "<model_key>")`
   to the lazy-import list and `"<ClassName>"` to `__all__`.
-- **`run_bench_regression.py`** — import `<ClassName>` and add one `MODELS` entry
+- **`scoringbench/univariate/models.py`** — import `<ClassName>` and add one `MODELS` entry
   keyed by the unique, version-stamped `model_name`. The value is a zero-arg
   factory (`lambda: <ClassName>(...)`) so each CV fold gets a fresh instance. For
   many configs, build a `dict_*` comprehension like the existing ones and use a
@@ -101,7 +101,7 @@ Read the current contents of each file before editing and match its style.
 - The `MODELS` key is the on-disk results folder (`output/raw/<key>/`), the
   aggregated `output/<key>.parquet`, and the leaderboard label.
 - It MUST be unique — reusing a key overwrites another model's ledger. Verify with
-  `grep -oE '"[a-z0-9_.]+":\s*lambda' run_bench_regression.py` and `ls output/raw/`.
+  `grep -oE '"[a-z0-9_.]+":\s*lambda' scoringbench/univariate/models.py` and `ls output/raw/`.
 - It MUST encode the version/config (library/checkpoint version, distribution
   family, loss). Bumping a version means a NEW key — never re-point an old one.
 - lowercase + digits + underscores only; `v2.5` → `v2_5`.

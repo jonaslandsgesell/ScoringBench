@@ -31,6 +31,9 @@ sys.path.insert(0, str(project_root))
 import argparse
 
 from scoringbench.multivariate import config as cfg
+
+# 👉 To add / remove / swap models, edit the MODELS dict in:
+#        scoringbench/multivariate/models.py
 from scoringbench.multivariate.models import MODELS
 from scoringbench.multivariate.runner import run_benchmark
 from scoringbench.multivariate.sources import SOURCES, get_source
