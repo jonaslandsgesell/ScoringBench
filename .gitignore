@@ -12,3 +12,5 @@ datasets.json
 output_smoke/
 output_multivariate/
 MONITOR_DONE
+AutogluonModels/
+catboost_info/

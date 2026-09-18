@@ -53,6 +53,7 @@ _OPTIONAL = [
     ("FlexCodeWrapper", "flexcode_wrapper"),
     ("SurjectorsWrapper", "surjectors_wrapper"),
     ("EXAONETabularWrapper", "exaonetabular_wrapper"),
+    ("LimiXWrapper", "limix"),
     ("MitraFinetuneWrapper", "mitra_finetune_wrapper"),
 ]
 for _name, _mod in _OPTIONAL:
@@ -103,6 +104,7 @@ __all__ = [
     "FlexCodeWrapper",
     "SurjectorsWrapper",
     "EXAONETabularWrapper",
+    "LimiXWrapper",
     "MitraFinetuneWrapper",
     "resolve_mitra2_checkpoint",
 ]

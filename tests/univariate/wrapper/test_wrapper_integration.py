@@ -152,6 +152,17 @@ def _make_causilo():
     return CausiloWrapper(device=_cuda_or_cpu())
 
 
+def _make_limix2():
+    pytest.importorskip("torch")
+    pytest.importorskip("nvtx")
+    pytest.importorskip("kditransform")
+    from scoringbench.univariate.models import MODELS
+
+    wrapper = MODELS["limix2"]()
+    wrapper.device = _cuda_or_cpu()
+    return wrapper
+
+
 def _make_tabdpt():
     """TabDPT v1.3 regressor — native bar-distribution probabilistic head.
 
@@ -327,6 +338,7 @@ def _make_mitra():
 # without relying on pytest internals that differ across scopes.
 MODEL_FACTORIES = [
     pytest.param(("CausiloWrapper", _make_causilo), id="CausiloWrapper"),
+    pytest.param(("LimiXWrapper", _make_limix2), id="LimiXWrapper"),
     pytest.param(("XGBVectorWrapper",        _make_xgb_vector),   id="XGBVectorWrapper"),
     pytest.param(("XGBQuantileVectorWrapper", _make_xgb_quantile), id="XGBQuantileVectorWrapper"),
     pytest.param(("TabPFNWrapper",            _make_tabpfn),       id="TabPFNWrapper"),

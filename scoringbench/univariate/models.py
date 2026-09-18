@@ -54,6 +54,7 @@ from .wrappers import (
     FlexCodeWrapper,
     SurjectorsWrapper,
     EXAONETabularWrapper,
+    LimiXWrapper,
     MitraFinetuneWrapper,
     resolve_mitra2_checkpoint,
 )
@@ -228,6 +229,7 @@ MODELS = {
     "tabldm_v1": lambda: TabLDMWrapper(),
     "tabdptv1_3": lambda: TabDPTWrapper(n_ensembles=8),
     "exaonetabular": lambda: EXAONETabularWrapper(device="cuda:0"),
+    "limix2": lambda: LimiXWrapper(),
     "finetune_mitra2_steps_50": lambda: MitraFinetuneWrapper(
         checkpoint_dir=resolve_mitra2_checkpoint(),
         device="cuda",

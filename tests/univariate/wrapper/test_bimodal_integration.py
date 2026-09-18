@@ -286,6 +286,39 @@ def _ks_vs_uniform(u: np.ndarray) -> float:
     return float(max(d_plus, d_minus))
 
 
+def _assert_bimodal_mode_recovery(dist, modes):
+    """Require mass near both conditional modes and little in the empty valley."""
+    probabilities = np.asarray(dist.native.probas, dtype=float)
+    probabilities = probabilities / probabilities.sum(axis=1, keepdims=True)
+    edges = np.broadcast_to(dist.native.bin_edges, (len(modes), probabilities.shape[1] + 1))
+    cumulative = np.column_stack([np.zeros(len(modes)), np.cumsum(probabilities, axis=1)])
+    centres = np.column_stack([modes[:, 0], modes[:, -1], modes.mean(axis=1)])
+    masses = np.asarray([
+        np.interp(centres[row] + 2 * COMPONENT_STD, edges[row], cumulative[row], left=0, right=1)
+        - np.interp(centres[row] - 2 * COMPONENT_STD, edges[row], cumulative[row], left=0, right=1)
+        for row in range(len(modes))
+    ])
+    left_mass, right_mass, valley_mass = masses.T
+    recovered = (left_mass > 0.15) & (right_mass > 0.15)
+    recovered &= valley_mass < 0.25 * np.minimum(left_mass, right_mass)
+    assert min(left_mass.mean(), right_mass.mean()) > 0.30, masses.mean(axis=0)
+    assert recovered.mean() > 0.90, (
+        f"Only {recovered.mean():.1%} of rows retain two separated modes; "
+        f"mean left/right/valley masses: {masses.mean(axis=0)}"
+    )
+
+
+@pytest.mark.parametrize(
+    "fitted_bimodal_model",
+    [factory for factory in MODEL_FACTORIES if factory.id == "LimiXWrapper"],
+    indirect=True,
+)
+@pytest.mark.skipif(N_MODES != 2, reason="This gate specifically tests two-mode recovery")
+def test_limix_bimodal_modes_are_separated(fitted_bimodal_model):
+    _, _, _, _, modes, distribution, _ = fitted_bimodal_model
+    _assert_bimodal_mode_recovery(distribution, modes)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
