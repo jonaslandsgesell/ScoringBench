@@ -1,0 +1,533 @@
+[
+  {
+    "model_name": "causilo_v1",
+    "organization": "Nums AI",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/nums-ai/causilo",
+      "github": "https://github.com/nums-ai/causilo"
+    }
+  },
+  {
+    "model_name": "nori",
+    "organization": "Synthefy",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/Synthefy/synthefy-nori"
+    }
+  },
+  {
+    "model_name": "nori_30m",
+    "organization": "Synthefy",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/Synthefy/synthefy-nori"
+    }
+  },
+  {
+    "model_name": "tabpfn_realv2_5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "tabpfn_v2_6",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "tabpfn_v3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "tabpfn_v3_5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "tabpfn_v3_5_fast",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_crls",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_crps",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_wCRPS_left",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_wCRPS_center",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_wCRPS_right",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_ce",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_0.1",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_0.3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_0.5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_0.7",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_0.9",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.1",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.7",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.8",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_beta_1.9",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_is_90",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_cde",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabpfn_realv2_5_mse",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "finetune_tabiclv2",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2602.11139",
+      "huggingface": null,
+      "github": "https://github.com/soda-inria/tabicl"
+    }
+  },
+  {
+    "model_name": "tabiclv2",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2602.11139",
+      "huggingface": null,
+      "github": "https://github.com/soda-inria/tabicl"
+    }
+  },
+  {
+    "model_name": "tabldm_v1",
+    "organization": "Xiaomi Research",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/occams/Xiaomi-TabLDM",
+      "github": "https://github.com/xiaomi-research/xiaomi-tabldm"
+    }
+  },
+  {
+    "model_name": "tabdptv1_3",
+    "organization": "Layer6 AI",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/layer6ai-labs/TabDPT-inference"
+    }
+  },
+  {
+    "model_name": "exaonetabular",
+    "organization": "LG AI Research",
+    "links": {
+      "paper": "https://arxiv.org/abs/2608.25774",
+      "huggingface": "https://huggingface.co/LG-AI-Research/EXAONE-Tabular",
+      "github": null
+    }
+  },
+  {
+    "model_name": "limix2",
+    "organization": "Stable AI",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/stable-ai/LimiX-2",
+      "github": null
+    }
+  },
+  {
+    "model_name": "finetune_mitra2_steps_50",
+    "organization": "AutoGluon",
+    "links": {
+      "paper": "https://arxiv.org/abs/2609.04540",
+      "huggingface": "https://huggingface.co/autogluon/mitra-classifier-2",
+      "github": null
+    }
+  },
+  {
+    "model_name": "mitra2",
+    "organization": "AutoGluon",
+    "links": {
+      "paper": "https://arxiv.org/abs/2609.04540",
+      "huggingface": "https://huggingface.co/autogluon/mitra-finetune",
+      "github": null
+    }
+  },
+  {
+    "model_name": "crepes_tabiclv2",
+    "organization": null,
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "crepes_tabiclv2_mondrian",
+    "organization": null,
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "xgb_vector",
+    "organization": "XGBoost Contributors",
+    "links": {
+      "paper": "https://arxiv.org/abs/1603.02754",
+      "huggingface": null,
+      "github": "https://github.com/dmlc/xgboost"
+    }
+  },
+  {
+    "model_name": "xgb_vector_quantile",
+    "organization": "XGBoost Contributors",
+    "links": {
+      "paper": "https://arxiv.org/abs/1603.02754",
+      "huggingface": null,
+      "github": "https://github.com/dmlc/xgboost"
+    }
+  },
+  {
+    "model_name": "catboost_quantile",
+    "organization": "Yandex",
+    "links": {
+      "paper": "https://arxiv.org/abs/1706.09516",
+      "huggingface": null,
+      "github": "https://github.com/catboost/catboost"
+    }
+  },
+  {
+    "model_name": "xgblss_Gaussian",
+    "organization": "XGBoost Contributors",
+    "links": {
+      "paper": "https://arxiv.org/abs/1907.03178",
+      "huggingface": null,
+      "github": "https://github.com/StatMixedML/XGBoostLSS"
+    }
+  },
+  {
+    "model_name": "tabm_d",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2407.04491",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "tabm_hpo_cv_8_tabarena",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2407.04491",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "pytabkit_realmlp_td",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2407.04491",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "pytabkit_realmlp_hpo_cv_8_new",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2407.04491",
+      "huggingface": null,
+      "github": null
+    }
+  },
+  {
+    "model_name": "crepes_xgb_difficulty",
+    "organization": "Crepes Contributors",
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": "https://github.com/henrikbostrom/crepes"
+    }
+  },
+  {
+    "model_name": "crepes_catboost_difficulty",
+    "organization": "Crepes Contributors",
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": "https://github.com/henrikbostrom/crepes"
+    }
+  },
+  {
+    "model_name": "crepes_xgb_difficulty_mondrian",
+    "organization": "Crepes Contributors",
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": "https://github.com/henrikbostrom/crepes"
+    }
+  },
+  {
+    "model_name": "crepes_catboost_difficulty_mondrian",
+    "organization": "Crepes Contributors",
+    "links": {
+      "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
+      "huggingface": null,
+      "github": "https://github.com/henrikbostrom/crepes"
+    }
+  },
+  {
+    "model_name": "ngboost_gaussian",
+    "organization": "Stanford ML Group",
+    "links": {
+      "paper": "https://arxiv.org/abs/1910.03225",
+      "huggingface": null,
+      "github": "https://github.com/stanfordmlgroup/ngboost"
+    }
+  },
+  {
+    "model_name": "nflows_rqs",
+    "organization": "Facebook Research",
+    "links": {
+      "paper": "https://doi.org/10.5281/zenodo.4296287",
+      "huggingface": null,
+      "github": "https://github.com/bayesiains/nflows"
+    }
+  },
+  {
+    "model_name": "pymc_bart",
+    "organization": "PyMC Contributors",
+    "links": {
+      "paper": "https://peerj.com/articles/cs-1516/",
+      "huggingface": null,
+      "github": "https://github.com/pymc-devs/pymc"
+    }
+  },
+  {
+    "model_name": "forest_diffusion_flow",
+    "organization": "Samsung SAIL Montreal",
+    "links": {
+      "paper": "https://arxiv.org/abs/2309.09968",
+      "huggingface": null,
+      "github": "https://github.com/SamsungSAILMontreal/ForestDiffusion"
+    }
+  },
+  {
+    "model_name": "cde_MDN",
+    "organization": "Conditional Density Estimation Contributors",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/freelunchtheorem/Conditional_Density_Estimation"
+    }
+  },
+  {
+    "model_name": "cde_NF",
+    "organization": "Conditional Density Estimation Contributors",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/freelunchtheorem/Conditional_Density_Estimation"
+    }
+  },
+  {
+    "model_name": "flexcode_xgboost",
+    "organization": "CMU Lee Group",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/lee-group-cmu/FlexCode"
+    }
+  },
+  {
+    "model_name": "flexcode_randomforest",
+    "organization": "CMU Lee Group",
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/lee-group-cmu/FlexCode"
+    }
+  },
+  {
+    "model_name": "surjectors_maf",
+    "organization": null,
+    "links": {
+      "paper": "https://doi.org/10.21105/joss.06188",
+      "huggingface": null,
+      "github": "https://github.com/dirmeier/surjectors"
+    }
+  }
+]
