@@ -16,8 +16,8 @@
 #   sbatch run_benchmark_multivariate.sbatch
 #
 # GPUs --gres=gpu:RTX-A6000:1  --gres=gpu:RTX-PRO-6000:1 --gres=gpu:H200:1 (smaller to larger)
-##SBATCH --partition=gpu
-##SBATCH --gres=gpu:RTX-A6000:1
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 
 #SBATCH --mem=128G
 #SBATCH --time=120:00:00
@@ -33,8 +33,8 @@
 
 # Hardcoded run configuration
 SAMPLE_SIZE="1000"        # "3000" is original
-TARGET_DIM="3"            # target dimension d (promotes d-1 correlated features)
-SOURCE="synthetic" #"scoringbench"     # dataset source: "scoringbench" (real) or "synthetic"
+TARGET_DIM="2"            # target dimension d (promotes d-1 correlated features)
+SOURCE="scoringbench" #"scoringbench"     # dataset source: "scoringbench" (real) or "synthetic"
 
 # Output dir mirrors the runner's default naming so sweeps never collide.
 OUTPUT_DIR="./output_multivariate_${SOURCE}_d${TARGET_DIM}_n${SAMPLE_SIZE}"

@@ -146,13 +146,9 @@ class CopulaMultiOutputWrapper(_ComposedMultiOutputWrapper):
 
     Robustness details
     ------------------
-    * **Family set.**  ``family_set="parametric"`` uses a rich set that adds the
-      two-parameter BB1/BB6/BB7/BB8 families and Tawn (asymmetric / tail
-      dependence) on top of the one-parameter families, with rotations enabled.
-      BIC selection falls back to simpler families when the extra flexibility is
-      not warranted, so this is a strict improvement over a Gaussian/Archimedean
-      set.  ``"nonparametric"`` fits TLL kernel pair-copulas; any other value
-      uses ``pyvinecopulib`` defaults.
+    * **Family set.**  The vine is fit with local-likelihood transformation
+      kernel (TLL) pair-copulas: fully nonparametric, capturing dependence
+      shapes no parametric family can, at the cost of a heavier fit.
     * **PIT jitter.**  TabPFN's piecewise bar CDF (and degenerate constant rows)
       produce *tied* pseudo-observations, which make a vine see spurious
       independence.  A tiny reproducible uniform jitter (``pit_jitter``) breaks
@@ -160,10 +156,8 @@ class CopulaMultiOutputWrapper(_ComposedMultiOutputWrapper):
     """
 
     def __init__(self, sampler_factory, n_draws=int(N_DRAWS), seed=int(SEED),
-                 family_set: str = "parametric", pit_jitter: float = 1e-4,
-                 num_threads: int = 1):
+                 pit_jitter: float = 1e-4, num_threads: int = 1):
         super().__init__(sampler_factory, n_draws=n_draws, seed=seed)
-        self._family_set = family_set
         self._pit_jitter = float(pit_jitter)
         self._num_threads = int(num_threads)
         self._copula = None
@@ -196,30 +190,11 @@ class CopulaMultiOutputWrapper(_ComposedMultiOutputWrapper):
             U = U + jit_rng.uniform(-self._pit_jitter, self._pit_jitter, size=U.shape)
             U = np.clip(U, 1e-6, 1 - 1e-6)
 
-        if self._family_set == "parametric":
-            # Include the two-parameter BB families (asymmetric / tail
-            # dependence) and Tawn on top of the one-parameter set; rotations
-            # are enabled by default so lower- *and* upper-tail dependence can
-            # be captured.  This is a strict superset of the previous set, so
-            # BIC selection falls back to the simpler families when the extra
-            # flexibility is not warranted.
-            fam = [pv.BicopFamily.indep, pv.BicopFamily.gaussian,
-                   pv.BicopFamily.student, pv.BicopFamily.clayton,
-                   pv.BicopFamily.gumbel, pv.BicopFamily.frank,
-                   pv.BicopFamily.joe, pv.BicopFamily.bb1,
-                   pv.BicopFamily.bb6, pv.BicopFamily.bb7,
-                   pv.BicopFamily.bb8, pv.BicopFamily.tawn]
-            controls = pv.FitControlsVinecop(
-                family_set=fam, selection_criterion="bic",
-                allow_rotations=True, num_threads=self._num_threads)
-        elif self._family_set == "nonparametric":
-            # Local-likelihood transformation kernel (TLL) pair-copulas: fully
-            # nonparametric, captures dependence shapes no parametric family
-            # can, at the cost of a heavier fit.
-            controls = pv.FitControlsVinecop(
-                family_set=[pv.BicopFamily.tll], num_threads=self._num_threads)
-        else:
-            controls = pv.FitControlsVinecop(num_threads=self._num_threads)
+        # Local-likelihood transformation kernel (TLL) pair-copulas: fully
+        # nonparametric, captures dependence shapes no parametric family can,
+        # at the cost of a heavier fit.
+        controls = pv.FitControlsVinecop(
+            family_set=[pv.BicopFamily.tll], num_threads=self._num_threads)
         self._copula = pv.Vinecop.from_data(U, controls=controls)
 
     def _draw(self, X, m, rng):
