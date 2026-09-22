@@ -3,7 +3,7 @@
     "model_name": "causilo_v1",
     "organization": "Nums AI",
     "links": {
-      "paper": null,
+      "paper": "https://arxiv.org/abs/2609.22866",
       "huggingface": "https://huggingface.co/nums-ai/causilo",
       "github": "https://github.com/nums-ai/causilo"
     }
@@ -13,7 +13,7 @@
     "organization": "Synthefy",
     "links": {
       "paper": null,
-      "huggingface": null,
+      "huggingface": "https://huggingface.co/Synthefy/Nori",
       "github": "https://github.com/Synthefy/synthefy-nori"
     }
   },
@@ -22,7 +22,7 @@
     "organization": "Synthefy",
     "links": {
       "paper": null,
-      "huggingface": null,
+      "huggingface": "https://huggingface.co/Synthefy/Nori-30M",
       "github": "https://github.com/Synthefy/synthefy-nori"
     }
   },
@@ -30,8 +30,8 @@
     "model_name": "tabpfn_realv2_5",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -39,8 +39,8 @@
     "model_name": "tabpfn_v2_6",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2511.08667",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_6",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -48,8 +48,8 @@
     "model_name": "tabpfn_v3",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2605.13986",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -57,8 +57,8 @@
     "model_name": "tabpfn_v3_5",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2609.17895",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -66,8 +66,8 @@
     "model_name": "tabpfn_v3_5_fast",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2609.17895",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -75,8 +75,8 @@
     "model_name": "finetune_tabpfn_realv2_5_crls",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -84,8 +84,8 @@
     "model_name": "finetune_tabpfn_realv2_5_crps",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -93,8 +93,8 @@
     "model_name": "finetune_tabpfn_realv2_5_wCRPS_left",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -102,8 +102,8 @@
     "model_name": "finetune_tabpfn_realv2_5_wCRPS_center",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -111,8 +111,8 @@
     "model_name": "finetune_tabpfn_realv2_5_wCRPS_right",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -120,8 +120,8 @@
     "model_name": "finetune_tabpfn_realv2_5_ce",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -129,8 +129,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_0.1",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -138,8 +138,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_0.3",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -147,8 +147,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_0.5",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -156,8 +156,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_0.7",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -165,8 +165,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_0.9",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -174,8 +174,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.1",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -183,8 +183,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.3",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -192,8 +192,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.5",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -201,8 +201,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.7",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -210,8 +210,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.8",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -219,8 +219,8 @@
     "model_name": "finetune_tabpfn_realv2_5_beta_1.9",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -228,8 +228,8 @@
     "model_name": "finetune_tabpfn_realv2_5_is_90",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -237,8 +237,8 @@
     "model_name": "finetune_tabpfn_realv2_5_cde",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -246,8 +246,8 @@
     "model_name": "finetune_tabpfn_realv2_5_mse",
     "organization": "Prior Labs",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
       "github": "https://github.com/PriorLabs/TabPFN"
     }
   },
@@ -256,7 +256,7 @@
     "organization": null,
     "links": {
       "paper": "https://arxiv.org/abs/2602.11139",
-      "huggingface": null,
+      "huggingface": "https://huggingface.co/jingang/TabICL",
       "github": "https://github.com/soda-inria/tabicl"
     }
   },
@@ -265,7 +265,7 @@
     "organization": null,
     "links": {
       "paper": "https://arxiv.org/abs/2602.11139",
-      "huggingface": null,
+      "huggingface": "https://huggingface.co/jingang/TabICL",
       "github": "https://github.com/soda-inria/tabicl"
     }
   },
@@ -273,7 +273,7 @@
     "model_name": "tabldm_v1",
     "organization": "Xiaomi Research",
     "links": {
-      "paper": null,
+      "paper": "https://arxiv.org/abs/2609.03880",
       "huggingface": "https://huggingface.co/occams/Xiaomi-TabLDM",
       "github": "https://github.com/xiaomi-research/xiaomi-tabldm"
     }
@@ -282,8 +282,8 @@
     "model_name": "tabdptv1_3",
     "organization": "Layer6 AI",
     "links": {
-      "paper": null,
-      "huggingface": null,
+      "paper": "https://arxiv.org/abs/2410.18164",
+      "huggingface": "https://huggingface.co/Layer6/TabDPT",
       "github": "https://github.com/layer6ai-labs/TabDPT-inference"
     }
   },
@@ -293,16 +293,16 @@
     "links": {
       "paper": "https://arxiv.org/abs/2608.25774",
       "huggingface": "https://huggingface.co/LG-AI-Research/EXAONE-Tabular",
-      "github": null
+      "github": "https://github.com/LGAI-Research/EXAONE-Tabular"
     }
   },
   {
     "model_name": "limix2",
     "organization": "Stable AI",
     "links": {
-      "paper": null,
+      "paper": "https://arxiv.org/abs/2609.17488",
       "huggingface": "https://huggingface.co/stable-ai/LimiX-2",
-      "github": null
+      "github": "https://github.com/limix-ldm-ai/LimiX"
     }
   },
   {
@@ -310,7 +310,7 @@
     "organization": "AutoGluon",
     "links": {
       "paper": "https://arxiv.org/abs/2609.04540",
-      "huggingface": "https://huggingface.co/autogluon/mitra-classifier-2",
+      "huggingface": "https://huggingface.co/autogluon/mitra-finetune",
       "github": null
     }
   },
@@ -329,7 +329,7 @@
     "links": {
       "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/henrikbostrom/crepes"
     }
   },
   {
@@ -338,7 +338,7 @@
     "links": {
       "paper": "https://proceedings.mlr.press/v179/bostrom22a.html",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/henrikbostrom/crepes"
     }
   },
   {
@@ -381,18 +381,18 @@
     "model_name": "tabm_d",
     "organization": null,
     "links": {
-      "paper": "https://arxiv.org/abs/2407.04491",
+      "paper": "https://arxiv.org/abs/2410.24210",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/dholzmueller/pytabkit"
     }
   },
   {
     "model_name": "tabm_hpo_cv_8_tabarena",
     "organization": null,
     "links": {
-      "paper": "https://arxiv.org/abs/2407.04491",
+      "paper": "https://arxiv.org/abs/2410.24210",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/dholzmueller/pytabkit"
     }
   },
   {
@@ -401,7 +401,7 @@
     "links": {
       "paper": "https://arxiv.org/abs/2407.04491",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/dholzmueller/pytabkit"
     }
   },
   {
@@ -410,7 +410,7 @@
     "links": {
       "paper": "https://arxiv.org/abs/2407.04491",
       "huggingface": null,
-      "github": null
+      "github": "https://github.com/dholzmueller/pytabkit"
     }
   },
   {
@@ -489,7 +489,7 @@
     "model_name": "cde_MDN",
     "organization": "Conditional Density Estimation Contributors",
     "links": {
-      "paper": null,
+      "paper": "https://arxiv.org/abs/1903.00954",
       "huggingface": null,
       "github": "https://github.com/freelunchtheorem/Conditional_Density_Estimation"
     }
@@ -498,7 +498,7 @@
     "model_name": "cde_NF",
     "organization": "Conditional Density Estimation Contributors",
     "links": {
-      "paper": null,
+      "paper": "https://arxiv.org/abs/1903.00954",
       "huggingface": null,
       "github": "https://github.com/freelunchtheorem/Conditional_Density_Estimation"
     }
@@ -507,7 +507,7 @@
     "model_name": "flexcode_xgboost",
     "organization": "CMU Lee Group",
     "links": {
-      "paper": null,
+      "paper": "https://projecteuclid.org/euclid.ejs/1499133755",
       "huggingface": null,
       "github": "https://github.com/lee-group-cmu/FlexCode"
     }
@@ -516,7 +516,7 @@
     "model_name": "flexcode_randomforest",
     "organization": "CMU Lee Group",
     "links": {
-      "paper": null,
+      "paper": "https://projecteuclid.org/euclid.ejs/1499133755",
       "huggingface": null,
       "github": "https://github.com/lee-group-cmu/FlexCode"
     }
