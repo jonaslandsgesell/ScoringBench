@@ -24,7 +24,7 @@ from .base_sampler import BaseSampler
 class TabPFNSampler(BaseSampler):
     """Conditional sampler over TabPFN's native bar distribution."""
 
-    def __init__(self, device: str | None = None, **kwargs):
+    def __init__(self, device: str | None = None, model_version=None, **kwargs):
         import torch
 
         # Ensure the pip-installed tabpfn is used (mirrors the univariate wrapper).
@@ -37,7 +37,17 @@ class TabPFNSampler(BaseSampler):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self._device = device
-        self._model = TabPFNRegressor(device=self._device, **kwargs)
+        if model_version is not None:
+            # Resolve string aliases ("v3.5-fast") to the ModelVersion enum and
+            # build via the version factory (mirrors the univariate wrapper).
+            from tabpfn.constants import ModelVersion
+            if isinstance(model_version, str):
+                model_version = ModelVersion(model_version)
+            self._model = TabPFNRegressor.create_default_for_version(
+                model_version, device=self._device, **kwargs
+            )
+        else:
+            self._model = TabPFNRegressor(device=self._device, **kwargs)
         # Single-entry cache for the (expensive) TabPFN forward pass.  The bar
         # distribution depends only on the feature matrix X, but ``cdf`` /
         # ``quantile`` / ``sample`` / ``predict_mean`` all recompute it for the

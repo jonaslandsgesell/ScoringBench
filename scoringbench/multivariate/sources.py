@@ -7,9 +7,8 @@ Two are provided:
   standard 1-D regression dataset and promote the (d-1) features carrying the
   strongest conditional (residual) cross-target dependence into targets (see
   :mod:`scoringbench.multivariate.datasets`).
-* ``"synthetic"`` — **explicitly-constructed dependent targets**: draw
-  copula-coupled residuals with a fixed vine copula so a product-of-marginals
-  (independent) model fails *by construction* (see
+* ``"synthetic"`` — nonlinear means plus feature-independent residuals from
+    randomized simplified R-vines with standard-normal margins (see
   :mod:`scoringbench.multivariate.synthetic_targets`).
 
 Design (open-closed)

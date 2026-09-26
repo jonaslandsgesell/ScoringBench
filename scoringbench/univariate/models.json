@@ -282,7 +282,7 @@
     "model_name": "tabdptv1_3",
     "organization": "Layer6 AI",
     "links": {
-      "paper": "https://arxiv.org/abs/2410.18164",
+      "paper": "https://arxiv.org/pdf/2608.01400",
       "huggingface": "https://huggingface.co/Layer6/TabDPT",
       "github": "https://github.com/layer6ai-labs/TabDPT-inference"
     }

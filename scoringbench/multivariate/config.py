@@ -1,12 +1,13 @@
 """Benchmark-wide configuration for the multivariate ScoringBench.
 
-Mirrors ``scoringbench.univariate.config`` and adds two multivariate-specific
-knobs: ``TARGET_DIM`` (the target dimension ``d``) and ``N_DRAWS`` (the number
-of Monte-Carlo draws every model must produce per test instance).
+Shared evaluation and wrapper settings apply to both data sources. The
+source-specific sections configure Source 1 (``--source scoringbench``:
+real-data feature promotion) and Source 2 (``--source synthetic``: nonlinear
+conditional means with randomized R-vine residuals).
 """
 
 # ---------------------------------------------------------------------------
-# Shared CV constants (mirrors univariate)
+# Shared CV constants (both sources; mirrors univariate)
 # ---------------------------------------------------------------------------
 SEED = 42
 N_FOLDS = 5
@@ -14,11 +15,12 @@ N_REPEATS_CV = 1
 SAMPLE_SIZE = 3000
 
 # ---------------------------------------------------------------------------
-# Multivariate-specific constants
+# Shared multivariate settings (both sources)
 # ---------------------------------------------------------------------------
 
-# Target dimension d.  Source 1 datasets promote the (d-1) most-correlated
-# feature columns to targets, producing a d-dimensional target vector Y.
+# Target dimension d for both sources. Source 1 promotes (d-1) feature columns
+# alongside the original target. Source 2 samples a d-dimensional residual
+# vine independently of SYNTHETIC_N_FEATURES feature columns.
 # This value is echoed into the output folder name together with SAMPLE_SIZE
 # so different d / sample-size sweeps never overwrite each other.
 TARGET_DIM = 2
@@ -33,7 +35,7 @@ TARGET_DIM = 2
 N_DRAWS = 300
 
 # ---------------------------------------------------------------------------
-# Baseline-wrapper robustness knobs
+# Shared baseline-wrapper settings (both sources)
 # ---------------------------------------------------------------------------
 
 # Number of random chain permutations the *chained* baseline averages over.
@@ -50,7 +52,7 @@ CHAINED_N_ORDERS = 3
 COPULA_PIT_JITTER = 1e-4
 
 # ---------------------------------------------------------------------------
-# Feature-promotion residualizer (dataset construction)
+# Source 1: scoringbench (real-data feature promotion)
 # ---------------------------------------------------------------------------
 
 # When promoting feature columns to target dimensions we residualise each
@@ -89,59 +91,13 @@ RESIDUALIZER_LINEAR_FALLBACK_THRESHOLD = 50
 RESIDUALIZER_PRESCREENING_KEEP = 20  # overridden to max(20, 3*n_promote) if larger
 
 # ---------------------------------------------------------------------------
-# Synthetic source (Source 2: explicit copula-coupled dependent targets)
+# Source 2: synthetic (nonlinear means with randomized R-vine residuals)
 # ---------------------------------------------------------------------------
-# The synthetic source constructs a d-dimensional regression problem whose
-# targets share dependence a product-of-marginals (independent) model CANNOT
-# represent: each target is a smooth function of the features plus a residual,
-# and the residuals across targets are coupled by an EXPLICITLY-constructed vine
-# copula (pyvinecopulib). Because the copula acts on the residuals (i.e. the
-# conditional-on-X part), the dependence survives conditioning on X — exactly
-# the structure copula / chained models can recover but independent models miss.
-
-# Number of feature columns X in a synthetic dataset. Must be >= 1 so models
-# always get a non-empty design matrix.
-SYNTHETIC_N_FEATURES = 5
-
-# Std-dev of the (copula-coupled) residual added to each target's conditional
-# mean f_k(X). Sets the signal-to-noise ratio: the copula dependence lives
-# entirely in this residual block, so a larger scale makes the multivariate
-# structure DOMINATE the X-explained mean. This is deliberately large relative
-# to SYNTHETIC_MEAN_SCALE so that a model which ignores the cross-target
-# dependence (an independent / product-of-marginals model) is badly
-# misspecified: the bulk of the joint's information lives in the residual
-# copula it cannot represent.
-SYNTHETIC_NOISE_SCALE = 3.0
-
-# Amplitude of the smooth conditional mean f_k(X) = mean_scale * tanh(X @ W).
-# Kept small relative to SYNTHETIC_NOISE_SCALE so the dependence (not the mean)
-# is the dominant source of variance -> independence fails hard.
-SYNTHETIC_MEAN_SCALE = 0.3
-
-# Kendall's tau of the pairwise copulas used to couple the residuals. Higher =
-# stronger residual dependence = larger independent-vs-copula score gap.
-# Two near-comonotone strengths are enumerated; even the weaker one (0.7) leaves
-# an independent model far behind, while 0.9 is near-deterministic coupling.
-SYNTHETIC_TAUS = (0.7, 0.9)
-
-# Copula families enumerated (one vine per family; all pair-copulas in a vine
-# share the family and the tau above). Names must be pyvinecopulib BicopFamily
-# members. Asymmetric families (clayton/gumbel/joe) give tail dependence that
-# Gaussian-copula fits cannot fully capture, further separating the models.
-SYNTHETIC_FAMILIES = ("gaussian", "clayton", "gumbel", "frank")
-
-# Total number of synthetic datasets generated per (target_dim, sample_size)
-# shape. The 4 families x 2 taus = 8 cells are populated with independently
-# seeded REPLICATES; this many datasets are distributed across the 8 cells as
-# evenly as possible (cells differ by at most one replicate). Each replicate is
-# a distinct random DGP instance, so more datasets = tighter leaderboard error
-# bars and broader coverage of the copula families / dependence strengths.
+SYNTHETIC_N_FEATURES = 20
+SYNTHETIC_DEPENDENCE_TYPES = ("tail", "no_tail", "mixed")
+# Keep only the strong regime in the benchmark suite.
+SYNTHETIC_DEPENDENCE_STRENGTHS = ("strong",)
+SYNTHETIC_DECAY = 0.8
+SYNTHETIC_TAU_UPPER = 1.0
 SYNTHETIC_N_DATASETS = 100
-
-# Root directory holding the FROZEN synthetic artifacts (committed). Artifacts
-# are scoped by shape into per-(d, n) subfolders ``datasets/synthetic/d{d}_n{n}/``
-# (each with its own manifest.json). Loading reads those exact bytes so results
-# are reproducible across numpy / pyvinecopulib versions and NEVER regenerates on
-# the fly — a missing shape raises FileNotFoundError pointing at the generator.
-# Relative to the multivariate package's parent (the repo's scoringbench/..).
 SYNTHETIC_DATA_SUBDIR = "datasets/synthetic"

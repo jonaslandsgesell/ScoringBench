@@ -49,8 +49,8 @@ def parse_args():
     p.add_argument(
         "--source", default="scoringbench", choices=sorted(SOURCES),
         help="Dataset source: 'scoringbench' (feature promotion from real "
-             "regression datasets) or 'synthetic' (explicit copula-coupled "
-             "dependent targets). Default: scoringbench.",
+               "regression datasets) or 'synthetic' (joint random-vine "
+               "features and targets). Default: scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,
