@@ -21,7 +21,6 @@ from sklearn.model_selection import KFold
 
 from . import config as cfg
 from .cv import run_fold
-from .datasets import load_multivariate_dataset
 from .results import build_results_rows, save_fold_parquet
 
 
@@ -43,7 +42,7 @@ def run_benchmark(
     seed: int = cfg.SEED,
     sample_size: int = cfg.SAMPLE_SIZE,
     target_dim: int = int(cfg.TARGET_DIM),
-    load_fn: Callable[..., tuple[pd.DataFrame, pd.DataFrame]] = load_multivariate_dataset,
+    load_fn: Callable[..., tuple[pd.DataFrame, pd.DataFrame]],
 ) -> pd.DataFrame:
     """Iterate over datasets, run CV for each, persist results.
 
@@ -52,10 +51,9 @@ def run_benchmark(
 
     ``load_fn`` is the source-specific loader used to turn each ``ds_config``
     into ``(X, Y)``; it must accept ``(ds_config, target_dim=...)`` and may
-    raise ``ValueError`` to signal "skip this dataset". It defaults to the
-    Source-1 feature-promotion loader so existing callers are unaffected; the
-    synthetic source injects its own loader (see ``sources.py``). This is the
-    single seam that keeps the runner source-agnostic (open-closed).
+    raise ``ValueError`` to signal "skip this dataset". Each source injects its
+    own loader (see ``sources.py``). This is the single seam that keeps the
+    runner source-agnostic (open-closed).
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

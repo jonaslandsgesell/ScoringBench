@@ -33,13 +33,12 @@
 
 # Hardcoded run configuration
 SAMPLE_SIZE="1000"        # "3000" is original
-TARGET_DIM="3"            # target dimension d (promotes d-1 correlated features)
+TARGET_DIM="3"            # target dimension d (number of jointly-modelled targets)
 # dataset source:
-#   "scoringbench"        — real 1-D datasets, (d-1) correlated features promoted to targets
 #   "synthetic"           — copula-coupled residuals (independence fails by construction)
 #   "native_scoringbench" — real jointly-measured multi-target OpenML datasets
 #                           (targets taken straight from multivariate_datasets.json)
-SOURCE="native_scoringbench" #"scoringbench"
+SOURCE="native_scoringbench" #"synthetic"
 
 # Output dir mirrors the runner's default naming so sweeps never collide.
 OUTPUT_DIR="./output_multivariate_${SOURCE}_d${TARGET_DIM}_n${SAMPLE_SIZE}"

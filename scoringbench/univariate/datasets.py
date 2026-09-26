@@ -26,8 +26,7 @@ CACHE_DIR = Path.home() / '.cache' / 'scoringbench' / 'datasets'
 # Permanently skipped datasets (OpenML dataset ids)
 # ---------------------------------------------------------------------------
 # Datasets listed here are dropped from DATASETS_CONFIG unconditionally, so
-# they never reach the univariate runner nor the multivariate runner (which
-# reuses this same config via scoringbench.multivariate.datasets).
+# they never reach the univariate runner.
 #
 # 42572 Santander_transaction_value: ~4.5k rows x 4991 mostly-sparse/constant
 #   columns. RealMLP (TabArena HPO) hangs indefinitely on it, and several other

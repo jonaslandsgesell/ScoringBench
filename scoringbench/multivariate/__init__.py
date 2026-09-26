@@ -7,13 +7,12 @@ Design invariants for everything here:
   density, no regridding — ever.
 - **No cross-talk with univariate model code.** Wrappers/metrics/estimators are
   built directly on the base libraries (``tabpfn``, ``tabicl``). Only the raw
-  *dataset loading* plumbing is reused (see ``datasets.py``).
+  *dataset loading* plumbing is reused (see ``native_scoringbench.py``).
 """
 
 from . import (
     config,
     cv,
-    datasets,
     estimators,
     metrics,
     models,
@@ -27,7 +26,6 @@ from . import (
 __all__ = [
     "config",
     "cv",
-    "datasets",
     "estimators",
     "metrics",
     "models",

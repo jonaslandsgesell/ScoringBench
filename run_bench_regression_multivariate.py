@@ -47,10 +47,10 @@ def parse_args():
         help="2-fold CV — quick smoke test over all datasets",
     )
     p.add_argument(
-        "--source", default="scoringbench", choices=sorted(SOURCES),
-        help="Dataset source: 'scoringbench' (feature promotion from real "
-               "regression datasets) or 'synthetic' (joint random-vine "
-               "features and targets). Default: scoringbench.",
+        "--source", default="native_scoringbench", choices=sorted(SOURCES),
+        help="Dataset source: 'native_scoringbench' (curated real jointly-"
+               "measured multi-target OpenML datasets) or 'synthetic' (joint "
+               "random-vine features and targets). Default: native_scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,
@@ -60,7 +60,7 @@ def parse_args():
     p.add_argument("--seed",          type=int, default=cfg.SEED)
     p.add_argument("--sample_size",   type=int, default=cfg.SAMPLE_SIZE)
     p.add_argument("--target_dim",    type=int, default=cfg.TARGET_DIM,
-                   help="Target dimension d (promotes d-1 correlated features to targets)")
+                   help="Target dimension d (number of jointly-modelled targets)")
     p.add_argument("--n_repeats_cv",  type=int, default=cfg.N_REPEATS_CV,
                    help="Number of repeated CV rounds (each uses a fresh resample)")
     p.add_argument(
