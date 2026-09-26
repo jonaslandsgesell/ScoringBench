@@ -10,6 +10,13 @@ Two are provided:
 * ``"synthetic"`` — nonlinear means plus feature-independent residuals from
     randomized simplified R-vines with standard-normal margins (see
   :mod:`scoringbench.multivariate.synthetic_targets`).
+* ``"multivariate_scoringbench"`` — **real jointly-measured targets**: curated
+  OpenML datasets that were uploaded as multi-target regression and that a
+  measured chained-vs-independent screen shows actually need the joint model
+  (see :mod:`scoringbench.multivariate.multivariate_scoringbench`). Unlike the
+  two above, nothing here is constructed — the dependence is whatever the world
+  put in the data. The dataset list ships in ``datasets.json`` next to that
+  module.
 
 Design (open-closed)
 --------------------
@@ -86,6 +93,17 @@ def _build_sources() -> dict[str, Source]:
         name="synthetic",
         enumerate_datasets=_syn.enumerate_synthetic,
         load=_syn.load_synthetic,
+    )
+
+    # Imported here (not at module scope) so importing this registry never
+    # hard-requires the ``openml`` client; only enumerating/loading this source
+    # touches the network, and an absent manifest simply enumerates nothing.
+    from . import multivariate_scoringbench as _mvsb
+
+    sources[_mvsb.SOURCE_NAME] = Source(
+        name=_mvsb.SOURCE_NAME,
+        enumerate_datasets=_mvsb.enumerate_multivariate_scoringbench,
+        load=_mvsb.load_multivariate_scoringbench,
     )
     return sources
 

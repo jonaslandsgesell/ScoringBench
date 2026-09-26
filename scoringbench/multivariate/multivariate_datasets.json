@@ -1,0 +1,1354 @@
+{
+ "schema": 1,
+ "n_datasets": 79,
+ "how_built": "curated real multi-target OpenML datasets",
+ "require_stage2": false,
+ "datasets": [
+  {
+   "openml_id": 8,
+   "name": "liver-disorders",
+   "n_rows": 345,
+   "target_cols": [
+    "sgpt",
+    "gammagt"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 503,
+   "name": "wind",
+   "n_rows": 6574,
+   "target_cols": [
+    "CLA",
+    "CLO",
+    "KIL",
+    "SHA",
+    "BIR",
+    "MUL",
+    "RPT",
+    "VAL",
+    "ROS",
+    "DUB",
+    "BEL",
+    "MAL"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 516,
+   "name": "pbcseq",
+   "n_rows": 1945,
+   "target_cols": [
+    "serum_bilirubin",
+    "alkaline_phosphatase",
+    "serum_cholesterol",
+    "albumin",
+    "SGOT",
+    "prothrombin_time"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "case_number",
+    "status"
+   ]
+  },
+  {
+   "openml_id": 565,
+   "name": "water-treatment",
+   "n_rows": 527,
+   "target_cols": [
+    "SSV-E",
+    "SSV-P",
+    "SSV-D",
+    "SED-E",
+    "SED-P",
+    "SSV-S"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 1168,
+   "name": "electricity_prices_ICON",
+   "n_rows": 38014,
+   "target_cols": [
+    "SystemLoadEP2",
+    "CO2Intensity",
+    "ActualWindProduction",
+    "SMPEP2"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "SMPEA",
+    "SystemLoadEA",
+    "ForecastWindProduction",
+    "Holiday"
+   ]
+  },
+  {
+   "openml_id": 4532,
+   "name": "higgs",
+   "n_rows": 98050,
+   "target_cols": [
+    "m_jj",
+    "m_jjj",
+    "m_lv",
+    "m_jlv",
+    "m_bb",
+    "m_wbb"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 4563,
+   "name": "SpokenArabicDigit",
+   "n_rows": 178526,
+   "target_cols": [
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V1",
+    "V2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 23515,
+   "name": "sulfur",
+   "n_rows": 10081,
+   "target_cols": [
+    "y1",
+    "y2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 23516,
+   "name": "debutanizer",
+   "n_rows": 2394,
+   "target_cols": [
+    "u2",
+    "u3",
+    "u1",
+    "u4",
+    "u5",
+    "u6"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 40976,
+   "name": "Bike",
+   "n_rows": 4435,
+   "target_cols": [
+    "Power(watts)",
+    "Speed(m/s)",
+    "Heartrate(BPM)",
+    "Cadaence(revs/s)"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41022,
+   "name": "Short_Track_Speed_Skating",
+   "n_rows": 5125,
+   "target_cols": [
+    "time_lap4",
+    "time_lap5",
+    "time_lap3",
+    "time_lap1",
+    "time_lap2"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Time",
+    "Num_Skater"
+   ]
+  },
+  {
+   "openml_id": 41091,
+   "name": "spellman_yeast",
+   "n_rows": 6178,
+   "target_cols": [
+    "cdc15_30",
+    "cdc15_50",
+    "cdc15_10",
+    "cdc15_70",
+    "cdc15_90"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41465,
+   "name": "emotions",
+   "n_rows": 593,
+   "target_cols": [
+    "BH_LowPeakBPM",
+    "BH_HighPeakBPM",
+    "BH_LowPeakAmp",
+    "BH_HighPeakAmp"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Mean_Acc1298_Mean_Mem40_Centroid",
+    "Mean_Acc1298_Mean_Mem40_Flux",
+    "Mean_Acc1298_Mean_Mem40_MFCC_0",
+    "Mean_Acc1298_Mean_Mem40_MFCC_1",
+    "Mean_Acc1298_Mean_Mem40_MFCC_10",
+    "Mean_Acc1298_Mean_Mem40_MFCC_11",
+    "Mean_Acc1298_Mean_Mem40_MFCC_12",
+    "Mean_Acc1298_Mean_Mem40_MFCC_2"
+   ]
+  },
+  {
+   "openml_id": 41474,
+   "name": "andro",
+   "n_rows": 49,
+   "target_cols": [
+    "Target_3",
+    "Target_4",
+    "Target",
+    "Target_2",
+    "Target_5",
+    "Target_6"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41475,
+   "name": "atp1d",
+   "n_rows": 337,
+   "target_cols": [
+    "LBL_aCOminpA_fut_001",
+    "LBL_aUAminpA_fut_001",
+    "LBL_ALLminpA_fut_001",
+    "LBL_aDLminpA_fut_001",
+    "LBL_aFLminpA_fut_001",
+    "LBL_ALLminp0_fut_001"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41476,
+   "name": "atp7d",
+   "n_rows": 296,
+   "target_cols": [
+    "LBL_aCOminpA_bt7d_000",
+    "LBL_aUAminpA_bt7d_000",
+    "LBL_ALLminpA_bt7d_000",
+    "LBL_aDLminpA_bt7d_000",
+    "LBL_aFLminpA_bt7d_000",
+    "LBL_ALLminp0_bt7d_000"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41482,
+   "name": "osales",
+   "n_rows": 639,
+   "target_cols": [
+    "Outcome_M4",
+    "Outcome_M5",
+    "Outcome_M2",
+    "Outcome_M3",
+    "Outcome_M1"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41483,
+   "name": "rf1",
+   "n_rows": 9125,
+   "target_cols": [
+    "CHSI2_48H__0",
+    "EADM7_48H__0",
+    "CLKM7_48H__0",
+    "DLDI4_48H__0",
+    "NASI2_48H__0",
+    "SCLM7_48H__0",
+    "VALI2_48H__0",
+    "NAPM7_48H__0"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41484,
+   "name": "rf2",
+   "n_rows": 9125,
+   "target_cols": [
+    "CHSI2_48H__0",
+    "EADM7_48H__0",
+    "NASI2_48H__0",
+    "SCLM7_48H__0",
+    "CLKM7_48H__0",
+    "VALI2_48H__0",
+    "NAPM7_48H__0",
+    "DLDI4_48H__0"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41485,
+   "name": "scm1d",
+   "n_rows": 9803,
+   "target_cols": [
+    "MTLp7",
+    "MTLp8",
+    "LBL",
+    "MTLp2",
+    "MTLp9",
+    "MTLp10",
+    "MTLp15",
+    "MTLp16",
+    "MTLp3",
+    "MTLp4",
+    "MTLp5",
+    "MTLp6",
+    "MTLp11",
+    "MTLp12",
+    "MTLp13",
+    "MTLp14"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41486,
+   "name": "scm20d",
+   "n_rows": 8966,
+   "target_cols": [
+    "MTLp7A",
+    "MTLp8A",
+    "LBL",
+    "MTLp2A",
+    "MTLp3A",
+    "MTLp4A",
+    "MTLp15A",
+    "MTLp16A",
+    "MTLp5A",
+    "MTLp6A",
+    "MTLp9A",
+    "MTLp10A",
+    "MTLp11A",
+    "MTLp12A",
+    "MTLp13A",
+    "MTLp14A"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41490,
+   "name": "slump",
+   "n_rows": 103,
+   "target_cols": [
+    "FLOW_cm",
+    "Compressive_Strength_Mpa",
+    "SLUMP_cm"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41491,
+   "name": "wq",
+   "n_rows": 1060,
+   "target_cols": [
+    "conduct",
+    "hardness",
+    "cl",
+    "kmno4",
+    "bod",
+    "std_temp",
+    "o2",
+    "no2",
+    "no3",
+    "nh4",
+    "po4",
+    "sio2"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "o2sat",
+    "k2cr2o7"
+   ]
+  },
+  {
+   "openml_id": 41492,
+   "name": "youtube",
+   "n_rows": 404,
+   "target_cols": [
+    "Agr",
+    "Emot",
+    "Extr",
+    "Cons",
+    "Open"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41545,
+   "name": "emotions",
+   "n_rows": 593,
+   "target_cols": [
+    "BHSUM2",
+    "BHSUM3",
+    "BHSUM1"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Mean_Acc1298_Mean_Mem40_Centroid",
+    "Mean_Acc1298_Mean_Mem40_Flux",
+    "Mean_Acc1298_Mean_Mem40_MFCC_0",
+    "Mean_Acc1298_Mean_Mem40_MFCC_1",
+    "Mean_Acc1298_Mean_Mem40_MFCC_10",
+    "Mean_Acc1298_Mean_Mem40_MFCC_11",
+    "Mean_Acc1298_Mean_Mem40_MFCC_12",
+    "Mean_Acc1298_Mean_Mem40_MFCC_2"
+   ]
+  },
+  {
+   "openml_id": 42079,
+   "name": "house_sales",
+   "n_rows": 21613,
+   "target_cols": [
+    "sqft_lot",
+    "sqft_lot15",
+    "sqft_living",
+    "sqft_above",
+    "sqft_living15"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42105,
+   "name": "default_credit_card_p",
+   "n_rows": 30000,
+   "target_cols": [
+    "BILL_AMT5",
+    "BILL_AMT6",
+    "BILL_AMT1",
+    "BILL_AMT2",
+    "BILL_AMT3",
+    "BILL_AMT4"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "ID",
+    "_dmIndex_",
+    "_PartInd_",
+    "PAY_AMT1",
+    "PAY_AMT2",
+    "PAY_AMT3",
+    "PAY_AMT4",
+    "PAY_AMT5",
+    "PAY_AMT6"
+   ]
+  },
+  {
+   "openml_id": 42165,
+   "name": "house_prices",
+   "n_rows": 1460,
+   "target_cols": [
+    "SalePrice",
+    "GrLivArea",
+    "LotArea",
+    "GarageArea"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "TotalBsmtSF",
+    "1stFlrSF",
+    "2ndFlrSF"
+   ]
+  },
+  {
+   "openml_id": 42333,
+   "name": "SoilHydroDB",
+   "n_rows": 155649,
+   "target_cols": [
+    "w6clod",
+    "w10cld",
+    "w3cld",
+    "w15l2",
+    "db_od"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "sand_tot_psa",
+    "hzn_depth",
+    "wrd_ws13",
+    "w15bfm",
+    "ph_kcl"
+   ]
+  },
+  {
+   "openml_id": 42367,
+   "name": "treasury",
+   "n_rows": 1049,
+   "target_cols": [
+    "1MonthCDRate",
+    "30Y-CMortgageRate",
+    "1Y-CMaturityRate",
+    "3Y-CMaturityRate",
+    "5Y-CMaturityRate"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "3M-Rate-SecondaryMarket"
+   ]
+  },
+  {
+   "openml_id": 42368,
+   "name": "weather_ankara",
+   "n_rows": 321,
+   "target_cols": [
+    "Min_temperature",
+    "Dewpoint",
+    "Max_temperature"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Mean_temperature",
+    "Max_wind_speed"
+   ]
+  },
+  {
+   "openml_id": 42369,
+   "name": "weather_izmir",
+   "n_rows": 1461,
+   "target_cols": [
+    "Min_temperature",
+    "Dewpoint",
+    "Max_temperature",
+    "Visibility"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Mean_temperature",
+    "Max_wind_speed"
+   ]
+  },
+  {
+   "openml_id": 42454,
+   "name": "mlr_knn_rng",
+   "n_rows": 111753,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42455,
+   "name": "mlr_glmnet_rng",
+   "n_rows": 104820,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42495,
+   "name": "delays_zurich_transport",
+   "n_rows": 27327,
+   "target_cols": [
+    "temp",
+    "dew_point",
+    "delay"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42635,
+   "name": "house_sales_reduced",
+   "n_rows": 21613,
+   "target_cols": [
+    "sqft_living",
+    "sqft_living15",
+    "sqft_lot",
+    "sqft_above"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "id"
+   ]
+  },
+  {
+   "openml_id": 42723,
+   "name": "colleges",
+   "n_rows": 7063,
+   "target_cols": [
+    "percent_white",
+    "percent_black",
+    "percent_hispanic",
+    "percent_asian",
+    "percent_female"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "act_combined_midrange",
+    "average_cost_academic_year",
+    "average_cost_program_year",
+    "mean_earnings_10_years",
+    "mean_earnings_6_years",
+    "sat_total_average"
+   ]
+  },
+  {
+   "openml_id": 42821,
+   "name": "NASA_PHM2008",
+   "n_rows": 45918,
+   "target_cols": [
+    "sensor_8",
+    "sensor_13",
+    "sensor_4",
+    "sensor_9",
+    "sensor_11",
+    "sensor_14",
+    "sensor_15",
+    "sensor_2",
+    "sensor_3",
+    "sensor_7",
+    "sensor_12",
+    "sensor_20",
+    "sensor_21"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "sensor_1",
+    "sensor_5",
+    "sensor_6",
+    "sensor_10",
+    "sensor_16",
+    "sensor_17",
+    "sensor_18",
+    "sensor_19"
+   ]
+  },
+  {
+   "openml_id": 42897,
+   "name": "bias-correction",
+   "n_rows": 7752,
+   "target_cols": [
+    "Next_Tmin",
+    "Present_Tmin",
+    "Next_Tmax",
+    "Present_Tmax"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Date"
+   ]
+  },
+  {
+   "openml_id": 42910,
+   "name": "cargo-2000",
+   "n_rows": 3943,
+   "target_cols": [
+    "i1_dep_1_e",
+    "i1_rcs_e",
+    "i1_rcf_1_e",
+    "i1_dlv_e"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "nr"
+   ]
+  },
+  {
+   "openml_id": 43505,
+   "name": "WHO-national-life-expectancy",
+   "n_rows": 3111,
+   "target_cols": [
+    "une_infant",
+    "une_life",
+    "une_pop",
+    "une_hiv",
+    "une_gni",
+    "une_poverty"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43602,
+   "name": "FEER-Dataset",
+   "n_rows": 190967,
+   "target_cols": [
+    "P_e2",
+    "P_e4",
+    "P_e1",
+    "P_e3",
+    "P_m1",
+    "P_m2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43653,
+   "name": "NBA-PLAYERS--2016-2019",
+   "n_rows": 1408,
+   "target_cols": [
+    "FGA",
+    "X2PA",
+    "MP"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43764,
+   "name": "Data-on-COVID-19-(coronavirus)",
+   "n_rows": 170646,
+   "target_cols": [
+    "new_deaths",
+    "new_tests",
+    "new_cases",
+    "new_vaccinations"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "excess_mortality_cumulative",
+    "excess_mortality_cumulative_absolute",
+    "excess_mortality_cumulative_per_million",
+    "total_boosters",
+    "total_boosters_per_hundred",
+    "total_cases",
+    "total_cases_per_million",
+    "total_deaths"
+   ]
+  },
+  {
+   "openml_id": 43822,
+   "name": "Perth-House-Prices",
+   "n_rows": 33656,
+   "target_cols": [
+    "NEAREST_SCH_DIST",
+    "NEAREST_STN_DIST",
+    "PRICE",
+    "FLOOR_AREA",
+    "LAND_AREA",
+    "CBD_DIST"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43843,
+   "name": "Eighty-years-of-Canadian-climate-data",
+   "n_rows": 29221,
+   "target_cols": [
+    "MEAN_TEMPERATURE_MONTREAL",
+    "MEAN_TEMPERATURE_OTTAWA",
+    "MEAN_TEMPERATURE_HALIFAX",
+    "MEAN_TEMPERATURE_MONCTON",
+    "MEAN_TEMPERATURE_QUEBEC",
+    "MEAN_TEMPERATURE_CALGARY",
+    "MEAN_TEMPERATURE_EDMONTON",
+    "MEAN_TEMPERATURE_SASKATOON",
+    "MEAN_TEMPERATURE_STJOHNS",
+    "MEAN_TEMPERATURE_TORONTO",
+    "MEAN_TEMPERATURE_VANCOUVER",
+    "MEAN_TEMPERATURE_WHITEHORSE",
+    "MEAN_TEMPERATURE_WINNIPEG"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "LOCAL_DATE"
+   ]
+  },
+  {
+   "openml_id": 43855,
+   "name": "SportsCars",
+   "n_rows": 475,
+   "target_cols": [
+    "max_power",
+    "max_torque"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43873,
+   "name": "sarcos",
+   "n_rows": 44484,
+   "target_cols": [
+    "V4",
+    "V6",
+    "V1",
+    "V5",
+    "V2",
+    "V3"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43927,
+   "name": "avocado_sales",
+   "n_rows": 18249,
+   "target_cols": [
+    "4046",
+    "4225",
+    "4770"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Total Volume",
+    "Total Bags",
+    "Small Bags",
+    "Large Bags",
+    "XLarge Bags"
+   ]
+  },
+  {
+   "openml_id": 44006,
+   "name": "superconduct",
+   "n_rows": 21263,
+   "target_cols": [
+    "entropy_fie",
+    "entropy_Valence",
+    "entropy_Density",
+    "entropy_ElectronAffinity",
+    "entropy_FusionHeat",
+    "entropy_ThermalConductivity"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_Density",
+    "mean_ElectronAffinity",
+    "mean_FusionHeat",
+    "mean_ThermalConductivity",
+    "mean_Valence",
+    "mean_atomic_mass",
+    "mean_atomic_radius",
+    "mean_fie"
+   ]
+  },
+  {
+   "openml_id": 44023,
+   "name": "superconduct",
+   "n_rows": 21263,
+   "target_cols": [
+    "wtd_entropy_fie",
+    "wtd_entropy_Valence",
+    "wtd_entropy_Density",
+    "wtd_entropy_FusionHeat",
+    "wtd_entropy_ElectronAffinity",
+    "wtd_entropy_ThermalConductivity"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_Density",
+    "mean_ElectronAffinity",
+    "mean_FusionHeat",
+    "mean_ThermalConductivity",
+    "mean_Valence",
+    "mean_atomic_mass",
+    "mean_atomic_radius",
+    "mean_fie"
+   ]
+  },
+  {
+   "openml_id": 44039,
+   "name": "yprop_4_1",
+   "n_rows": 8885,
+   "target_cols": [
+    "oz1",
+    "oz4",
+    "oz2",
+    "oz3"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 44144,
+   "name": "house_sales",
+   "n_rows": 21613,
+   "target_cols": [
+    "sqft_lot",
+    "sqft_lot15",
+    "price",
+    "sqft_living",
+    "sqft_living15"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 44231,
+   "name": "mobile_churn",
+   "n_rows": 66469,
+   "target_cols": [
+    "user_lifetime",
+    "user_spendings"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "calls_outgoing_count",
+    "calls_outgoing_to_abroad_count",
+    "calls_outgoing_to_offnet_count",
+    "calls_outgoing_to_onnet_count",
+    "gprs_session_count",
+    "last_100_reloads_count",
+    "last_100_reloads_sum",
+    "last_100_sms_outgoing_count"
+   ]
+  },
+  {
+   "openml_id": 44964,
+   "name": "superconductivity",
+   "n_rows": 21263,
+   "target_cols": [
+    "gmean_FusionHeat",
+    "gmean_ThermalConductivity",
+    "gmean_fie",
+    "gmean_Density",
+    "gmean_ElectronAffinity",
+    "gmean_Valence"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_Density",
+    "mean_ElectronAffinity",
+    "mean_FusionHeat",
+    "mean_ThermalConductivity",
+    "mean_Valence",
+    "mean_atomic_mass",
+    "mean_atomic_radius",
+    "mean_fie"
+   ]
+  },
+  {
+   "openml_id": 45013,
+   "name": "jannis",
+   "n_rows": 57580,
+   "target_cols": [
+    "V2",
+    "V6",
+    "V1",
+    "V3",
+    "V4",
+    "V5"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45018,
+   "name": "electricity",
+   "n_rows": 38474,
+   "target_cols": [
+    "nswdemand",
+    "vicdemand",
+    "transfer",
+    "nswprice",
+    "vicprice"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "class"
+   ]
+  },
+  {
+   "openml_id": 45029,
+   "name": "cpu_act",
+   "n_rows": 8192,
+   "target_cols": [
+    "lread",
+    "lwrite",
+    "sread",
+    "swrite",
+    "scall",
+    "fork",
+    "exec",
+    "rchar",
+    "wchar"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "pgout",
+    "ppgout"
+   ]
+  },
+  {
+   "openml_id": 45078,
+   "name": "nomao",
+   "n_rows": 34465,
+   "target_cols": [
+    "V3",
+    "V4",
+    "V2",
+    "V6",
+    "V5"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45536,
+   "name": "Contaminant-detection-in-packaged-cocoa-hazelnut-spread-jars-using-Microwaves-Sensing-and-Machine-Learning-9.0GHz(Urbinati)",
+   "n_rows": 2400,
+   "target_cols": [
+    "s13",
+    "s21",
+    "s12",
+    "s14",
+    "s15",
+    "s16"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45950,
+   "name": "Heart_Failure_Prediction",
+   "n_rows": 5000,
+   "target_cols": [
+    "serum_creatinine",
+    "platelets",
+    "creatinine_phosphokinase"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "DEATH_EVENT"
+   ]
+  },
+  {
+   "openml_id": 46123,
+   "name": "Pedestrian-Counting-System-Melbourne",
+   "n_rows": 132209,
+   "target_cols": [
+    "Flinders Ln - Degraves St (North)",
+    "Flinders Ln - Degraves St (Crossing)",
+    "Flinders Ln - Degraves St (South)"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46211,
+   "name": "ETTm1",
+   "n_rows": 69680,
+   "target_cols": [
+    "value_0",
+    "value_2",
+    "value_1",
+    "value_3",
+    "value_5",
+    "value_4"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46241,
+   "name": "Pedestrian-Counting-System-Melbourne-preprocessed",
+   "n_rows": 43824,
+   "target_cols": [
+    "value_0",
+    "value_3",
+    "value_1",
+    "value_2",
+    "value_4",
+    "value_5"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46244,
+   "name": "Rideshare",
+   "n_rows": 77904,
+   "target_cols": [
+    "value_3",
+    "value_4",
+    "value_2",
+    "value_1",
+    "value_5"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46263,
+   "name": "weather_and_campsite_germany",
+   "n_rows": 4255,
+   "target_cols": [
+    "mean_evapo_p",
+    "mean_evapo_r",
+    "mean_air_temp_max",
+    "mean_air_temp_min",
+    "mean_drought_index"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_air_temp_mean"
+   ]
+  },
+  {
+   "openml_id": 46265,
+   "name": "mabbob_ela_as_2d_regression_DiagonalCMA",
+   "n_rows": 1120,
+   "target_cols": [
+    "disp.ratio_median_02",
+    "disp.ratio_median_05",
+    "disp.ratio_median_10",
+    "disp.ratio_median_25"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "disp.diff_median_02",
+    "disp.diff_median_05",
+    "disp.diff_median_10",
+    "disp.diff_median_25",
+    "disp.ratio_mean_02",
+    "disp.ratio_mean_05",
+    "disp.ratio_mean_10",
+    "disp.ratio_mean_25"
+   ]
+  },
+  {
+   "openml_id": 46271,
+   "name": "mabbob_ela_as_5d_regression_DiagonalCMA",
+   "n_rows": 1120,
+   "target_cols": [
+    "ela_level.lda_qda_25",
+    "ela_level.lda_qda_50",
+    "ela_level.lda_qda_10"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "disp.diff_mean_02",
+    "disp.diff_mean_05",
+    "disp.diff_mean_10",
+    "disp.diff_mean_25",
+    "disp.ratio_mean_02",
+    "disp.ratio_mean_05",
+    "disp.ratio_mean_10",
+    "disp.ratio_mean_25"
+   ]
+  },
+  {
+   "openml_id": 46283,
+   "name": "appliances_energy_prediction",
+   "n_rows": 19735,
+   "target_cols": [
+    "RH_7",
+    "RH_8",
+    "RH_1",
+    "RH_3",
+    "RH_4",
+    "RH_2",
+    "RH_5",
+    "RH_6",
+    "RH_9"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "rv1",
+    "rv2"
+   ]
+  },
+  {
+   "openml_id": 46313,
+   "name": "data",
+   "n_rows": 145460,
+   "target_cols": [
+    "Pressure9am",
+    "Pressure3pm",
+    "MinTemp",
+    "MaxTemp",
+    "Humidity9am",
+    "Humidity3pm",
+    "WindSpeed9am",
+    "WindSpeed3pm"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Temp9am",
+    "Temp3pm",
+    "RainTomorrow"
+   ]
+  },
+  {
+   "openml_id": 46337,
+   "name": "Conso_RTE",
+   "n_rows": 105168,
+   "target_cols": [
+    "temp",
+    "tempMin",
+    "Load",
+    "tempMax",
+    "wind"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "temp_liss_faible",
+    "temp_liss_fort",
+    "Unnamed: 0"
+   ]
+  },
+  {
+   "openml_id": 46621,
+   "name": "Wheat",
+   "n_rows": 859,
+   "target_cols": [
+    "Bread_L",
+    "Water_abs",
+    "Bread_b",
+    "Loaf_volume",
+    "Protein"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Bread_L.b",
+    "Bread_score",
+    "Unnamed: 0",
+    "Plot"
+   ]
+  },
+  {
+   "openml_id": 46748,
+   "name": "coffee_distribution_across_94_counties",
+   "n_rows": 6016,
+   "target_cols": [
+    "Domestic Consumption",
+    "Exports"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Production",
+    "Total Distribution",
+    "Ending Stocks",
+    "Beginning Stocks"
+   ]
+  },
+  {
+   "openml_id": 46903,
+   "name": "abalone",
+   "n_rows": 4176,
+   "target_cols": [
+    "Diameter",
+    "Shucked_weight",
+    "Length",
+    "Shell_weight",
+    "Height",
+    "Viscera_weight"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Whole_weight"
+   ]
+  },
+  {
+   "openml_id": 46928,
+   "name": "Food_Delivery_Time",
+   "n_rows": 45451,
+   "target_cols": [
+    "Restaurant_latitude",
+    "Restaurant_longitude"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46961,
+   "name": "superconductivity",
+   "n_rows": 21263,
+   "target_cols": [
+    "wtd_gmean_fie",
+    "wtd_gmean_Density",
+    "wtd_gmean_ThermalConductivity",
+    "wtd_gmean_ElectronAffinity",
+    "wtd_gmean_FusionHeat",
+    "wtd_gmean_Valence"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_Density",
+    "mean_ElectronAffinity",
+    "mean_FusionHeat",
+    "mean_ThermalConductivity",
+    "mean_Valence",
+    "mean_atomic_mass",
+    "mean_atomic_radius",
+    "mean_fie"
+   ]
+  },
+  {
+   "openml_id": 47111,
+   "name": "Weather-and-Air-Pollution-Kiev",
+   "n_rows": 33863,
+   "target_cols": [
+    "LevelPM2",
+    "LevelPM10",
+    "LevelCO",
+    "LevelNO2",
+    "LevelNO",
+    "LevelO3",
+    "LevelSO2",
+    "LevelNH3"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "UtcTime",
+    "LocalDate",
+    "AirQuality"
+   ]
+  },
+  {
+   "openml_id": 47112,
+   "name": "Weather-and-Air-Pollution-Kiev",
+   "n_rows": 33863,
+   "target_cols": [
+    "LevelPM2",
+    "LevelPM10"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 47177,
+   "name": "check_times",
+   "n_rows": 13626,
+   "target_cols": [
+    "ns_import",
+    "ns_export"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "data_count",
+    "doc_count",
+    "r_count",
+    "src_count",
+    "testthat_count",
+    "time"
+   ]
+  }
+ ]
+}
