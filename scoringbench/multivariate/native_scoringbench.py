@@ -1,5 +1,5 @@
 """Curated **real** multi-target regression datasets (source
-``multivariate_scoringbench``).
+``native_scoringbench``).
 
 Sources 1 and 2 of the multivariate benchmark are both *constructions*: source 1
 promotes features of a 1-D dataset into targets, source 2 draws copula-coupled
@@ -33,7 +33,7 @@ import pandas as pd
 
 from . import config as cfg
 
-SOURCE_NAME = "multivariate_scoringbench"
+SOURCE_NAME = "native_scoringbench"
 
 #: Curated manifest (see module docstring for the bar an entry must clear).
 MANIFEST_PATH = Path(__file__).with_name("multivariate_datasets.json")
@@ -49,7 +49,7 @@ def load_manifest(path: str | Path | None = None) -> list[dict[str, Any]]:
 
     An absent manifest is not an error: it means the curation pipeline has not
     run in this checkout. The source then enumerates nothing and the runner
-    simply has no ``multivariate_scoringbench`` datasets to score, rather than
+    simply has no ``native_scoringbench`` datasets to score, rather than
     failing.
     """
     p = Path(path) if path is not None else MANIFEST_PATH
@@ -60,8 +60,8 @@ def load_manifest(path: str | Path | None = None) -> list[dict[str, Any]]:
     return list(entries)
 
 
-def enumerate_multivariate_scoringbench(target_dim: int, sample_size: int
-                                        ) -> list[dict[str, Any]]:
+def enumerate_native_scoringbench(target_dim: int, sample_size: int
+                                  ) -> list[dict[str, Any]]:
     """Stable-ordered configs for every manifest entry with enough targets.
 
     ``target_dim`` selects the leading ``target_dim`` columns of each entry's
@@ -112,8 +112,8 @@ def _fetch(openml_id: int) -> pd.DataFrame:
     return df
 
 
-def load_multivariate_scoringbench(ds_config: dict[str, Any], target_dim: int | None = None
-                                   ) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None = None
+                             ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load one curated dataset as ``(X, Y)``.
 
     ``Y``'s columns are renamed ``target_0 .. target_{d-1}`` in manifest order,
