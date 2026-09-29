@@ -270,6 +270,33 @@
     }
   },
   {
+    "model_name": "kumo_tabular_small",
+    "organization": "NVIDIA",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/nvidia/Kumo-Tabular",
+      "github": "https://github.com/NVIDIA/structured-data-models"
+    }
+  },
+  {
+    "model_name": "kumo_tabular_medium",
+    "organization": "NVIDIA",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/nvidia/Kumo-Tabular",
+      "github": "https://github.com/NVIDIA/structured-data-models"
+    }
+  },
+  {
+    "model_name": "kumo_tabular_large",
+    "organization": "NVIDIA",
+    "links": {
+      "paper": null,
+      "huggingface": "https://huggingface.co/nvidia/Kumo-Tabular",
+      "github": "https://github.com/NVIDIA/structured-data-models"
+    }
+  },
+  {
     "model_name": "tabldm_v1",
     "organization": "Xiaomi Research",
     "links": {

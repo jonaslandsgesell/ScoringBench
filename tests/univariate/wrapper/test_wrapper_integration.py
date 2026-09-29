@@ -134,6 +134,17 @@ def _make_tabicl():
     return TabICLWrapper(device=_cuda_or_cpu())
 
 
+def _make_kumo_tabular_small():
+    """KumoTabular (NVIDIA/SDM) — size="small" in-context 999-quantile head.
+
+    Downloads the released checkpoint on first use. The smallest size and a
+    small ensemble (upstream uses 8 estimators) keep the CI forward pass fast.
+    """
+    pytest.importorskip("sdm")
+    from scoringbench.univariate.wrappers.kumo import KumoTabularSmallWrapper
+    return KumoTabularSmallWrapper(device=_cuda_or_cpu(), seed=RANDOM_STATE)
+
+
 def _make_tabldm():
     """Xiaomi-TabLDM regressor — in-context multi-quantile head.
 
@@ -346,6 +357,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabPFNWrapper[v3.5-fast]", _make_tabpfn_v3_5_fast), id="TabPFNWrapper[v3.5-fast]"),
     pytest.param(("TabDPTWrapper",            _make_tabdpt),       id="TabDPTWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
+    pytest.param(("KumoTabularSmallWrapper",  _make_kumo_tabular_small), id="KumoTabularSmallWrapper"),
     pytest.param(("TabLDMWrapper",            _make_tabldm),       id="TabLDMWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),
     pytest.param(("CatBoostQuantileWrapper",  _make_catboost_quantile), id="CatBoostQuantileWrapper"),
