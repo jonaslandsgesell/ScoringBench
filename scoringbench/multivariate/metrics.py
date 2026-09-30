@@ -10,6 +10,11 @@ Rules (see the "Preliminary: Multivariate ScoringBench" note)
 * **Energy score** ``ES_β(F, y) = E‖Y − y‖^β − ½ E‖Y − Y'‖^β`` with ``β = 1``
   (and a small β family reported as extra columns).  Term 2 uses the *fair*
   estimator ``1/(m(m−1)) Σ_{i≠j}`` so the estimate is unbiased for finite m.
+* **Average marginal energy score** (diagnostic) — the scalar energy score
+  computed independently per dimension (``d = 1`` energy score, ``‖·‖ → |·|``)
+  and averaged over the ``d`` marginals, reported at ``β ∈ {0.5, 1, 1.5}``.
+  Contrasting it with the joint energy score isolates the marginal contribution
+  from the cross-dimension dependence.
 * **Variogram score of order p** ``VS_p = Σ_{a,b} w_{ab} (|y_a − y_b|^p − E|Y_a − Y_b|^p)²``
   with ``p = 0.5`` and uniform weights ``w_{ab} = 1``.
 * **Dawid–Sebastiani score** ``DSS = (y − μ)ᵀ Σ⁻¹ (y − μ) + log det Σ`` where
@@ -110,6 +115,39 @@ def _energy_scores(samples: torch.Tensor, y: torch.Tensor, betas: list[float]) -
 
 
 @force_precision(torch.float64)
+def _avg_marginal_energy_scores(
+    samples: torch.Tensor, y: torch.Tensor, betas: list[float]
+) -> dict:
+    """Diagnostic: marginal (per-dimension) energy score, averaged over dimensions.
+
+    For each coordinate ``k`` the marginal energy score is the ordinary (scalar)
+    energy score ``E|Y_k − y_k|^β − ½ E|Y_k − Y'_k|^β`` — identical to the
+    multivariate energy score with ``d = 1`` where ``‖·‖`` collapses to ``|·|``.
+    We compute each coordinate independently and average the resulting
+    per-instance scores over the ``d`` marginals.
+
+    This ignores cross-dimension dependence entirely (unlike the joint energy
+    score), so contrasting it with ``energy_score_beta_*`` isolates how much of
+    the multivariate score comes from the marginals versus the dependence
+    structure.
+    """
+    d = samples.shape[-1]
+    out = {}
+    for beta in betas:
+        per_dim = samples.new_zeros(d)
+        for k in range(d):
+            # Treat coordinate k as a 1-D vector so ||.|| == |.|.
+            samples_k = samples[:, :, k:k + 1]                    # (n_test, m, 1)
+            y_k = y[:, k:k + 1]                                   # (n_test, 1)
+            term1 = cross_norm_expectation(samples_k, y_k, beta)  # (n_test,)
+            term2 = pairwise_norm_expectation(samples_k, beta)    # (n_test,)
+            es = torch.clamp(term1 - 0.5 * term2, min=0.0)
+            per_dim[k] = es.mean()
+        out[f"avg_marginal_energy_score_beta_{_fmt(beta)}"] = float(per_dim.mean())
+    return out
+
+
+@force_precision(torch.float64)
 def _variogram_scores(samples: torch.Tensor, y: torch.Tensor, orders: list[float]) -> dict:
     """Variogram score for each order p with uniform weights w_{ab}=1."""
     out = {}
@@ -165,6 +203,7 @@ def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray
 
     metrics: dict = {}
     metrics.update(_energy_scores(samples, y_t, ENERGY_BETAS))
+    metrics.update(_avg_marginal_energy_scores(samples, y_t, ENERGY_BETAS))
     metrics.update(_variogram_scores(samples, y_t, VARIOGRAM_ORDERS))
     metrics.update(_dawid_sebastiani(samples, y_t))
     return metrics
@@ -174,6 +213,7 @@ def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray
 # point-only fallback, mirroring the univariate cv.py).
 SCORING_RULE_KEYS = (
     *[f"energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
+    *[f"avg_marginal_energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
     *[f"variogram_score_p_{_fmt(p)}" for p in VARIOGRAM_ORDERS],
     "dawid_sebastiani",
 )
