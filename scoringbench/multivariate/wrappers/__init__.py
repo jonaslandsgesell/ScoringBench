@@ -6,8 +6,8 @@ from ``scoringbench.univariate``.
 
 * :class:`BaseSampler` — abstract per-dimension conditional sampler with shared
   monotone-PCHIP ``cdf`` / ``quantile`` / ``sample``.
-* :class:`TabPFNSampler`, :class:`TabICLSampler` — concrete samplers, one per
-  file, each implementing only the model-specific CDF grid.
+* :class:`TabPFNSampler`, :class:`TabICLSampler`, :class:`CausiloSampler` —
+  concrete samplers, each implementing the model-specific CDF grid.
 * :class:`IndependentMultiOutputWrapper`, :class:`CopulaMultiOutputWrapper`,
   :class:`ChainedMultiOutputWrapper` — the three composition modes, all sharing
   ``_ComposedMultiOutputWrapper``.
@@ -22,6 +22,7 @@ from .baselines import (
     CopulaMultiOutputWrapper,
     IndependentMultiOutputWrapper,
 )
+from .causilo_sampler import CausiloSampler
 from .forest_diffusion_sampler import ForestDiffusionMultiOutputWrapper
 from .sample_based import SampleBasedWrapper
 from .tabicl_sampler import TabICLSampler
@@ -31,6 +32,7 @@ __all__ = [
     "MultivariateWrapper",
     "SampleBasedWrapper",
     "BaseSampler",
+    "CausiloSampler",
     "TabPFNSampler",
     "TabICLSampler",
     "IndependentMultiOutputWrapper",

@@ -26,7 +26,7 @@ SAMPLE_SIZE = 3000
 TARGET_DIM = 2
 
 # Number of Monte-Carlo draws every model emits per test instance.  Pinned
-# benchmark-wide because the *fair* pairwise estimators used by the scoring
+# benchmark-wide because the Monte-Carlo estimates used by the scoring
 # rules still have a finite-sample bias/variance that depends on the number of
 # draws m; fixing m across all models keeps the comparison apples-to-apples.
 # (The energy-score term-2 estimator 1/(m(m-1)) Σ_{i≠j} is unbiased for every

@@ -8,12 +8,12 @@ The building blocks are:
   dtype (copied locally so the multivariate package does not import from
   ``scoringbench.univariate``).
 * :func:`pairwise_norm_expectation` — the "term 2" of the energy score,
-  ``E‖Y − Y'‖^β`` under the *fair* (unbiased) estimator
+    ``E‖Y − Y'‖^β`` under the unbiased estimator
   ``1 / (m(m−1)) Σ_{i≠j} ‖yᵢ − yⱼ‖^β``.
 * :func:`cross_norm_expectation` — the "term 1" of the energy score,
   ``E‖Y − y‖^β`` = ``1/m Σᵢ ‖yᵢ − y‖^β``.
-* :func:`pairwise_abs_pow_expectation` — per-coordinate
-  ``E|Yₐ − Y'ₐ|^p`` under the same fair estimator, used by the variogram score.
+* :func:`pairwise_abs_pow_expectation` — within-draw coordinate differences
+    ``E|Yₐ − Y_b|^p``, used by the variogram score.
 
 The pairwise estimators are chunked over the *draw* axis so an ``m × m`` distance
 matrix is never fully materialised for large ensembles.
@@ -40,9 +40,9 @@ def force_precision(dtype: torch.dtype = torch.float64):
     The Monte-Carlo scoring rules form differences of large, nearly-equal
     expectations (energy ``term1 − term2``; variogram ``(observed − expected)²``;
     Dawid–Sebastiani quadratic form + log-determinant).  Evaluated in float32
-    these suffer catastrophic cancellation and can violate guarantees such as
-    "energy score ≥ 0".  Computing in float64 restores them.  Integer/index
-    tensors and non-tensor arguments pass through unchanged.
+    these can suffer catastrophic cancellation. Float64 reduces roundoff, but
+    a finite-sample energy-score estimate can still legitimately be negative.
+    Integer/index tensors and non-tensor arguments pass through unchanged.
     """
 
     def decorator(func):
@@ -92,9 +92,9 @@ def cross_norm_expectation(samples: torch.Tensor, y: torch.Tensor, beta: float) 
 
 @force_precision(torch.float64)
 def pairwise_norm_expectation(samples: torch.Tensor, beta: float) -> torch.Tensor:
-    """``E‖Y − Y'‖^β`` per test instance under the FAIR estimator (energy term 2).
+    """Unbiased ``E‖Y − Y'‖^β`` per test instance (energy-score term 2).
 
-    The unbiased ("fair") estimator excludes the diagonal ``i = j``:
+    The estimator excludes the diagonal ``i = j``:
 
         1 / (m (m − 1))  Σ_{i ≠ j}  ‖yᵢ − yⱼ‖^β
 
@@ -133,12 +133,9 @@ def pairwise_norm_expectation(samples: torch.Tensor, beta: float) -> torch.Tenso
 
 @force_precision(torch.float64)
 def pairwise_abs_pow_expectation(samples: torch.Tensor, p: float) -> torch.Tensor:
-    """``E|Yₐ − Y'ₐ|^p`` per test instance and coordinate pair (a, b).
+    """``E|Y_a − Y_b|^p`` per test instance and coordinate pair (a, b).
 
-    Uses the same fair ``1/(m(m−1))`` estimator as
-    :func:`pairwise_norm_expectation`, but coordinate-wise: for every ordered
-    pair of dimensions ``(a, b)`` it estimates ``E|Y_a − Y'_b|^p`` … no — the
-    variogram compares the *same* draw's coordinates, so this returns the matrix
+    The variogram compares the same draw's coordinates, so this returns
 
         M[a, b] = E |Y_a − Y_b|^p           (single draw, two coordinates)
 

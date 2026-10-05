@@ -3,6 +3,37 @@
 import logging
 import gc
 import pytest
+import torch
+
+_CUDA_IS_AVAILABLE = torch.cuda.is_available
+
+
+def pytest_addoption(parser):
+    parser.addoption("--cuda", action="store_true", help="Run scoring pipelines and device-aware tests on CUDA.")
+
+
+def pytest_configure(config):
+    if config.getoption("--cuda") and not _CUDA_IS_AVAILABLE():
+        raise pytest.UsageError("--cuda requires an available CUDA device")
+
+
+@pytest.fixture
+def scoring_device(pytestconfig):
+    return torch.device("cuda" if pytestconfig.getoption("--cuda") else "cpu")
+
+
+@pytest.fixture(autouse=True)
+def configure_scoring_device(pytestconfig, monkeypatch):
+    if not pytestconfig.getoption("--cuda"):
+        yield
+        return
+    from scoringbench.univariate.metrics import _compute_device
+
+    monkeypatch.setattr(torch.cuda, "is_available", _CUDA_IS_AVAILABLE)
+    _compute_device.cache_clear()
+    assert _compute_device().type == "cuda"
+    yield
+    _compute_device.cache_clear()
 
 # Configure pytest logging to show INFO and DEBUG levels during test runs
 logging.basicConfig(

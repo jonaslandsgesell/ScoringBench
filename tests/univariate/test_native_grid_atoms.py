@@ -147,56 +147,26 @@ def _interval_ref(centres, masses, y, level):
 
 
 def _wcrps_ref(centres, masses, y, weight):
-    """Gneiting-Ranjan (2011) quantile-weighted CRPS on the SAME 99-level grid.
-
-    Mirrors ``compute_quantile_wcrps`` exactly, INCLUDING its grid discretisation:
-    the recovered quantile for a level is the BIN MIDPOINT of the bin the level's
-    searchsorted lands in, read off the SAME native Dirac grid the metric sees
-    (cumsum over all bins, connectors included), not the atom location itself.
-    """
-    edges, probas = _dirac_grid(centres, masses)
-    edges, probas = edges[0], probas[0]
-    mids = 0.5 * (edges[:-1] + edges[1:])
-    cdf = np.cumsum(probas)                       # CDF over ALL bins, connectors too
-    n_bins = probas.shape[0]
-    alphas = np.linspace(0.01, 0.99, 99)
-    idx = np.searchsorted(cdf, alphas).clip(0, n_bins - 1)
-    q = mids[idx]                                 # quantile = bin midpoint (metric's rule)
-    pinball = 2.0 * ((y <= q).astype(float) - alphas) * (q - y)
-    v = {"left": (1 - alphas) ** 2, "right": alphas ** 2, "center": alphas * (1 - alphas)}[weight]
-    # Midpoint rule on (0, 1) with 99 INTERIOR points: each carries weight
-    # 1/(99+1) = 1/100 (the two open end half-intervals are folded in), so the
-    # integral is sum/100, NOT the plain mean sum/99.  Mirrors uniform_axis_integral.
-    return float((pinball * v).sum() / 100.0)
+    """Exact atom-wise polynomial pinball integral, independent of grid geometry."""
+    polynomial = np.polynomial.Polynomial
+    weight_polynomial = polynomial({
+        "left": [1.0, -2.0, 1.0], "right": [0.0, 0.0, 1.0],
+        "center": [0.0, 1.0, -1.0],
+    }[weight])
+    cumulative = np.concatenate([[0.0], np.cumsum(masses)])
+    score = 0.0
+    for location, lower, upper in zip(centres, cumulative[:-1], cumulative[1:]):
+        pinball = 2.0 * (location - y) * polynomial([float(y <= location), -1.0])
+        primitive = (pinball * weight_polynomial).integ()
+        score += primitive(upper) - primitive(lower)
+    return float(score)
 
 
 def _pit_ref(centres, masses, y):
-    """PIT of ``y`` under the native Dirac histogram, mirroring ``compute_pit_ks``.
-
-    The metric locates the target bin with ``searchsorted(edges[1:], y)`` and then
-    interpolates the CDF across that bin: ``pit = F(bin_lo) + p_bin * frac`` where
-    ``frac = 0.5`` on a zero-width (atom) bin, else ``(y - lo) / width``.  On this
-    Dirac grid the atom's mass sits on a zero-width bin that is *preceded* by a
-    positive-width connector bin, so ``side='left'`` sends a target landing exactly
-    on an interior atom to the connector (giving ``F(atom-)``); only a target on the
-    first atom bin (index 0) receives the mid-CDF ``p/2`` treatment.  The reference
-    reproduces this discretisation exactly rather than the idealised mixture PIT.
-    """
-    edges, probas = _dirac_grid(centres, masses)
-    edges, probas = edges[0], probas[0]
-    cdf = np.cumsum(probas)
-    n_bins = probas.shape[0]
-    y_bin = min(int(np.searchsorted(edges[1:], y)), n_bins - 1)
-    w_y = edges[y_bin + 1] - edges[y_bin]
-    p_y = probas[y_bin]
-    cdf_prev = cdf[y_bin] - p_y
-    frac = 0.5 if w_y <= 1e-12 else (y - edges[y_bin]) / max(w_y, 1e-12)
-    pit = cdf_prev + p_y * frac
-    if y <= edges[0]:
-        pit = 0.0
-    elif y >= edges[-1]:
-        pit = 1.0
-    return float(min(max(pit, 0.0), 1.0))
+    """Exact mid-PIT: mass strictly below y plus half the mass at y."""
+    centres = np.asarray(centres)
+    masses = np.asarray(masses)
+    return float(masses[centres < y].sum() + 0.5 * masses[centres == y].sum())
 
 
 # ---------------------------------------------------------------------------
@@ -279,16 +249,7 @@ def test_wcrps_on_atoms_matches_pinball_reference(weight, y):
 
 @pytest.mark.parametrize("y", [-2.0, 0.5, 3.0])
 def test_pit_on_atom_uses_mid_cdf_convention(y):
-    """A target ON an atom yields a finite PIT via the metric's bin-frac rule.
-
-    ``compute_pit_ks`` is called directly and the single-sample KS statistic
-    ``D = max(u, 1 - u)`` is inverted to recover the PIT value ``u``, which must
-    equal the grid-discretised reference (``_pit_ref``).  The zero-width atom bin
-    would give ``(y - left) / 0`` without the atom guard, so a finite value is the
-    whole point; on this Dirac layout an interior atom's target lands (via
-    ``searchsorted`` side='left') on its preceding connector, giving ``F(atom-)``,
-    while the first atom bin receives the mid-CDF ``p/2`` treatment.
-    """
+    """Every atom, including both support boundaries, uses the exact mid-CDF."""
     import torch
 
     from scoringbench.univariate.metrics import compute_pit_ks
@@ -325,6 +286,14 @@ def test_pit_never_nan_on_all_atoms_grid():
         out = _score_native(list(c), list(p), y)
         assert np.isfinite(out["pit_ks_stat"])
         assert np.isfinite(out["pit_ks_pvalue"])
+
+
+def test_pit_pipeline_on_mixed_atom_uses_mid_cdf():
+    dist = DistributionPrediction.from_histogram(
+        [-1.0, 0.0, 0.0, 1.0], [[0.25, 0.5, 0.25]], train_range=(-1.0, 1.0),
+    )
+    result = compute_scoring_rules(dist, np.array([0.0]), representation="native")
+    assert result["pit_ks_stat"] == pytest.approx(0.5, abs=1e-12)
 
 
 # ---------------------------------------------------------------------------

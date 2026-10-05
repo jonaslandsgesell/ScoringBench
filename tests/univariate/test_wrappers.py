@@ -52,11 +52,11 @@ def test_tabicl_wrapper_predict_distribution_conversion():
 
     # TabICL uses the shared quantile->distribution mapping
     # (``quantiles_to_distribution``): the predicted quantiles are used verbatim
-    # as the native edges, so K levels give K edges and K-1 bins on a
-    # per-sample (2-D) grid.
-    n_bins = len(w._ALPHAS) - 1
+    # as the native edges plus a tail atom at each outermost quantile, so K
+    # interior levels give K + 2 edges and K + 1 bins on a per-sample (2-D) grid.
+    n_bins = len(w._ALPHAS) + 1
     assert dist.probas.shape == (2, n_bins)
-    assert dist.bin_edges.shape == (2, len(w._ALPHAS))
+    assert dist.bin_edges.shape == (2, len(w._ALPHAS) + 2)
     assert dist.bin_midpoints.shape == (2, n_bins)
 
     # Each row is a valid PMF on a non-decreasing grid.
@@ -109,10 +109,11 @@ def test_xgb_quantile_vector_wrapper_predict_distribution():
     dist = w.predict_distribution(X)
 
     assert isinstance(dist, DistributionPrediction)
-    # Nodes-as-edges: K levels -> K-1 bins, K edges.
-    assert dist.probas.shape == (2, len(w._alphas) - 1)
+    # Nodes-as-edges plus a tail atom at each outermost quantile: K interior
+    # levels -> K + 1 bins, K + 2 edges.
+    assert dist.probas.shape == (2, len(w._alphas) + 1)
     # bin_edges can be shared (1-D) or per-sample (2-D)
-    expected_edges = len(w._alphas)
+    expected_edges = len(w._alphas) + 2
     if dist.bin_edges.ndim == 1:
         assert dist.bin_edges.shape[0] == expected_edges
     else:

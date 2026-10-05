@@ -3,22 +3,23 @@
 The quantile function ``alpha -> q(alpha)`` is read as a CDF and its nodes are
 used DIRECTLY as bin edges (``resampling_grid.cdf_nodes_to_native_PMF_grid``): the
 quantile values themselves ARE the edges and the cumulative mass at edge ``k`` is
-``alpha_k``, used verbatim (NO ``C = 0/1`` anchoring, no invented tail).  ``K``
-levels therefore give ``K`` edges and ``K - 1`` bins, and the bin masses are the
-CDF increments ``diff(alphas)`` RENORMALISED to sum to 1 -- the small ``~1/K``
-tail mass beyond the outermost quantiles is folded back into the bins by that
-renormalization rather than pushed onto an invented tail.  No resampling, no
-uniform grid.  This is the NATIVE view: tied quantiles stay coincident as
-zero-width Dirac bins (atoms) so the grid-robust rules (CRPS, CRTS, energy,
-coverage) score them exactly.  The density rules read the resampled view instead
+``alpha_k``, used verbatim (no invented tail).  The tail masses the model does
+not place -- ``alpha_0`` below ``q_0`` and ``1 - alpha_{K-1}`` above ``q_{K-1}``
+-- are kept as zero-width atoms AT the outermost quantiles, so every reported
+level stays exact.  ``K`` interior levels therefore give ``K + 2`` edges and
+``K + 1`` bins with masses ``[alpha_0, diff(alphas), 1 - alpha_{K-1}]``; no atom
+is added where a level already is ``0`` / ``1``.  No resampling, no uniform
+grid.  This is the NATIVE view: tied quantiles stay coincident as zero-width
+Dirac bins (atoms) so the grid-robust rules (CRPS, CRTS, energy, coverage) score
+them exactly.  The density rules read the resampled view instead
 (``.resampled``), which neutralises the atoms onto the grow-only grid.
 
 The properties that matter here:
 
 * shapes / PMF validity (rows sum to 1, non-negative),
-* the edges are the quantiles verbatim -- no added tail edges,
-* the masses are ``diff(alphas)`` renormalised to 1 -- the CDF increments with
-  the tail mass folded in,
+* the edges are the quantiles verbatim -- the outermost ones doubled as tail
+  atoms, no edge beyond the quantile hull,
+* the masses are the exact level increments including the two tail atoms,
 * atoms (tied quantiles) survive as zero-width bins on the native PMF grid,
 * defensive handling of unsorted / non-finite / degenerate inputs.
 """
@@ -64,15 +65,25 @@ def _normal_quantiles(alphas, locs, scales):
     return norm.ppf(np.asarray(alphas)[None, :], loc=locs, scale=scales)
 
 
-def _interior_masses(alphas):
-    """The exact native masses for ``K`` levels: ``diff(alphas)`` renormalised.
+def _native_masses(alphas):
+    """The exact native masses: ``[alpha_0, diff(alphas), 1 - alpha_{K-1}]``.
 
-    The nodes are unanchored, so the bin masses are just the forward differences
-    of the (sorted) alphas divided by their sum -- the ``~alpha_0`` / ``~(1 -
-    alpha_{K-1})`` tail mass is folded into all bins by that renormalization.
+    The interior increments are the reported level differences verbatim; the two
+    tail masses are atoms on the outermost quantiles (omitted at ``0`` / ``1``).
     """
-    d = np.diff(np.sort(alphas))
-    return d / d.sum()
+    a = np.sort(alphas)
+    parts = [np.diff(a)]
+    if a[0] > 0.0:
+        parts.insert(0, a[:1])
+    if a[-1] < 1.0:
+        parts.append(1.0 - a[-1:])
+    return np.concatenate(parts)
+
+
+def _with_tail_atoms(q):
+    """Quantile rows with the outermost values doubled (the tail-atom edges)."""
+    q = np.sort(q, axis=1)
+    return np.concatenate([q[:, :1], q, q[:, -1:]], axis=1)
 
 
 def _cdf_at(dist, x):
@@ -92,10 +103,10 @@ def test_default_grid_size_matches_number_of_quantiles():
 
     k = len(ALPHAS_9)
     assert isinstance(dist, DistributionPrediction)
-    # K levels -> K edges (the quantiles verbatim), K - 1 bins.
-    assert dist.probas.shape == (2, k - 1)
-    assert dist.bin_edges.shape == (2, k)
-    assert dist.bin_midpoints.shape == (2, k - 1)
+    # K interior levels -> K + 2 edges (quantiles + two tail atoms), K + 1 bins.
+    assert dist.probas.shape == (2, k + 1)
+    assert dist.bin_edges.shape == (2, k + 2)
+    assert dist.bin_midpoints.shape == (2, k + 1)
     assert dist.mean.shape == (2,)
 
 
@@ -106,10 +117,11 @@ def test_grid_size_tracks_the_number_of_quantile_levels(n_alphas):
     dist = _q2d(q, alphas)
 
     # A single level cannot define an interval, so it becomes a zero-width atom
-    # (the value repeated -> two coincident edges); K columns give K - 1 bins.
-    k = max(n_alphas, 2)
-    assert dist.probas.shape == (3, k - 1)
-    assert dist.bin_edges.shape == (3, k)
+    # (the value repeated at levels [0, 1] -> one bin, no tail atoms); K > 1
+    # interior levels give K + 1 bins (two tail atoms).
+    n_bins = 1 if n_alphas == 1 else n_alphas + 1
+    assert dist.probas.shape == (3, n_bins)
+    assert dist.bin_edges.shape == (3, n_bins + 1)
     np.testing.assert_allclose(dist.probas.sum(axis=1), 1.0, atol=1e-12)
 
 
@@ -117,8 +129,8 @@ def test_one_dimensional_input_is_promoted_to_a_single_row():
     q = norm.ppf(ALPHAS_9)
     dist = _q2d(q, ALPHAS_9)
     k = len(ALPHAS_9)
-    assert dist.probas.shape == (1, k - 1)
-    assert dist.bin_edges.shape == (1, k)
+    assert dist.probas.shape == (1, k + 1)
+    assert dist.bin_edges.shape == (1, k + 2)
 
 
 def test_shape_mismatch_raises():
@@ -131,16 +143,16 @@ def test_shape_mismatch_raises():
 # ---------------------------------------------------------------------------
 
 def test_edges_are_the_quantiles_verbatim():
-    """The quantile values ARE the bin edges -- no resampling, no tail edges.
+    """The quantile values ARE the bin edges -- no resampling, no invented tail.
 
     Two rows with wildly different scales (sigma = 1e-3 and 50) are converted in
-    one call; the edges of each row are exactly its (sorted) quantiles.
+    one call; the edges of each row are exactly its (sorted) quantiles, with the
+    outermost two doubled as the zero-width tail atoms.
     """
     q = _normal_quantiles(ALPHAS_9, [0.0, 100.0], [1e-3, 50.0])
     dist = _q2d(q, ALPHAS_9)
 
-    # Edges equal the quantiles verbatim -- no tail extension.
-    np.testing.assert_allclose(dist.bin_edges, np.sort(q, axis=1), rtol=1e-12)
+    np.testing.assert_allclose(dist.bin_edges, _with_tail_atoms(q), rtol=1e-12)
     assert np.all(np.diff(dist.bin_edges, axis=1) >= 0.0)
     np.testing.assert_allclose(
         dist.bin_midpoints, (dist.bin_edges[:, :-1] + dist.bin_edges[:, 1:]) / 2
@@ -150,9 +162,9 @@ def test_edges_are_the_quantiles_verbatim():
 def test_support_is_the_quantile_hull_no_invented_tail():
     """The support is exactly ``[q_0, q_{K-1}]`` -- no invented tail either side.
 
-    The mass below ``alpha_0`` / above ``alpha_{K-1}`` is folded into the
-    outermost bins by renormalisation rather than placed on an invented tail, so
-    the reported support is the quantile hull itself.
+    The mass below ``alpha_0`` / above ``alpha_{K-1}`` sits as atoms ON the
+    outermost quantiles rather than on an invented tail, so the reported support
+    is the quantile hull itself.
     """
     q = _normal_quantiles(ALPHAS_9, [0.0, 5.0], [1.0, 2.0])
     dist = _q2d(q, ALPHAS_9)
@@ -161,37 +173,35 @@ def test_support_is_the_quantile_hull_no_invented_tail():
     np.testing.assert_allclose(dist.bin_edges[:, -1], q[:, -1], rtol=1e-12)
 
 
-def test_masses_are_the_renormalised_alpha_increments():
-    """Masses are the CDF increments ``diff(alphas)`` renormalised to 1.
+def test_masses_are_the_level_increments_with_tail_atoms():
+    """Masses are ``[alpha_0, diff(alphas), 1 - alpha_{K-1}]`` -- no rescaling.
 
-    The quantiles are the edges and ``C`` at them is ``alpha``; renormalising the
-    unanchored increments, the bin masses are the forward differences of the
-    alphas divided by their sum -- independent of the quantile *values*, which
-    only set where the mass sits, not how much.
+    The quantiles are the edges and ``C`` at them is ``alpha``, so the bin masses
+    are the level increments verbatim plus the two tail atoms -- independent of
+    the quantile *values*, which only set where the mass sits, not how much.
     """
     q = _normal_quantiles(ALPHAS_9, [0.0, 3.0], [1.0, 0.5])
     dist = _q2d(q, ALPHAS_9)
 
-    expected = _interior_masses(ALPHAS_9)
+    expected = _native_masses(ALPHAS_9)
     for i in range(dist.probas.shape[0]):
         np.testing.assert_allclose(dist.probas[i], expected, rtol=1e-12)
     np.testing.assert_allclose(dist.probas.sum(axis=1), 1.0, atol=1e-12)
 
 
-def test_unequally_spaced_levels_give_the_renormalised_increments():
-    """The grid is the quantiles, the masses are ``diff(alphas)`` renormalised.
+def test_unequally_spaced_levels_keep_their_increments():
+    """``alphas = [.1, .2, .5, .9]`` at ``q = [0, 1, 2, 3]``.
 
-    ``alphas = [.1, .2, .5, .9]`` at ``q = [0, 1, 2, 3]``.  The edges are the
-    quantiles ``[0, 1, 2, 3]`` (no tails) and the 3 raw increments are
-    ``diff([.1, .2, .5, .9]) = [.1, .3, .4]``; renormalised by their sum ``.8``
-    they become ``[.125, .375, .5]``.
+    The edges are ``[0, 0, 1, 2, 3, 3]`` (quantiles + tail atoms) and the masses
+    ``[.1, .1, .3, .4, .1]``: the lower tail atom, ``diff(alphas)`` verbatim, and
+    the upper tail atom.
     """
     alphas = np.array([0.1, 0.2, 0.5, 0.9])
     q = np.array([[0.0, 1.0, 2.0, 3.0]])
     dist = _q2d(q, alphas)
 
-    np.testing.assert_allclose(dist.bin_edges[0], [0.0, 1.0, 2.0, 3.0], rtol=1e-12)
-    np.testing.assert_allclose(dist.probas[0], [0.125, 0.375, 0.5], rtol=1e-12)
+    np.testing.assert_allclose(dist.bin_edges[0], [0.0, 0.0, 1.0, 2.0, 3.0, 3.0], rtol=1e-12)
+    np.testing.assert_allclose(dist.probas[0], [0.1, 0.1, 0.3, 0.4, 0.1], rtol=1e-12)
 
 
 def test_pmf_is_valid():
@@ -212,38 +222,36 @@ def test_pmf_is_valid():
 # Correctness of the CDF construction
 # ---------------------------------------------------------------------------
 
-def test_masses_are_exactly_the_renormalised_increments():
-    """Pin the construction to the bit: masses == ``diff(alphas) / sum``.
+def test_masses_are_exactly_the_level_increments():
+    """Pin the construction to the bit: masses == ``_native_masses(alphas)``.
 
     The quantile values are used verbatim as edges and ``C`` at each is its
     ``alpha``, so the masses do not depend on the quantiles at all -- they are the
-    renormalised forward differences of the alpha vector, per row identical.
+    level increments plus the two tail atoms, per row identical.
     """
     rng = np.random.default_rng(1)
     alphas = np.linspace(0.02, 0.98, 25)
     q = np.sort(rng.normal(loc=rng.normal(size=(6, 1)), scale=2.0, size=(6, 25)), axis=1)
 
     dist = _q2d(q, alphas)
-    expected = _interior_masses(alphas)
+    expected = _native_masses(alphas)
     for i in range(q.shape[0]):
         np.testing.assert_allclose(dist.probas[i], expected, rtol=0, atol=1e-12)
 
 
-def test_cdf_at_the_quantiles_is_the_renormalised_cumulative():
-    """``F_hat(q_k)`` is the renormalised cumulative of the alpha increments.
+def test_cdf_at_the_quantiles_is_exactly_alpha():
+    """``F_hat(q_k) = alpha_k``: every reported level is kept, nothing rescaled.
 
-    Because the quantiles are used verbatim as edges, the reconstructed CDF hits
-    each ``q_k`` at ``cumsum(diff(alphas))[k-1] / sum`` -- the alphas rescaled so
-    the outermost levels land on ``0`` and ``1`` (no resampling error otherwise).
+    The cumulative mass through the bin ending at ``q_k`` (the lower tail atom
+    first) is exactly ``alpha_k``; the last bin (upper tail atom) closes at 1.
     """
     for k in (9, 51, 199):
         alphas = np.linspace(0.02, 0.98, k)
         q = _normal_quantiles(alphas, [0.0], [1.0])
         dist = _q2d(q, alphas)
-        cdf = np.concatenate([[0.0], np.cumsum(dist.probas[0])])
-        got = np.interp(q[0], dist.bin_edges[0], cdf)
-        expected = np.concatenate([[0.0], np.cumsum(_interior_masses(alphas))])
-        np.testing.assert_allclose(got, expected, atol=1e-12)
+        cdf_right = np.cumsum(dist.probas[0])
+        np.testing.assert_allclose(cdf_right[:-1], alphas, atol=1e-12)
+        assert cdf_right[-1] == pytest.approx(1.0, abs=1e-12)
 
 
 def test_recovers_normal_cdf_and_moments():
@@ -263,9 +271,9 @@ def test_recovers_normal_cdf_and_moments():
 def test_cdf_error_decreases_with_more_quantiles():
     """Finer quantile grids => the reconstructed CDF converges to the truth.
 
-    The residual floor is the folded-in tail mass ``~alpha_0``, not the bin
-    width: with levels starting at ``alpha_0 = 1 / (k + 1)`` the outermost level
-    controls how much mass is redistributed, so convergence is driven by it.
+    The residual floor is the tail atom mass ``alpha_0`` (the CDF jumps to it at
+    ``q_0``), not the bin width: with levels starting at ``alpha_0 = 1 / (k + 1)``
+    the outermost level controls the error, so convergence is driven by it.
     """
     x = np.linspace(-3.0, 3.0, 201)
     errors, floors = [], []

@@ -20,27 +20,18 @@ local_tabicl = repo_root / "tabicl" / "src"
 if local_tabicl.exists():
     sys.path.insert(0, str(local_tabicl))
 
+# Same 999-level grid as the KumoTabular wrapper.
+_QUANTILE_LEVELS = np.linspace(0.001, 0.999, 999)
+
 
 class TabICLWrapper(ProbabilisticWrapper):
     """Wraps TabICLRegressor (v2).
-
-    predict() works out of the box (uses output_type='mean').
-    predict_distribution() is TODO — the plan is to call
-        predict(X, output_type='quantiles', alphas=...)
-    and convert the per-sample quantile values into a piecewise-uniform
-    histogram (DistributionPrediction with 2-D bin_edges).
-    Until that conversion is implemented this raises NotImplementedError,
-    and cv.py will run point metrics only.
     """
-
-    # Quantile levels and output grid resolution
     
-    
-
     def __init__(self, **kwargs):
         from tabicl import TabICLRegressor
         self._model = TabICLRegressor(**kwargs)
-        self._ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
+        self._ALPHAS = _QUANTILE_LEVELS.tolist()
 
     def fit(self, X, y) -> "TabICLWrapper":
         self._set_train_range(y)
@@ -106,7 +97,7 @@ class FinetuneTabICLWrapper(TabICLWrapper):
         # Set the distribution-grid attributes directly instead of calling
         # super().__init__(), which would build a throwaway TabICLRegressor and
         # reject finetune-only kwargs such as ``max_data_size``.
-        self._ALPHAS = np.linspace(0.005, 0.995, 200).tolist()   # 200 quantiles
+        self._ALPHAS = _QUANTILE_LEVELS.tolist()
 
         from tabicl import FinetunedTabICLRegressor
 

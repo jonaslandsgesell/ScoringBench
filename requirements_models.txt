@@ -1,6 +1,7 @@
 # Optional model-specific dependencies for ScoringBench
 # Install with: pip install -r requirements_models.txt
 # These are only needed if you plan to use the corresponding wrappers
+#scikit-learn==1.7.2
 synthefy-nori>=0.6.0
 xgboost>=1.7.0
 catboost>=1.0.0

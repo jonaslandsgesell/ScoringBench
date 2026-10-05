@@ -34,7 +34,7 @@ def _ref_cross(samples, y, beta):
 
 
 def _ref_pairwise(samples, beta):
-    """Naive fair estimator 1/(m(m-1)) Σ_{i≠j} ‖y_i − y_j‖^β."""
+    """Naive unbiased estimator 1/(m(m-1)) Σ_{i≠j} ‖y_i − y_j‖^β."""
     n_test, m, _ = samples.shape
     if m < 2:
         return np.zeros(n_test)
@@ -66,32 +66,32 @@ def _ref_abs_pow(samples, p):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("beta", [0.5, 1.0, 1.5])
-def test_cross_norm_matches_reference(beta):
+def test_cross_norm_matches_reference(beta, scoring_device):
     rng = np.random.default_rng(0)
     samples = rng.normal(size=(7, 40, 3))
     y = rng.normal(size=(7, 3))
     got = cross_norm_expectation(
-        torch.as_tensor(samples), torch.as_tensor(y), beta
-    ).numpy()
+        torch.as_tensor(samples, device=scoring_device), torch.as_tensor(y, device=scoring_device), beta
+    ).cpu().numpy()
     assert np.allclose(got, _ref_cross(samples, y, beta), atol=1e-10)
 
 
 @pytest.mark.parametrize("beta", [0.5, 1.0, 1.5])
-def test_pairwise_norm_matches_reference(beta):
+def test_pairwise_norm_matches_reference(beta, scoring_device):
     rng = np.random.default_rng(1)
     samples = rng.normal(size=(5, 30, 2))
-    got = pairwise_norm_expectation(torch.as_tensor(samples), beta).numpy()
+    got = pairwise_norm_expectation(torch.as_tensor(samples, device=scoring_device), beta).cpu().numpy()
     assert np.allclose(got, _ref_pairwise(samples, beta), atol=1e-10)
 
 
-def test_pairwise_norm_chunking_is_exact():
+def test_pairwise_norm_chunking_is_exact(scoring_device):
     """Chunked accumulation must equal a single-chunk computation."""
     from scoringbench.multivariate import estimators as est
 
     rng = np.random.default_rng(2)
-    samples = torch.as_tensor(rng.normal(size=(3, 600, 4)))  # m > _PAIRWISE_CHUNK
-    chunked = pairwise_norm_expectation(samples, 1.0).numpy()
-    ref = _ref_pairwise(samples.numpy(), 1.0)
+    samples = torch.as_tensor(rng.normal(size=(3, 600, 4)), device=scoring_device)  # m > _PAIRWISE_CHUNK
+    chunked = pairwise_norm_expectation(samples, 1.0).cpu().numpy()
+    ref = _ref_pairwise(samples.cpu().numpy(), 1.0)
     assert np.allclose(chunked, ref, atol=1e-9)
 
 
@@ -112,10 +112,10 @@ def test_pairwise_norm_diagonal_excluded():
 
 
 @pytest.mark.parametrize("p", [0.5, 1.0, 2.0])
-def test_abs_pow_matches_reference(p):
+def test_abs_pow_matches_reference(p, scoring_device):
     rng = np.random.default_rng(3)
     samples = rng.normal(size=(6, 25, 4))
-    got = pairwise_abs_pow_expectation(torch.as_tensor(samples), p).numpy()
+    got = pairwise_abs_pow_expectation(torch.as_tensor(samples, device=scoring_device), p).cpu().numpy()
     assert np.allclose(got, _ref_abs_pow(samples, p), atol=1e-10)
 
 

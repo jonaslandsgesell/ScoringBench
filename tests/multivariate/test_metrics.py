@@ -4,7 +4,7 @@ Coverage
 --------
 * Output contract: keys present, all finite, all plain floats.
 * Energy score:
-    - non-negativity (proper-forecast lower bound, clamped),
+    - unbiased sample estimates, including legitimate negative values,
     - propriety in expectation (true forecaster beats a mis-located one),
     - analytic value for a known ensemble,
     - translation invariance of ES(β=1),
@@ -21,18 +21,25 @@ Coverage
 
 from __future__ import annotations
 
+from itertools import product
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from scoringbench.multivariate.cv import run_fold
+from scoringbench.multivariate.estimators import cross_norm_expectation, pairwise_norm_expectation
 from scoringbench.multivariate.metrics import (
     ENERGY_BETAS,
     SCORING_RULE_KEYS,
     VARIOGRAM_ORDERS,
+    _avg_marginal_energy_scores,
+    _dawid_sebastiani,
+    _energy_scores,
     _geometric_median,
+    _variogram_scores,
     compute_elementwise_mae,
     compute_mean_euclidean_error,
     compute_metrics,
@@ -41,6 +48,7 @@ from scoringbench.multivariate.metrics import (
     compute_scoring_rules,
 )
 from scoringbench.multivariate.prediction import MultivariateSamplePrediction
+from scoringbench.univariate.metrics import compute_energy_score_histogram_corrected
 
 
 # ---------------------------------------------------------------------------
@@ -159,16 +167,117 @@ def test_energy_and_variogram_key_naming():
     assert "dawid_sebastiani" in m
 
 
+@pytest.mark.parametrize("degenerate", [False, True])
+def test_multivariate_scoring_kernels_match_cpu_reference(scoring_device, degenerate):
+    rng = np.random.default_rng(42)
+    samples = rng.normal(size=(5, 30, 3))
+    targets = rng.normal(size=(5, 3))
+    if degenerate:
+        samples[:, :, 2] = 7.0
+    expected = compute_scoring_rules(make_pred(samples), targets)
+    samples_tensor = torch.tensor(samples, dtype=torch.float64, device=scoring_device)
+    targets_tensor = torch.tensor(targets, dtype=torch.float64, device=scoring_device)
+    assert samples_tensor.device.type == scoring_device.type
+    result = {
+        **_energy_scores(samples_tensor, targets_tensor, ENERGY_BETAS),
+        **_avg_marginal_energy_scores(samples_tensor, targets_tensor, ENERGY_BETAS),
+        **_variogram_scores(samples_tensor, targets_tensor, VARIOGRAM_ORDERS),
+        **_dawid_sebastiani(samples_tensor, targets_tensor),
+    }
+    assert result == pytest.approx(expected, rel=1e-10, abs=1e-10)
+
+
 # ---------------------------------------------------------------------------
 # Energy score
 # ---------------------------------------------------------------------------
 
-def test_energy_score_non_negative():
+@pytest.mark.parametrize("beta", ENERGY_BETAS)
+@pytest.mark.parametrize("n_targets", [1, 2])
+def test_energy_score_clamping_against_exact_calibrated_distribution(beta, n_targets, scoring_device):
+    """Exhaust all 64 equiprobable (draw1, draw2, observation) combinations.
+
+    All three are independent with P(-1)=P(1)=1/4 and P(0)=1/2. The exact
+    expected energy score is half E|X-X'|**beta = 1/4 + 2**beta/16.
+    """
+    outcomes = np.array(list(product([-1.0, 0.0, 0.0, 1.0], repeat=3)))
+    samples = torch.tensor(
+        np.repeat(outcomes[:, :2, None], n_targets, axis=2),
+        dtype=torch.float64, device=scoring_device,
+    )
+    targets = torch.tensor(
+        np.repeat(outcomes[:, 2, None], n_targets, axis=1),
+        dtype=torch.float64, device=scoring_device,
+    )
+    term1 = cross_norm_expectation(samples, targets, beta)
+    term2 = pairwise_norm_expectation(samples, beta)
+    assert term1.device.type == scoring_device.type
+    assert term2.device.type == scoring_device.type
+    assert torch.all(term1 >= 0.0)
+    assert torch.all(term2 >= 0.0)
+
+    scale = n_targets ** (beta / 2.0)
+    exact_marginal = 0.25 + 2.0 ** beta / 16.0
+    exact_joint = scale * exact_marginal
+    estimates = term1 - 0.5 * term2
+    assert estimates.mean().item() == pytest.approx(exact_joint, abs=1e-12)
+    assert _energy_scores(samples, targets, [beta])[f"energy_score_beta_{beta:g}"] == pytest.approx(
+        exact_joint, abs=1e-12,
+    )
+    assert _avg_marginal_energy_scores(samples, targets, [beta])[
+        f"avg_marginal_energy_score_beta_{beta:g}"
+    ] == pytest.approx(exact_marginal, abs=1e-12)
+
+    clipping_bias = scale * max(0.0, 2.0 ** (beta - 1.0) - 1.0) / 16.0
+    clipped = estimates.clamp(min=0.0).mean().item()
+    assert clipped == pytest.approx(exact_joint + clipping_bias, abs=1e-12)
+    if beta > 1.0:
+        assert estimates.min().item() < -0.4 * scale
+        assert clipped > exact_joint
+
+    edges = torch.tensor([-1.0, -1.0, 0.0, 0.0, 1.0, 1.0], dtype=torch.float64, device=scoring_device)
+    masses = torch.tensor([[0.25, 0.0, 0.5, 0.0, 0.25]], dtype=torch.float64, device=scoring_device)
+    observations = torch.tensor([-1.0, 0.0, 0.0, 1.0], dtype=torch.float64, device=scoring_device)
+    exact_histogram_score = compute_energy_score_histogram_corrected(
+        masses.expand(4, -1), edges, observations, [beta],
+    )[f"energy_score_beta_{beta}"]
+    assert exact_histogram_score >= 0.0
+    assert exact_histogram_score == pytest.approx(exact_marginal, abs=1e-12)
+
+
+@pytest.mark.parametrize("n_targets", [1, 2])
+def test_energy_score_retains_negative_estimates(n_targets):
+    samples = np.repeat(np.array([[[-1.0], [1.0]]]), n_targets, axis=-1)
+    metrics = compute_scoring_rules(make_pred(samples), np.zeros((1, n_targets)))
+    expected_marginal = 1.0 - np.sqrt(2.0)
+
+    assert metrics["energy_score_beta_1.5"] == pytest.approx(
+        n_targets ** 0.75 * expected_marginal,
+    )
+    assert metrics["avg_marginal_energy_score_beta_1.5"] == pytest.approx(expected_marginal)
+
+
+@pytest.mark.parametrize("n_targets", [1, 2])
+def test_energy_score_is_unbiased_over_two_draw_forecasts(n_targets):
+    samples = np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]])
+    samples = np.repeat(samples[:, :, None], n_targets, axis=-1)
+    metrics = compute_scoring_rules(make_pred(samples), np.zeros((4, n_targets)))
+
+    for beta in ENERGY_BETAS:
+        expected_marginal = 1.0 - 2.0 ** beta / 4.0
+        assert metrics[f"energy_score_beta_{beta:g}"] == pytest.approx(
+            n_targets ** (beta / 2.0) * expected_marginal,
+        )
+        assert metrics[f"avg_marginal_energy_score_beta_{beta:g}"] == pytest.approx(
+            expected_marginal,
+        )
+
+
+def test_energy_score_non_negative_for_metric_exponents():
     rng = np.random.default_rng(2)
     samples = rng.normal(size=(10, 60, 3))
     y = rng.normal(size=(10, 3))
     m = compute_scoring_rules(make_pred(samples), y)
-    for b in ENERGY_BETAS:
+    for b in (beta for beta in ENERGY_BETAS if beta <= 1.0):
         assert m[f"energy_score_beta_{b:g}"] >= 0.0
 
 
@@ -177,7 +286,7 @@ def test_energy_score_analytic_two_point_ensemble():
 
     Ensemble draws {a, b}, observation y.
       term1 = ½(‖a−y‖ + ‖b−y‖)
-      term2 (fair) = ‖a−b‖   (two ordered off-diagonal pairs / (2·1))
+    term2 = ‖a−b‖   (two ordered off-diagonal pairs / (2·1))
       ES = term1 − ½·term2
     """
     a = np.array([0.0, 0.0])
@@ -190,7 +299,7 @@ def test_energy_score_analytic_two_point_ensemble():
     expected = term1 - 0.5 * term2  # 1 - 1 = 0
 
     got = compute_scoring_rules(make_pred(samples), y[None, :])["energy_score_beta_1"]
-    assert got == pytest.approx(max(expected, 0.0), abs=1e-9)
+    assert got == pytest.approx(expected, abs=1e-9)
 
 
 def test_energy_score_is_proper_in_expectation():

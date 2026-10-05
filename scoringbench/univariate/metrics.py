@@ -37,7 +37,6 @@ from scipy import stats
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from ._integration import (
-    uniform_axis_integral,
     uniform_slab_pairwise_distance,
 )
 from .wrappers import DistributionPrediction
@@ -328,10 +327,9 @@ def compute_energy_score_histogram_corrected(
         Computes the Energy Score with exact uniform interval-correction.
         At beta=1.0, this mathematically equals the exact continuous CRPS.
 
-        Runs in float64 (see ``force_precision``): term1 - term2 is a difference
-        of large, nearly-equal values whose float32 cancellation can drive the
-        (non-negative) energy score / CRPS below zero. The per-sample clamp below
-        is a final guard restoring the mathematical guarantee score >= 0.
+        Runs in float64 (see ``force_precision``). For normalized forecasts and
+        beta in (0, 2] the exact score is non-negative, so the final clamp only
+        removes float roundoff below zero.
 
         Parameters
         ----------
@@ -803,7 +801,7 @@ def _interval(alpha, cdf, bin_edges, y, n_samples, n_bins, device, shared, y_bin
     Parameters
     ----------
     alpha : float
-        Confidence level (e.g., 0.10 for 90% CI, 0.05 for 95% CI)
+        Significance level (e.g., 0.10 for 90% CI, 0.05 for 95% CI)
     cdf : torch.Tensor
         Cumulative distribution function (n_samples, n_bins)
     bin_edges : torch.Tensor
@@ -819,29 +817,20 @@ def _interval(alpha, cdf, bin_edges, y, n_samples, n_bins, device, shared, y_bin
     coverage : float
         Empirical coverage (fraction of samples where y is in interval)
     """
-    lower_q, upper_q = alpha / 2.0, 1.0 - alpha / 2.0
+    levels = torch.tensor([alpha / 2.0, 1.0 - alpha / 2.0], dtype=cdf.dtype, device=device)
+    probes = (cdf[:, -1:] * levels).contiguous()
+    indices = torch.searchsorted(cdf.contiguous(), probes).clamp(0, n_bins - 1)
+    cdf_hi = cdf.gather(1, indices)
+    cdf_lo = torch.where(indices == 0, 0.0, cdf.gather(1, (indices - 1).clamp(min=0)))
+    mass = cdf_hi - cdf_lo
+    fraction = (probes - cdf_lo) / torch.where(mass > 0.0, mass, torch.ones_like(mass))
     if shared:
-        n_e = len(bin_edges)
-        # uint8 (1 byte/elem) is bit-identical to long (8 bytes/elem) for
-        # argmax on a 0/1 tensor; saves 8× on the (n_samples, n_bins) bool cast.
-        idx_l = (cdf >= lower_q).to(torch.uint8).argmax(dim=1).clamp(max=n_e - 1)
-        idx_u = ((cdf >= upper_q).to(torch.uint8).argmax(dim=1) + 1).clamp(max=n_e - 1)
-        lows  = bin_edges[idx_l]
-        highs = bin_edges[idx_u]
+        left = bin_edges[indices]
+        right = bin_edges[indices + 1]
     else:
-        # dtype=cdf.dtype is required, not cosmetic: `force_precision` upcasts the
-        # *arguments*, but these probes are built here, so a bare `torch.full`
-        # would take the global default (float32) and `searchsorted` would compare
-        # the float64 `cdf` against e.g. 0.7 -> 0.699999988079071.  Rows whose CDF
-        # crosses inside that ~1e-8 window then pick the neighbouring bin, which
-        # is how the shared (argmax, exact-double) and per-sample branches drifted
-        # apart on `interval_score_40` for numerically identical inputs.
-        q_l = torch.full((n_samples, 1), lower_q, device=device, dtype=cdf.dtype)
-        q_u = torch.full((n_samples, 1), upper_q, device=device, dtype=cdf.dtype)
-        idx_l = torch.searchsorted(cdf.contiguous(), q_l).squeeze(1).clamp(0, n_bins - 1)
-        idx_u = (torch.searchsorted(cdf.contiguous(), q_u).squeeze(1) + 1).clamp(0, n_bins - 1)
-        lows  = bin_edges[ns_idx, idx_l]
-        highs = bin_edges[ns_idx, idx_u]
+        left = bin_edges.gather(1, indices)
+        right = bin_edges.gather(1, indices + 1)
+    lows, highs = (left + fraction * (right - left)).unbind(dim=1)
     
     # `.float()` is float32 *by definition* -- it ignores the receiver's dtype --
     # so it would compute this mean in single precision on the float64 path.  The
@@ -855,13 +844,19 @@ def _interval(alpha, cdf, bin_edges, y, n_samples, n_bins, device, shared, y_bin
 
 
 @force_precision(torch.float64)
-def compute_quantile_wcrps(cdf, bin_mids, y, n_samples, n_bins, device, shared):
+def compute_quantile_wcrps(cdf, bin_edges, y, n_samples, n_bins, device, shared):
     """Compute quantile-weighted CRPS with three weighting schemes.
     
     Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17):
         qwCRPS_v(F, y) = 2 ∫₀¹ ρ_α(y, q_α) v(α) dα
     
     where ρ_α(y, q) = (I[y ≤ q] − α)(q − y) is the pinball/check function.
+
+    Exchanging the quantile and spatial integrals gives, below y,
+    ``2 * integral_0^F alpha * v(alpha) d alpha`` and, above y,
+    ``2 * integral_F^1 (1-alpha) * v(alpha) d alpha``. These are quartic
+    polynomials in the piecewise-linear CDF. Three-point Gauss-Legendre
+    integration on each bin, split at y, is exact and preserves atoms.
     
     Weight functions (Table 1, Gneiting & Ranjan 2011):
         left-tail:  v(α) = (1−α)²      (emphasizes underprediction)
@@ -872,57 +867,39 @@ def compute_quantile_wcrps(cdf, bin_mids, y, n_samples, n_bins, device, shared):
     -------
     dict with keys: wcrps_left, wcrps_right, wcrps_center
     """
-    # dtype=cdf.dtype matters twice over.  `force_precision` only upcasts the
-    # arguments, so a bare `linspace` would be float32 here: (a) `searchsorted`
-    # would probe the float64 `cdf` with e.g. 0.07 -> 0.070000000298..., shifting
-    # the recovered quantile bin on rows that cross inside that window, and (b)
-    # `alphas_qw` is subtracted from the indicator below, where float32 levels
-    # would cap the pinball loss's precision regardless of the float64 inputs.
-    alphas_qw = torch.linspace(0.01, 0.99, 99, device=device, dtype=cdf.dtype)   # (A,)
+    cdf = cdf / cdf[:, -1:]
+    cdf_lo = torch.cat([torch.zeros_like(cdf[:, :1]), cdf[:, :-1]], dim=1)
+    edges = bin_edges[None, :] if shared else bin_edges
+    left, right = edges[:, :-1], edges[:, 1:]
+    widths = right - left
+    below_width = torch.minimum((y[:, None] - left).clamp(min=0.0), widths)
+    fraction = below_width / torch.where(widths > 0.0, widths, torch.ones_like(widths))
+    cdf_at_y = cdf_lo + (cdf - cdf_lo) * fraction
 
-    # Invert the CDF: for each sample i and level α_j find the smallest bin k
-    # with cdf[i, k] >= α_j.  Expand alphas to (n_samples, A) so searchsorted
-    # can match the (n_samples, n_bins) cdf row-by-row.
-    alphas_expanded = alphas_qw[None, :].expand(n_samples, -1).contiguous()  # (n_samples, A)
-    idx_q = torch.searchsorted(cdf.contiguous(), alphas_expanded).clamp(0, n_bins - 1)
+    def integrate_cdf_weights(lower, upper, length):
+        left_score = cdf.new_zeros(n_samples)
+        right_score = cdf.new_zeros(n_samples)
+        center_score = cdf.new_zeros(n_samples)
+        offset = np.sqrt(3.0 / 5.0) / 2.0
+        for position, weight in ((0.5 - offset, 5.0 / 18.0),
+                                 (0.5, 4.0 / 9.0),
+                                 (0.5 + offset, 5.0 / 18.0)):
+            probability = lower + (upper - lower) * position
+            square = probability.square()
+            factor = length * weight * square
+            left_score += (factor * (1.0 - 4.0 / 3.0 * probability + 0.5 * square)).sum(dim=-1)
+            right_score += (factor * (0.5 * square)).sum(dim=-1)
+            center_score += (factor * probability * (2.0 / 3.0 - 0.5 * probability)).sum(dim=-1)
+        return left_score, right_score, center_score
 
-    if shared:
-        q_a = bin_mids[idx_q]                    # (n_samples, A)
-    else:
-        q_a = torch.gather(bin_mids, 1, idx_q)   # (n_samples, A)
-
-    # Pinball loss per sample and quantile level: 2(I[y ≤ q_α] − α)(q_α − y)
-    # Cast the indicator to `alphas_qw.dtype` rather than `.float()`: `.float()`
-    # is float32 by definition, which would silently drop this difference (and
-    # hence the whole score) back to single precision.
-    pinball = (
-        2.0
-        * ((y[:, None] <= q_a).to(alphas_qw.dtype) - alphas_qw[None, :])
-        * (q_a - y[:, None])
-    )                                                              # (n_samples, A)
-
-    v_left   = (1.0 - alphas_qw).pow(2)                          # (A,)
-    v_right  = alphas_qw.pow(2)
-    v_center = alphas_qw * (1.0 - alphas_qw)
-
-    # ∫₀¹ pinball(α)·v(α) dα via the shared uniform-grid quadrature.  The 99
-    # levels are the *interior* points of a uniform grid on (0, 1), so the
-    # "midpoint" rule (equal weight 1/(99+1) per sample, accounting for the two
-    # open end intervals) reproduces the original Gneiting–Ranjan discretisation
-    # exactly.
-    def _qw_integral(v):
-        return uniform_axis_integral(
-            pinball * v[None, :], a=0.0, b=1.0, rule="midpoint", dim=-1
-        ).mean().item()
-
-    wcrps_left   = _qw_integral(v_left)
-    wcrps_right  = _qw_integral(v_right)
-    wcrps_center = _qw_integral(v_center)
-
+    below = integrate_cdf_weights(cdf_lo, cdf_at_y, below_width)
+    above = integrate_cdf_weights(1.0 - cdf, 1.0 - cdf_at_y, widths - below_width)
+    lower_gap = (left[:, 0] - y).clamp(min=0.0)
+    upper_gap = (y - right[:, -1]).clamp(min=0.0)
     return {
-        "wcrps_left":   wcrps_left,
-        "wcrps_right":  wcrps_right,
-        "wcrps_center": wcrps_center,
+        "wcrps_left": (below[0] + above[1] + lower_gap / 2.0 + upper_gap / 6.0).mean().item(),
+        "wcrps_right": (below[1] + above[0] + lower_gap / 6.0 + upper_gap / 2.0).mean().item(),
+        "wcrps_center": (below[2] + above[2] + (lower_gap + upper_gap) / 6.0).mean().item(),
     }
 
 
@@ -1213,56 +1190,49 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
         F(y) = cdf_{k_y - 1} + p_{k_y} * (y - left_edge_{k_y}) / w_{k_y}
     Values outside the support are clamped to [0, 1].
 
+    At atoms use mid-PIT, ``(F(y-) + F(y)) / 2``, including all coincident
+    bins. The uniform KS p-value is calibrated for continuous forecasts;
+    with atoms it is a diagnostic, not a calibrated discrete-distribution test.
+
     Returns
     -------
     dict with keys:
         pit_ks_stat : float    KS statistic (sup |F_emp(p) - p|)
         pit_ks_pvalue : float  Two-sided p-value vs. Uniform(0, 1)
     """
-    eps = 100 * torch.finfo(probas.dtype).eps
-
-    # Probability mass and width of the bin containing each y
-    p_y = probas.gather(1, y_bin.unsqueeze(1)).squeeze(1)
+    total = cdf[:, -1:]
+    probas = probas / total
+    cdf = cdf / total
+    boundaries = bin_edges[1:] if shared else bin_edges[:, 1:]
+    targets = y if shared else y[:, None]
+    lower = torch.searchsorted(boundaries.contiguous(), targets, right=False).reshape(-1)
+    upper = torch.searchsorted(boundaries.contiguous(), targets, right=True).reshape(-1)
+    indices = torch.stack([lower, upper], dim=1).clamp(0, probas.shape[1] - 1)
+    mass = probas.gather(1, indices)
     if shared:
-        w_y = bin_widths[y_bin]
-        left_y = bin_edges[y_bin]
+        widths = bin_widths[indices]
+        left = bin_edges[indices]
         support_lo = bin_edges[0]
         support_hi = bin_edges[-1]
     else:
-        w_y = bin_widths.gather(1, y_bin.unsqueeze(1)).squeeze(1)
-        left_y = bin_edges.gather(1, y_bin.unsqueeze(1)).squeeze(1)
+        widths = bin_widths.gather(1, indices)
+        left = bin_edges.gather(1, indices)
         support_lo = bin_edges[:, 0]
         support_hi = bin_edges[:, -1]
 
-    # Cumulative mass strictly below the y-bin
-    cdf_prev = cdf[ns_idx, y_bin] - p_y
-
-    # Position of y WITHIN its bin, as a fraction in [0, 1].
-    #
-    # Positive-width bins: the histogram density is uniform on the bin, so the
-    # CDF rises linearly and ``frac = (y - left) / w``.
-    #
-    # Zero-width bins are ATOMS: a target can land exactly on a Dirac (e.g. a
-    # bar-distribution border or a repeated quantile), giving ``w_y = 0`` and a
-    # ``0/0`` interpolation.  The CDF is a step there, so a single ``frac`` is
-    # ill-defined; we use the mid-CDF convention ``frac = 1/2`` -- the mean of
-    # the left and right CDF limits.  This is the (non-randomised) PIT for a
-    # discrete component (Czado et al. 2009): for a calibrated atom it is the
-    # unbiased choice and keeps every PIT value finite and in [0, 1], instead of
-    # raising on an otherwise legitimate atom-on-target case.
-    atom = w_y <= eps
-    safe_w = torch.where(atom, torch.ones_like(w_y), w_y)
-    frac = torch.where(
-        atom,
-        torch.full_like(w_y, 0.5),
-        ((y - left_y) / safe_w).clamp(0.0, 1.0),
+    positive_width = widths > 0.0
+    safe_widths = torch.where(positive_width, widths, torch.ones_like(widths))
+    atom_limits = torch.tensor([0.0, 1.0], dtype=probas.dtype, device=probas.device)
+    fraction = torch.where(
+        positive_width,
+        ((y[:, None] - left) / safe_widths).clamp(0.0, 1.0),
+        atom_limits,
     )
-    pit = (cdf_prev + p_y * frac).clamp(0.0, 1.0)
+    cdf_before = cdf.gather(1, indices) - mass
+    pit = (cdf_before + mass * fraction).mean(dim=1).clamp(0.0, 1.0)
 
-    # y outside support -> clamp PIT to 0 / 1.
-    # Scalar constants avoid allocating zeros_like / ones_like tensors.
-    pit = torch.where(y <= support_lo, 0.0, pit)
-    pit = torch.where(y >= support_hi, 1.0, pit)
+    pit = torch.where(y < support_lo, 0.0, pit)
+    pit = torch.where(y > support_hi, 1.0, pit)
 
     pit_np = pit.detach().cpu().numpy().astype(np.float64)
     ks = stats.kstest(pit_np, "uniform")
@@ -1529,8 +1499,9 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute
         # ``probas * mids`` / ``probas * mids²`` are freed as soon as the two
         # scalars are read out.
         def _sharpness_dispersion():
-            mean_  = (probas * mids).sum(dim=-1)
-            var_   = ((probas * mids.pow(2)).sum(dim=-1) - mean_.pow(2)).clamp(min=0)
+            weights = probas / probas.sum(dim=-1, keepdim=True)
+            mean_ = (weights * mids).sum(dim=-1, keepdim=True)
+            var_ = (weights * ((mids - mean_).square() + bw.square() / 12.0)).sum(dim=-1)
             std_per_sample = var_.sqrt()                          # (n_samples,)
             # Use unbiased=False to avoid torch warning when n_samples is small
             return std_per_sample.mean().item(), std_per_sample.std(unbiased=False).item()
@@ -1538,7 +1509,7 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute
         sharpness, dispersion = _sharpness_dispersion()
 
         # ---- Quantile-Weighted CRPS (Gneiting & Ranjan 2011, Eq. 17) ----
-        qwcrps = compute_quantile_wcrps(cdf, bin_mids, y, n_samples, n_bins, device, shared)
+        qwcrps = compute_quantile_wcrps(cdf, bin_edges, y, n_samples, n_bins, device, shared)
 
         # ---- Interval scores (shared path: vectorised; non-shared: searchsorted) ----
         # Coverage levels (%) from COVERAGE_LEVELS; alpha = 1 - level/100.

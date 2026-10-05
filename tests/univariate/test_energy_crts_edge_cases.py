@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import sympy
 import torch
 
 torch.cuda.is_available = lambda: False  # force CPU float64 determinism
@@ -75,6 +76,55 @@ def _mc_energy_reference(edges, probas, y, beta, n=6_000_000, seed=0):
 # ENERGY SCORE edge cases
 # ===========================================================================
 _EXTREME_BETAS = [0.1, 0.3, 1.5, 1.9]
+
+
+def test_histogram_energy_symbolic_nonnegative_identities():
+    coordinate, other, target = sympy.symbols("coordinate other target", real=True)
+    half = sympy.Rational(1, 2)
+    first = sympy.integrate(target - coordinate, (coordinate, 0, target))
+    first += sympy.integrate(coordinate - target, (coordinate, target, 1))
+    pair_half = sympy.integrate(
+        sympy.integrate(coordinate - other, (other, 0, coordinate)), (coordinate, 0, 1),
+    )
+    assert sympy.simplify(first - pair_half - ((target - half) ** 2 + sympy.Rational(1, 12))) == 0
+
+    first_squared = sympy.integrate((coordinate - target) ** 2, (coordinate, 0, 1))
+    pair_half_squared = sympy.integrate(
+        sympy.integrate((coordinate - other) ** 2, (other, 0, coordinate)), (coordinate, 0, 1),
+    )
+    assert sympy.simplify(first_squared - pair_half_squared - (target - half) ** 2) == 0
+
+
+@pytest.mark.parametrize("shared", [True, False])
+@pytest.mark.parametrize("beta", [sympy.Rational(1, 2), sympy.Integer(1),
+                                  sympy.Rational(3, 2), sympy.Integer(2)])
+def test_histogram_energy_matches_symbolic_integrals(beta, shared, scoring_device):
+    coordinate, other = sympy.symbols("coordinate other", nonnegative=True)
+    targets = [sympy.Rational(1, 4), sympy.Rational(1, 2), sympy.Rational(3, 4)]
+    pair_half = sympy.integrate(
+        sympy.integrate((coordinate - other) ** beta, (other, 0, coordinate)),
+        (coordinate, 0, 1),
+    )
+    exact = []
+    for target in targets:
+        first = sympy.integrate((target - coordinate) ** beta, (coordinate, 0, target))
+        first += sympy.integrate((coordinate - target) ** beta, (coordinate, target, 1))
+        score = sympy.simplify(first - pair_half)
+        assert score.is_nonnegative is True
+        exact.append(float(score.evalf(60)))
+
+    widths = np.ones(3) if shared else np.array([1.0, 2.0, 4.0])
+    offsets = np.zeros(3) if shared else np.array([0.0, 3.0, 16.0])
+    edges = np.array([0.0, 1.0]) if shared else np.column_stack([offsets, offsets + widths])
+    observations = offsets + widths * np.array([float(target) for target in targets])
+    expected = np.array(exact) * widths ** float(beta)
+    scores = compute_energy_score_histogram_corrected(
+        torch.ones((3, 1), dtype=torch.float64, device=scoring_device),
+        torch.tensor(edges, dtype=torch.float64, device=scoring_device),
+        torch.tensor(observations, dtype=torch.float64, device=scoring_device),
+        betas=[float(beta)],
+    )
+    assert scores[f"energy_score_beta_{float(beta)}"] == pytest.approx(expected.mean(), rel=1e-12)
 
 
 @pytest.mark.parametrize("beta", _EXTREME_BETAS)

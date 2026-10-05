@@ -49,8 +49,10 @@ from scoringbench.univariate.wrappers import DistributionPrediction
 # ---------------------------------------------------------------------------
 
 def _uniform_histogram(scale: float, span: float, K: int):
-    """A single sharp, equal-width histogram: ``K`` bins of uniform mass over
-    ``[scale - span/2, scale + span/2]``.  Returns (edges, mids, widths, probas)."""
+    """Equal-width histogram whose K midpoints span scale +/- span/2.
+
+    The support width is span * K / (K - 1). Returns edges, mids, widths, probas.
+    """
     mids = np.linspace(scale - span / 2.0, scale + span / 2.0, K)
     widths = np.full(K, span / (K - 1))
     edges = np.concatenate([[mids[0] - widths[0] / 2.0], mids + widths / 2.0])
@@ -185,7 +187,7 @@ def test_crps_float64_matches_independent_definition():
 # ---------------------------------------------------------------------------
 
 def _hist_std(probas, mids, dtype):
-    """Predictive std from the same E[X²] - E[X]² formula the pipeline uses."""
+    """Legacy midpoint-only E[X²] - E[X]² formula for a cancellation comparison."""
     p = probas.astype(dtype)
     m = mids.astype(dtype)
     mean = (p * m).sum(dtype=dtype)
@@ -225,7 +227,7 @@ def test_pipeline_sharpness_and_finiteness_large_scale():
     assert std64 == pytest.approx(span / np.sqrt(12.0), rel=0.05)
 
     # Pipeline (float64) recovers the true spread and every metric is finite.
-    assert out["sharpness"] == pytest.approx(std64, rel=1e-3)
+    assert out["sharpness"] == pytest.approx(span * K / ((K - 1) * np.sqrt(12.0)), rel=1e-10)
     assert out["sharpness"] > 0.0
     assert out["crps"] >= 0.0
     assert all(np.isfinite(v) for v in out.values())
@@ -236,9 +238,8 @@ def test_sharpness_and_dispersion_match_analytic_per_sample():
     analytic predictive std; check both sharpness (mean of stds) and dispersion
     (population std of stds) against closed forms, and show float32 is wrong.
 
-    For ``K`` equally-weighted, equally-spaced points spanning width ``W`` the
-    variance is ``W² (K+1) / (12 (K-1))`` (variance of a discrete uniform), so
-    each sample's std is ``W * sqrt((K+1) / (12 (K-1)))``.
+    The ``K`` midpoints span width ``W``; the full uniform histogram therefore
+    spans ``W * K / (K - 1)`` and has that width divided by ``sqrt(12)`` as std.
     """
     scale, K = 1.0e7, 300
     spans = np.array([50.0, 100.0, 150.0, 200.0, 250.0])
@@ -256,7 +257,7 @@ def test_sharpness_and_dispersion_match_analytic_per_sample():
     out = compute_scoring_rules(dist, np.full(n, scale))
 
     # Closed-form per-sample std, then mean (sharpness) and population std (dispersion).
-    std_i = spans * np.sqrt((K + 1) / (12.0 * (K - 1)))
+    std_i = spans * K / ((K - 1) * np.sqrt(12.0))
     sharpness_ref = float(std_i.mean())
     dispersion_ref = float(std_i.std(ddof=0))  # population std == torch std(unbiased=False)
     assert dispersion_ref > 0.0
@@ -330,7 +331,7 @@ def _m_dpd(I):
 
 def _m_wcrps(I):
     return compute_quantile_wcrps.__wrapped__(
-        I["cdf"], I["bin_mids"], I["y"], I["n_samples"], I["n_bins"], I["device"], True)
+        I["cdf"], I["bin_edges"], I["y"], I["n_samples"], I["n_bins"], I["device"], True)
 
 
 def _m_crts(I):
@@ -356,10 +357,11 @@ def _m_interval(I):
 
 
 def _m_sharpness(I):
-    """Inline variance E[X²] - E[X]² (sharpness / dispersion)."""
+    """Centered histogram variance, including the within-bin uniform spread."""
     probas, mids = I["probas"], I["bin_mids"]
-    mean_ = (probas * mids).sum(dim=-1)
-    var_ = ((probas * mids.pow(2)).sum(dim=-1) - mean_.pow(2)).clamp(min=0)
+    weights = probas / probas.sum(dim=-1, keepdim=True)
+    mean_ = (weights * mids).sum(dim=-1, keepdim=True)
+    var_ = (weights * ((mids - mean_).square() + I["bw"].square() / 12.0)).sum(dim=-1)
     std = var_.sqrt()
     return {"sharpness": std.mean().item(), "dispersion": std.std(unbiased=False).item()}
 
@@ -416,7 +418,6 @@ def test_all_metrics_dtype_sensitivity_report(capsys):
     # Sanity: the known cancellation-prone rules must show up as sensitive.
     flagged_names = {s[0] for s in sensitive}
     assert any(n.startswith("energy/crps") for n in flagged_names)
-    assert any(n.startswith("sharpness") for n in flagged_names)
 
 
 
@@ -505,11 +506,11 @@ def test_interval_builds_no_float32_intermediates():
 
 
 def test_quantile_wcrps_builds_no_float32_intermediates():
-    """The alpha grid is searchsorted *and* arithmetic, so it must be float64."""
+    """Exact CDF integration must retain the working float64 precision."""
     I = _make_inputs(torch.float64)
     created = _assert_no_f32_tensor_created(
         lambda: compute_quantile_wcrps(
-            I["cdf"], I["bin_mids"], I["y"], I["n_samples"], I["n_bins"],
+            I["cdf"], I["bin_edges"], I["y"], I["n_samples"], I["n_bins"],
             I["device"], True)
     )
     bad = [c for c in created if c[1] == torch.float32]

@@ -20,6 +20,8 @@ import numpy as np
 import pytest
 import torch
 
+_trapz = getattr(np, "trapezoid", None) or np.trapz
+
 # Force CPU so the tests are deterministic and independent of GPU availability.
 torch.cuda.is_available = lambda: False
 
@@ -59,7 +61,7 @@ def _reference_crps(bin_edges, probas, y, pad=5.0, n=400_001):
     F = np.interp(t, edges, cum, left=0.0, right=1.0)
     indicator = (t >= float(y)).astype(np.float64)
     integrand = (F - indicator) ** 2
-    return float(np.trapezoid(integrand, t))
+    return float(_trapz(integrand, t))
 
 
 def _make_dist(bin_edges, probas):

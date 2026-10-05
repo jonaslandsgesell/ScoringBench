@@ -8,7 +8,7 @@ forecast.
 Rules (see the "Preliminary: Multivariate ScoringBench" note)
 -------------------------------------------------------------
 * **Energy score** ``ES_β(F, y) = E‖Y − y‖^β − ½ E‖Y − Y'‖^β`` with ``β = 1``
-  (and a small β family reported as extra columns).  Term 2 uses the *fair*
+    (and a small β family reported as extra columns). Term 2 uses the unbiased
   estimator ``1/(m(m−1)) Σ_{i≠j}`` so the estimate is unbiased for finite m.
 * **Average marginal energy score** (diagnostic) — the scalar energy score
   computed independently per dimension (``d = 1`` energy score, ``‖·‖ → |·|``)
@@ -166,15 +166,12 @@ def compute_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 @force_precision(torch.float64)
 def _energy_scores(samples: torch.Tensor, y: torch.Tensor, betas: list[float]) -> dict:
-    """Energy score for each β: ``E‖Y−y‖^β − ½ E‖Y−Y'‖^β`` (per-instance mean)."""
+    """Energy scores, retaining negative sample estimates to preserve unbiasedness."""
     out = {}
     for beta in betas:
         term1 = cross_norm_expectation(samples, y, beta)          # (n_test,)
         term2 = pairwise_norm_expectation(samples, beta)          # (n_test,)
         es = term1 - 0.5 * term2
-        # Energy score is non-negative for a proper forecast; tiny negatives are
-        # Monte-Carlo noise -> clamp at 0 for a clean leaderboard column.
-        es = torch.clamp(es, min=0.0)
         out[f"energy_score_beta_{_fmt(beta)}"] = float(es.mean())
     return out
 
@@ -206,7 +203,7 @@ def _avg_marginal_energy_scores(
             y_k = y[:, k:k + 1]                                   # (n_test, 1)
             term1 = cross_norm_expectation(samples_k, y_k, beta)  # (n_test,)
             term2 = pairwise_norm_expectation(samples_k, beta)    # (n_test,)
-            es = torch.clamp(term1 - 0.5 * term2, min=0.0)
+            es = term1 - 0.5 * term2
             per_dim[k] = es.mean()
         out[f"avg_marginal_energy_score_beta_{_fmt(beta)}"] = float(per_dim.mean())
     return out

@@ -15,11 +15,13 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 import warnings
+from scipy.integrate import quad
 from sklearn.exceptions import UndefinedMetricWarning
 
 from scoringbench.univariate.wrappers.base import DistributionPrediction
 from scoringbench.univariate.metrics import (
     compute_point_metrics,
+    compute_quantile_wcrps,
     compute_scoring_rules,
     compute_metrics,
     ENERGY_BETAS,
@@ -291,69 +293,62 @@ def _compute_wcrps_numerical(probas, bin_edges, bin_midpoints, y_true, weight_fu
     probas = np.asarray(probas, dtype=np.float64)
     y_true = np.asarray(y_true, dtype=np.float64)
     bin_edges = np.asarray(bin_edges, dtype=np.float64)
-    bin_midpoints = np.asarray(bin_midpoints, dtype=np.float64)
-    
-    n_samples = probas.shape[0]
     wcrps_values = []
-    
-    # Quantile levels for numerical integration
-    alphas = np.linspace(0.01, 0.99, 99)
-    d_alpha = 1.0 / (len(alphas) + 1)  # ≈ 0.01
-    
-    for i in range(n_samples):
-        p = probas[i]
-        y = y_true[i]
-        
-        # Get bin edges and midpoints for this sample
-        if bin_edges.ndim == 1:
-            edges = bin_edges
-            mids = bin_midpoints
-        else:
-            edges = bin_edges[i]
-            mids = bin_midpoints[i]
-        
-        # Compute CDF
-        cdf = np.cumsum(p)
-        
-        # For each quantile level alpha, find the alpha-quantile value
-        pinballs = []
-        for alpha in alphas:
-            # Find smallest bin k with cdf[k] >= alpha
-            k = np.searchsorted(cdf, alpha, side='left')
-            k = np.clip(k, 0, len(mids) - 1)
-            q_alpha = mids[k]
-            
-            # Pinball loss: 2(I[y ≤ q_α] − α)(q_α − y)
-            indicator = float(y <= q_alpha)
-            pinball = 2.0 * (indicator - alpha) * (q_alpha - y)
-            pinballs.append(pinball)
-        
-        pinballs = np.array(pinballs)
-        
-        # Weight function
-        if weight_func_name == 'left':
-            v = (1.0 - alphas)**2
-        elif weight_func_name == 'right':
-            v = alphas**2
-        elif weight_func_name == 'center':
-            v = alphas * (1.0 - alphas)
-        else:
-            raise ValueError(f"Unknown weight function: {weight_func_name}")
-        
-        # Weighted sum
-        wcrps_i = np.sum(pinballs * v) * d_alpha
-        wcrps_values.append(wcrps_i)
-    
+    weight = {
+        "left": lambda level: (1.0 - level) ** 2,
+        "right": lambda level: level ** 2,
+        "center": lambda level: level * (1.0 - level),
+    }[weight_func_name]
+    for row, target in enumerate(y_true):
+        masses = probas[row] / probas[row].sum()
+        edges = bin_edges if bin_edges.ndim == 1 else bin_edges[row]
+        cumulative = np.concatenate([[0.0], np.cumsum(masses)])
+        score = 0.0
+        for index, mass in enumerate(masses):
+            if mass <= 0.0:
+                continue
+            lower, upper = cumulative[index:index + 2]
+            left, right = edges[index:index + 2]
+
+            def pinball(level):
+                quantile = left + (level - lower) / mass * (right - left)
+                return 2.0 * (float(target <= quantile) - level) * (quantile - target) * weight(level)
+
+            crossing = lower + mass * np.clip((target - left) / (right - left), 0.0, 1.0) if right > left else lower
+            points = [crossing] if lower < crossing < upper else None
+            score += quad(pinball, lower, upper, points=points, epsabs=1e-12, epsrel=1e-12)[0]
+        wcrps_values.append(score)
     return np.mean(wcrps_values)
 
 
+@pytest.mark.parametrize("shared", [True, False])
+@pytest.mark.parametrize("target", [-3.0, 0.2, 10.0])
+def test_wcrps_nonuniform_grid_matches_pinball_integral(shared, target):
+    edges = np.array([-2.0, -1.0, 0.0, 0.0, 0.5, 7.0])
+    probas = np.array([[0.1, 0.0, 0.4, 0.2, 0.3], [0.3, 0.0, 0.2, 0.4, 0.1]])
+    offsets = np.zeros(2) if shared else np.array([0.0, 4.0])
+    if not shared:
+        edges = edges[None, :] + offsets[:, None]
+    targets = target + offsets
+    midpoints = (edges[..., :-1] + edges[..., 1:]) / 2.0
+    result = compute_quantile_wcrps(
+        _torch.tensor(np.cumsum(probas, axis=1), dtype=_torch.float64),
+        _torch.tensor(edges, dtype=_torch.float64),
+        _torch.tensor(targets, dtype=_torch.float64), 2, 5,
+        _torch.device("cpu"), shared,
+    )
+    for weight in ("left", "right", "center"):
+        expected = _compute_wcrps_numerical(probas, edges, midpoints, targets, weight)
+        assert result[f"wcrps_{weight}"] == pytest.approx(expected, abs=1e-12)
+
+
 # ---------------------------------------------------------------------------
-# 2  Delta (point-mass) distribution — all scores should be ≈ 0
+# 2  Single occupied uniform bin
 # ---------------------------------------------------------------------------
 
 
 class TestDeltaDistribution:
-    """All probability mass on the bin containing y_true."""
+    """A uniform slab: one occupied bin is not a point mass."""
 
     @pytest.fixture
     def delta(self):
@@ -379,13 +374,13 @@ class TestDeltaDistribution:
 
     def test_sharpness(self, delta):
         r = compute_scoring_rules(*delta)
-        assert r["sharpness"] == pytest.approx(0.0, abs=1e-6)
+        assert r["sharpness"] == pytest.approx(1.0 / np.sqrt(12.0), abs=1e-6)
 
     def test_wcrps_variants(self, delta):
         r = compute_scoring_rules(*delta)
-        assert r["wcrps_left"] == pytest.approx(0.0, abs=1e-6)
-        assert r["wcrps_right"] == pytest.approx(0.0, abs=1e-6)
-        assert r["wcrps_center"] == pytest.approx(0.0, abs=1e-6)
+        assert r["wcrps_left"] == pytest.approx(13.0 / 480.0, abs=1e-12)
+        assert r["wcrps_right"] == pytest.approx(13.0 / 480.0, abs=1e-12)
+        assert r["wcrps_center"] == pytest.approx(7.0 / 480.0, abs=1e-12)
 
     def test_coverage(self, delta):
         r = compute_scoring_rules(*delta)
@@ -425,7 +420,7 @@ class TestUniformDistribution:
 
     def test_sharpness(self, uniform):
         r = compute_scoring_rules(*uniform)
-        assert r["sharpness"] == pytest.approx(np.sqrt(1.25), abs=1e-5)
+        assert r["sharpness"] == pytest.approx(4.0 / np.sqrt(12.0), abs=1e-5)
 
     def test_coverage(self, uniform):
         r = compute_scoring_rules(*uniform)
@@ -434,8 +429,8 @@ class TestUniformDistribution:
 
     def test_interval_scores(self, uniform):
         r = compute_scoring_rules(*uniform)
-        assert r["interval_score_90"] == pytest.approx(4.0, abs=1e-5)
-        assert r["interval_score_95"] == pytest.approx(4.0, abs=1e-5)
+        assert r["interval_score_90"] == pytest.approx(3.6, abs=1e-5)
+        assert r["interval_score_95"] == pytest.approx(3.8, abs=1e-5)
 
     def test_energy_beta1_equals_crps(self, uniform):
         r = compute_scoring_rules(*uniform)
@@ -502,7 +497,7 @@ class TestAsymmetricDistribution:
 
     def test_sharpness(self, asym):
         r = compute_scoring_rules(*asym)
-        assert r["sharpness"] == pytest.approx(np.sqrt(0.44), abs=1e-5)
+        assert r["sharpness"] == pytest.approx(np.sqrt(0.44 + 1.0 / 12.0), abs=1e-5)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from .resampling_grid import (
     quantiles_to_cdf_nodes,
     resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid,
     samples_to_cdf_nodes,
+    with_tail_atoms,
 )
 
 
@@ -138,19 +139,25 @@ class DistributionPrediction:
 
         Each row's empirical CDF (strictly increasing, de-tied) is the lossless
         intermediate: the native PMF grid bins it onto ``n_bins`` uniform bins (a
-        bounded grid -- the native energy score is O(n_bins^2)), and the resampled
-        view PCHIPs the SAME eCDF nodes.  No histogram round-trip.
+        bounded grid -- the native energy score is O(n_bins^2)) plus a zero-width
+        atom at the min / max draw holding the ``1/2n`` Hazen tail mass, so the
+        native CDF keeps the eCDF levels exactly.  The resampled view PCHIPs the
+        SAME eCDF nodes.  No histogram round-trip.
         """
         samples = np.atleast_2d(np.asarray(samples, dtype=np.float64))
         n_bins = max(int(n_bins), 1)
         # Per-row eCDF nodes have different lengths, so keep them as a list and
         # bin each to the shared native bin count.
         node_rows = [samples_to_cdf_nodes(row) for row in samples]
-        edges = np.empty((samples.shape[0], n_bins + 1), dtype=np.float64)
-        probas = np.empty((samples.shape[0], n_bins), dtype=np.float64)
-        for i, (x, c) in enumerate(node_rows):
+        edge_rows, proba_rows = [], []
+        for x, c in node_rows:
             e, p = interpolate_cdf_to_grid_with_equally_sized_bins(x, c, n_bins)
-            edges[i], probas[i] = e[0], p[0]
+            # The binning normalizes the interior to 1; restore its true mass
+            # c_last - c_0 before the tail atoms take the rest.
+            e, p = with_tail_atoms(e, p * (c[:, -1:] - c[:, :1]), c)
+            edge_rows.append(e[0])
+            proba_rows.append(p[0])
+        edges, probas = np.stack(edge_rows), np.stack(proba_rows)
         out_mean = samples.mean(axis=1) if mean is None else np.asarray(mean, float).reshape(-1)
         prediction = cls._from_native(edges, probas, out_mean, train_range,
                                       cdf_nodes=node_rows, is_sample_based=True, **kw)

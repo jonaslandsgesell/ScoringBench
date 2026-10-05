@@ -112,6 +112,43 @@ def test_distribution_prediction_container():
     assert dist.mean.shape == (2,)
 
 
+@pytest.mark.parametrize("shared", [True, False])
+@pytest.mark.parametrize("shift", [0.0, 1e8])
+def test_sharpness_includes_uniform_bin_variance(shared, shift):
+    edges = np.array([shift, shift + 1.0])
+    if not shared:
+        edges = np.tile(edges, (2, 1))
+    dist = DistributionPrediction.from_histogram(
+        edges, np.ones((2, 1)), train_range=(shift, shift + 1.0),
+    )
+    result = compute_scoring_rules(dist, np.full(2, shift + 0.5), representation="native")
+    assert result["sharpness"] == pytest.approx(1.0 / np.sqrt(12.0), abs=1e-12)
+    assert result["dispersion"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_dispersion_includes_per_row_bin_variances_and_atoms():
+    dist = DistributionPrediction.from_histogram(
+        [[0.0, 1.0], [2.0, 4.0], [3.0, 3.0]], np.ones((3, 1)),
+        train_range=(0.0, 4.0),
+    )
+    result = compute_scoring_rules(dist, np.array([0.5, 3.0, 3.0]), representation="native")
+    expected_std = np.array([1.0, 2.0, 0.0]) / np.sqrt(12.0)
+    assert result["sharpness"] == pytest.approx(expected_std.mean(), abs=1e-12)
+    assert result["dispersion"] == pytest.approx(expected_std.std(), abs=1e-12)
+
+
+def test_sharpness_combines_within_and_between_bin_variances():
+    dist = DistributionPrediction.from_histogram(
+        [0.0, 1.0, 5.0], [[0.25, 0.75]], train_range=(0.0, 5.0),
+    )
+    result = compute_scoring_rules(dist, np.array([2.0]), representation="native")
+    expected_second_moment = 0.25 / 3.0 + 0.75 * (1.0 + 5.0 + 25.0) / 3.0
+    expected_mean = 0.25 * 0.5 + 0.75 * 3.0
+    assert result["sharpness"] == pytest.approx(
+        np.sqrt(expected_second_moment - expected_mean ** 2), abs=1e-12,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Quantile-weighted CRPS tests (Gneiting & Ranjan 2011, Eq. 17)
 # ---------------------------------------------------------------------------
@@ -123,6 +160,25 @@ def test_distribution_prediction_container():
 # Key identity: when distribution mass is concentrated to the RIGHT of y,
 # the lower quantiles (small α) deviate most from the truth, so
 # wCRPS_left > wCRPS_right.  The symmetric argument holds for the mirror case.
+
+
+@pytest.mark.parametrize("shared", [True, False])
+@pytest.mark.parametrize("n_bins", [1, 5])
+def test_wcrps_matches_exact_uniform_quantile_integral(shared, n_bins):
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    offsets = np.zeros(2) if shared else np.array([0.0, 3.0])
+    if not shared:
+        edges = edges[None, :] + offsets[:, None]
+    dist = DistributionPrediction.from_histogram(
+        edges, np.full((2, n_bins), 1.0 / n_bins), train_range=(0.0, 4.0),
+    )
+    result = compute_scoring_rules(dist, offsets + 0.3, representation="native")
+    assert result["wcrps_left"] == pytest.approx(0.02335, abs=1e-12)
+    assert result["wcrps_right"] == pytest.approx(0.05135, abs=1e-12)
+    assert result["wcrps_center"] == pytest.approx(0.024316666666666667, abs=1e-12)
+    assert result["wcrps_left"] + result["wcrps_right"] + 2.0 * result["wcrps_center"] == pytest.approx(
+        result["crps"], abs=1e-12,
+    )
 
 
 def _make_dist_shared(probas_row, bin_edges, n_samples):
@@ -301,19 +357,18 @@ def test_wcrps_analytical_single_bin():
     """Analytical test: single-bin Dirac-like distribution with known closed-form wCRPS.
 
     Setup:
-      - 1 bin [0, 1] with midpoint 0.5, all mass concentrated here
+    - 1 zero-width bin [0.5, 0.5], all mass concentrated here
       - y_true = 0.3 (below the quantiles q_α = 0.5)
       - For all α: pinball(α) = 2(I[0.3 ≤ 0.5] - α)(0.5 - 0.3) = 2(1 - α)(0.2) = 0.4(1 - α)
 
     Expected wCRPS (via numerical integration):
       wCRPS_v = ∫₀¹ 0.4(1-α) v(α) dα
 
-    For v_left(α) = (1-α)²:    wCRPS_left ≈ 0.1333
+    For v_left(α) = (1-α)²:    wCRPS_left = 0.1
     For v_right(α) = α²:        wCRPS_right ≈ 0.0333
-    For v_center(α) = α(1-α):   wCRPS_center ≈ 0.0667
+    For v_center(α) = α(1-α):   wCRPS_center ≈ 0.0333
     """
-    # Create single-bin distribution: [0, 1] with all mass at midpoint 0.5
-    bin_edges = np.array([0.0, 1.0], dtype=np.float32)
+    bin_edges = np.array([0.5, 0.5], dtype=np.float32)
     bin_mids = np.array([0.5], dtype=np.float32)
     probas = np.array([[1.0]], dtype=np.float32)  # Single sample, all mass in bin 0
     mean = np.array([0.5], dtype=np.float64)
@@ -324,10 +379,10 @@ def test_wcrps_analytical_single_bin():
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
-        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
+        train_range=(0.0, 1.0),
     )
 
-    res = compute_scoring_rules(dist, y_true)
+    res = compute_scoring_rules(dist, y_true, representation="native")
 
     # Analytically compute expected wCRPS values via numerical integration
     # For pinball(α) = 0.4(1-α), integrate with weight functions
@@ -367,7 +422,7 @@ def test_wcrps_exact_values_with_epsilon():
     """Exact value test: verify specific wCRPS values match analytical expectations within epsilon.
 
     Setup:
-      - 1 bin [0, 1] with all mass at midpoint 0.5
+    - 1 zero-width bin [0.5, 0.5] with all mass at 0.5
       - y_true = 0.3 (below quantile)
       - Closed-form analytical solution possible
 
@@ -378,33 +433,30 @@ def test_wcrps_exact_values_with_epsilon():
       wCRPS_right = ∫₀¹ 0.4(1-α)α² dα = 0.4 * 1/12 ≈ 0.0333...
       wCRPS_center = ∫₀¹ 0.4(1-α)α(1-α) dα = 0.4 * 1/12 ≈ 0.0333...
 
-    The discrete implementation uses 99 quantile levels, so there's ~1% discretization error.
+    The point-mass integrals are exact up to floating-point rounding.
     """
-    bin_edges = np.array([0.0, 1.0], dtype=np.float32)
-    bin_mids = np.array([0.5], dtype=np.float32)
-    probas = np.array([[1.0]], dtype=np.float32)
+    bin_edges = np.array([0.5, 0.5], dtype=np.float64)
+    bin_mids = np.array([0.5], dtype=np.float64)
+    probas = np.array([[1.0]], dtype=np.float64)
     mean = np.array([0.5], dtype=np.float64)
-    y_true = np.array([0.3], dtype=np.float32)
+    y_true = np.array([0.3], dtype=np.float64)
 
     dist = DistributionPrediction(
         probas=probas,
         bin_edges=bin_edges,
         bin_midpoints=bin_mids,
         mean=mean,
-        train_range=(float(np.asarray(bin_edges).min()), float(np.asarray(bin_edges).max())),
+        train_range=(0.0, 1.0),
     )
 
-    res = compute_scoring_rules(dist, y_true)
+    res = compute_scoring_rules(dist, y_true, representation="native")
 
     # Analytical values computed from closed-form integrals
     expected_wcrps_left = 0.1
     expected_wcrps_right = 0.4 / 12.0  # ≈ 0.0333...
     expected_wcrps_center = 0.4 / 12.0  # ≈ 0.0333...
 
-    # Tolerance accounts for:
-    # 1. Discretization: 99 quantile levels instead of continuous integration
-    # 2. Numerical precision: finite precision arithmetic in torch
-    epsilon = 0.01  # 1% tolerance for discretization + numerical error
+    epsilon = 1e-12
 
     assert abs(res["wcrps_left"] - expected_wcrps_left) < epsilon, (
         f"wcrps_left exact value test failed: "
