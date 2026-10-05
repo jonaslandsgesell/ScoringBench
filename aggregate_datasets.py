@@ -33,6 +33,24 @@ def _detect_parquet_engine():
             return None
 
 
+def _is_up_to_date(dest: Path, combined: pd.DataFrame, model_dir: Path,
+                   dataset_files: list[str], engine: str) -> bool:
+    """True if ``dest`` already holds every (dataset, fold) run in ``combined``
+    and no raw file is newer than it, so rewriting it would change nothing."""
+    if not dest.exists() or not {"dataset", "fold"}.issubset(combined.columns):
+        return False
+    dest_mtime = dest.stat().st_mtime
+    if any((model_dir / f).stat().st_mtime > dest_mtime for f in dataset_files):
+        return False
+    try:
+        existing = pd.read_parquet(dest, columns=["dataset", "fold"], engine=engine)
+    except Exception:
+        return False
+    existing_keys = set(map(tuple, existing[["dataset", "fold"]].astype(str).values))
+    new_keys = set(map(tuple, combined[["dataset", "fold"]].astype(str).values))
+    return new_keys <= existing_keys
+
+
 def aggregate(raw_dir: Path, out_dir: Path) -> dict[str, int]:
     """Aggregate per-dataset per-model parquet files into aggregated per-model files.
 
@@ -119,6 +137,11 @@ def aggregate(raw_dir: Path, out_dir: Path) -> dict[str, int]:
             combined = combined.sort_values(["dataset", "fold"]).reset_index(drop=True)
 
         dest = out_dir / f"{model_name}.parquet"
+        if _is_up_to_date(dest, combined, model_dir, dataset_files, engine):
+            summary[model_name] = len(combined)
+            print(f"  {model_name}.parquet  (already contains all {len(combined)} run(s) — not rewritten)")
+            continue
+
         tmp = dest.with_suffix(".parquet.tmp")
         try:
             combined.to_parquet(tmp, engine=engine, index=False)

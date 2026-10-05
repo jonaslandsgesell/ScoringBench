@@ -28,12 +28,15 @@ on a grid, which this package deliberately does not construct.
 Output contract
 ---------------
 :func:`compute_metrics` returns a flat ``dict[str, float]`` of *lower-is-better*
-numeric metrics plus point metrics (``mae``, ``rmse`` — vector versions).  The
+numeric metrics plus point metrics (``mean_euclidean_error``, ``rmse``,
+``elementwise_mae``).  The
 keys are plain numeric columns so ``autorank_leaderboard.py`` treats them all as
 ascending (lower = better), exactly like the univariate energy-score columns.
 """
 
 from __future__ import annotations
+
+import warnings
 
 import numpy as np
 import torch
@@ -64,8 +67,46 @@ def _fmt(x: float) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _geometric_median(samples: np.ndarray) -> np.ndarray:
+    """Minimize ensemble Euclidean error with modified Weiszfeld iterations."""
+    median = np.median(samples, axis=1)
+    if samples.shape[-1] == 1:
+        return median
+
+    scale = np.median(np.linalg.norm(samples - median[:, None, :], axis=-1), axis=1)
+    active = np.arange(samples.shape[0])
+    for _ in range(1000):
+        offsets = samples[active] - median[active, None, :]
+        distances = np.linalg.norm(offsets, axis=-1)
+        nonzero = distances > 0.0
+        weights = np.divide(1.0, distances, out=np.zeros_like(distances), where=nonzero)
+        residual = (offsets * weights[:, :, None]).sum(axis=1)
+        residual_norm = np.linalg.norm(residual, axis=1)
+        coincident = (~nonzero).sum(axis=1)
+        retained = np.maximum(0.0, 1.0 - np.divide(
+            coincident, residual_norm, out=np.ones_like(residual_norm),
+            where=residual_norm > 0.0,
+        ))
+        weight_sum = weights.sum(axis=1, keepdims=True)
+        step = np.divide(residual, weight_sum, out=np.zeros_like(residual),
+                         where=weight_sum > 0.0) * retained[:, None]
+        median[active] += step
+        converged = np.linalg.norm(step, axis=1) <= 1e-10 * scale[active]
+        active = active[~converged]
+        if active.size == 0:
+            return median
+
+    warnings.warn("Geometric median reached its iteration limit; mean Euclidean error uses the last iterate.",
+                  RuntimeWarning, stacklevel=2)
+    return median
+
+
 def compute_metrics(pred: MultivariateSamplePrediction, y_true: np.ndarray) -> dict:
     """All multivariate metrics from a sample prediction.
+
+    Mean Euclidean error uses the conditional geometric median, which minimizes
+    the sum of L2 distances to the ensemble draws. RMSE uses the mean, and
+    element-wise MAE uses the vector of conditional marginal medians.
 
     Parameters
     ----------
@@ -75,28 +116,52 @@ def compute_metrics(pred: MultivariateSamplePrediction, y_true: np.ndarray) -> d
         Observed target vectors.
     """
     return {
-        **compute_point_metrics(y_true, pred.mean),
+        **compute_point_metrics(pred, y_true),
         **compute_scoring_rules(pred, y_true),
     }
 
 
-def compute_point_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """Vector MAE / RMSE (mean Euclidean error and root-mean-squared error).
+def compute_point_metrics(pred: MultivariateSamplePrediction, y_true: np.ndarray) -> dict:
+    """Point losses at the sample forecast's mean and appropriate medians."""
+    return {
+        "mean_euclidean_error": compute_mean_euclidean_error(y_true, _geometric_median(pred.samples)),
+        "rmse": compute_rmse(y_true, pred.mean),
+        "elementwise_mae": compute_elementwise_mae(y_true, np.median(pred.samples, axis=1)),
+    }
 
-    ``mae`` = mean over instances of ``‖y − ŷ‖`` (Euclidean).
-    ``rmse`` = sqrt(mean over instances of ``‖y − ŷ‖²``).
-    """
+
+def compute_mean_euclidean_error(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Mean L2 distance between observed and predicted target vectors."""
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     if y_true.ndim == 1:
         y_true = y_true[:, None]
     if y_pred.ndim == 1:
         y_pred = y_pred[:, None]
-    err = np.linalg.norm(y_true - y_pred, axis=-1)  # (n_test,)
-    return {
-        "mae": float(np.mean(err)),
-        "rmse": float(np.sqrt(np.mean(err ** 2))),
-    }
+    return float(np.linalg.norm(y_true - y_pred, axis=-1).mean())
+
+
+def compute_elementwise_mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Mean absolute error over instances and coordinates (L1 error / dimension)."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if y_true.ndim == 1:
+        y_true = y_true[:, None]
+    if y_pred.ndim == 1:
+        y_pred = y_pred[:, None]
+    return float(np.abs(y_true - y_pred).mean())
+
+
+def compute_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Square root of the mean squared L2 distance between target vectors."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if y_true.ndim == 1:
+        y_true = y_true[:, None]
+    if y_pred.ndim == 1:
+        y_pred = y_pred[:, None]
+    squared_errors = np.square(y_true - y_pred).sum(axis=-1)
+    return float(np.sqrt(squared_errors.mean()))
 
 
 @force_precision(torch.float64)
@@ -209,8 +274,7 @@ def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray
     return metrics
 
 
-# Metric keys produced by compute_scoring_rules (used by cv.py to null-fill on
-# point-only fallback, mirroring the univariate cv.py).
+# Metric keys produced by compute_scoring_rules.
 SCORING_RULE_KEYS = (
     *[f"energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
     *[f"avg_marginal_energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],

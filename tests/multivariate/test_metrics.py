@@ -16,20 +16,28 @@ Coverage
 * Dawid–Sebastiani:
     - matches the closed form (y-μ)ᵀΣ⁻¹(y-μ) + logdet Σ on a fixed ensemble,
     - propriety (well-located ensemble beats a shifted one) in expectation.
-* Point metrics: MAE/RMSE against hand-computed Euclidean errors.
+* Point metrics: mean Euclidean error, RMSE, and element-wise MAE.
 """
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import numpy as np
+import pandas as pd
 import pytest
 
+from scoringbench.multivariate.cv import run_fold
 from scoringbench.multivariate.metrics import (
     ENERGY_BETAS,
     SCORING_RULE_KEYS,
     VARIOGRAM_ORDERS,
+    _geometric_median,
+    compute_elementwise_mae,
+    compute_mean_euclidean_error,
     compute_metrics,
     compute_point_metrics,
+    compute_rmse,
     compute_scoring_rules,
 )
 from scoringbench.multivariate.prediction import MultivariateSamplePrediction
@@ -66,10 +74,79 @@ def test_metric_keys_present_and_finite():
 
     for key in SCORING_RULE_KEYS:
         assert key in m, f"missing scoring-rule key {key}"
-    assert "mae" in m and "rmse" in m
+    assert "mean_euclidean_error" in m and "rmse" in m
+    assert "elementwise_mae" in m
+    assert "mae" not in m
     for k, v in m.items():
         assert isinstance(v, float), f"{k} is not a float"
         assert np.isfinite(v), f"{k} is not finite"
+
+
+def test_compute_metrics_uses_geometric_median_for_mean_euclidean_error(monkeypatch):
+    pred = make_pred(np.array([[[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]]))
+    median = np.full((1, 2), 1.0 - 1.0 / np.sqrt(3.0))
+    monkeypatch.setattr(
+        "scoringbench.multivariate.metrics.compute_scoring_rules",
+        lambda pred, y_true: {},
+    )
+
+    metrics = compute_metrics(pred, median)
+
+    assert metrics["mean_euclidean_error"] == pytest.approx(0.0, abs=1e-8)
+    assert compute_mean_euclidean_error(median, pred.mean) > 0.3
+    assert metrics["rmse"] == compute_rmse(median, pred.mean)
+
+
+def test_compute_metrics_uses_marginal_medians_for_elementwise_mae(monkeypatch):
+    pred = make_pred(np.array([
+        [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]],
+        [[1.0, 4.0], [1.0, 8.0], [9.0, 4.0]],
+    ]))
+    marginal_medians = np.median(pred.samples, axis=1)
+    monkeypatch.setattr(
+        "scoringbench.multivariate.metrics.compute_scoring_rules",
+        lambda pred, y_true: {},
+    )
+
+    metrics = compute_metrics(pred, marginal_medians)
+
+    assert metrics["elementwise_mae"] == pytest.approx(0.0)
+    assert metrics["mean_euclidean_error"] > 0.1
+    assert metrics["rmse"] == compute_rmse(marginal_medians, pred.mean)
+    assert metrics["rmse"] > 0.1
+
+
+@pytest.mark.parametrize("samples, expected", [
+    ([[0.0], [0.0], [9.0]], [0.0]),
+    ([[4.0, 7.0]], [4.0, 7.0]),
+    ([[3.0, -2.0]] * 3, [3.0, -2.0]),
+    ([[0.0, 0.0], [2.0, 4.0]], [1.0, 2.0]),
+    ([[0.0, 0.0], [0.0, 0.0], [9.0, 4.0]], [0.0, 0.0]),
+    ([[0.0, 0.0], [4.0, 0.0], [-2.0, 1.0]], [0.0, 0.0]),
+    ([[0.0, 0.0], [1.0, 2.0], [9.0, 18.0]], [1.0, 2.0]),
+])
+def test_geometric_median_degenerate_ensembles(samples, expected):
+    median = _geometric_median(np.asarray(samples, dtype=float)[None, :, :])
+    np.testing.assert_allclose(median[0], expected, atol=1e-9)
+
+
+@pytest.mark.parametrize("scale", [0.001, 1.0, 1000.0])
+def test_geometric_median_rotation_translation_and_scale(scale):
+    samples = np.array([[[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]])
+    rotation = np.array([[0.6, -0.8], [0.8, 0.6]])
+    shift = np.array([5.0, -7.0])
+    expected = np.full((1, 2), 1.0 - 1.0 / np.sqrt(3.0)) @ rotation * scale + shift
+    median = _geometric_median(samples @ rotation * scale + shift)
+    np.testing.assert_allclose(median, expected, rtol=0.0, atol=1e-8 * scale)
+
+
+def test_geometric_median_minimizes_ensemble_euclidean_error():
+    samples = np.random.default_rng(123).exponential(size=(5, 80, 3))
+    median = _geometric_median(samples)
+    offsets = median[:, None, :] - samples
+    distances = np.linalg.norm(offsets, axis=-1)
+    gradient = (offsets / distances[:, :, None]).mean(axis=1)
+    np.testing.assert_allclose(gradient, 0.0, atol=1e-8)
 
 
 def test_energy_and_variogram_key_naming():
@@ -265,27 +342,85 @@ def test_dawid_sebastiani_finite_for_degenerate_ensemble():
 # Point metrics
 # ---------------------------------------------------------------------------
 
+def test_compute_point_metrics_delegates_to_individual_functions(monkeypatch):
+    pred = make_pred(np.ones((2, 3, 2)))
+    y_true = np.zeros((2, 2))
+    expected = {"mean_euclidean_error": 2.0, "rmse": 3.0, "elementwise_mae": 1.0}
+    functions = []
+    for name, value in expected.items():
+        function = Mock(return_value=value)
+        monkeypatch.setattr(f"scoringbench.multivariate.metrics.compute_{name}", function)
+        functions.append(function)
+
+    assert compute_point_metrics(pred, y_true) == expected
+    for function in functions:
+        function.assert_called_once()
+        np.testing.assert_array_equal(function.call_args.args[0], y_true)
+        np.testing.assert_array_equal(function.call_args.args[1], pred.mean)
+
+
+@pytest.mark.parametrize("samples", [
+    [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]],
+    [[0.0, -9.0], [0.0, 0.0], [7.0, 1.0], [100.0, 1.0]],
+    [[1.0, 3.0], [1.0, 3.0], [1.0, 3.0]],
+    [[2.0, -4.0]],
+    [[0.0], [0.0], [9.0]],
+], ids=["dependent-skewed", "even-draws", "ties", "single-draw", "one-target"])
+def test_marginal_medians_minimize_sample_elementwise_mae(samples):
+    """Piecewise-linear L1 loss has a minimum at observed coordinate values."""
+    samples = np.asarray(samples)
+    marginal_medians = np.median(samples, axis=0)
+    median_loss = compute_elementwise_mae(
+        samples, np.broadcast_to(marginal_medians, samples.shape),
+    )
+    coordinates = [np.unique(coordinate) for coordinate in samples.T]
+    candidates = np.stack(np.meshgrid(*coordinates, indexing="ij"), axis=-1)
+    candidate_losses = [
+        compute_elementwise_mae(samples, np.broadcast_to(candidate, samples.shape))
+        for candidate in candidates.reshape(-1, samples.shape[-1])
+    ]
+    assert median_loss == pytest.approx(min(candidate_losses))
+
+    for alternative in (samples.mean(axis=0), _geometric_median(samples[None, :, :])[0]):
+        alternative_loss = compute_elementwise_mae(
+            samples, np.broadcast_to(alternative, samples.shape),
+        )
+        assert median_loss <= alternative_loss + 1e-12
+
+
 def test_point_metrics_hand_computed():
     y_true = np.array([[0.0, 0.0], [1.0, 1.0]])
     y_pred = np.array([[3.0, 4.0], [1.0, 1.0]])  # errors: 5, 0
-    m = compute_point_metrics(y_true, y_pred)
-    assert m["mae"] == pytest.approx((5.0 + 0.0) / 2)
-    assert m["rmse"] == pytest.approx(np.sqrt((25.0 + 0.0) / 2))
+    assert compute_mean_euclidean_error(y_true, y_pred) == pytest.approx((5.0 + 0.0) / 2)
+    assert compute_rmse(y_true, y_pred) == pytest.approx(np.sqrt((25.0 + 0.0) / 2))
+    assert compute_elementwise_mae(y_true, y_pred) == pytest.approx(7.0 / 4.0)
+    pred = make_pred(y_pred[:, None, :])
+    assert compute_point_metrics(pred, y_true) == pytest.approx({
+        "mean_euclidean_error": 2.5,
+        "rmse": np.sqrt(12.5),
+        "elementwise_mae": 1.75,
+    })
 
 
 def test_point_metrics_zero_for_exact():
     y = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-    m = compute_point_metrics(y, y)
-    assert m["mae"] == pytest.approx(0.0)
-    assert m["rmse"] == pytest.approx(0.0)
+    assert compute_mean_euclidean_error(y, y) == pytest.approx(0.0)
+    assert compute_rmse(y, y) == pytest.approx(0.0)
+    assert compute_elementwise_mae(y, y) == pytest.approx(0.0)
 
 
-def test_point_metrics_handles_1d_input():
+@pytest.mark.parametrize("true_column", [False, True])
+@pytest.mark.parametrize("pred_column", [False, True])
+def test_point_metrics_handles_1d_input(true_column, pred_column):
     y_true = np.array([0.0, 2.0])
     y_pred = np.array([1.0, 0.0])  # abs errors 1, 2
-    m = compute_point_metrics(y_true, y_pred)
-    assert m["mae"] == pytest.approx(1.5)
-    assert m["rmse"] == pytest.approx(np.sqrt((1 + 4) / 2))
+    if true_column:
+        y_true = y_true[:, None]
+    if pred_column:
+        y_pred = y_pred[:, None]
+    assert compute_mean_euclidean_error(y_true, y_pred) == pytest.approx(1.5)
+    assert compute_rmse(y_true, y_pred) == pytest.approx(np.sqrt((1 + 4) / 2))
+    assert compute_elementwise_mae(y_true, y_pred) == pytest.approx(1.5)
 
 
 # ---------------------------------------------------------------------------
@@ -298,5 +433,46 @@ def test_compute_metrics_merges_point_and_rules():
     y = rng.normal(size=(5, 3))
     full = compute_metrics(make_pred(samples), y)
     rules = compute_scoring_rules(make_pred(samples), y)
-    points = compute_point_metrics(y, samples.mean(axis=1))
-    assert set(full) == set(rules) | set(points)
+    assert set(full) == set(rules) | {"mean_euclidean_error", "rmse", "elementwise_mae"}
+
+
+def test_run_fold_includes_all_scoring_rules_and_point_metrics():
+    pred = make_pred(np.random.default_rng(41).normal(size=(2, 8, 2)))
+    model = Mock()
+    model.predict_ensemble.return_value = pred
+    features = pd.DataFrame({"feature": [0.0, 1.0]})
+    targets = pd.DataFrame([[0.0, 0.0], [1.0, 1.0]])
+
+    results = run_fold(
+        features, features.copy(), targets, targets.copy(),
+        {"sample_based": lambda: model}, seed=0,
+    )
+    metrics = results["sample_based"]
+    expected_rules = compute_scoring_rules(pred, targets.to_numpy())
+    expected_point = compute_point_metrics(pred, targets.to_numpy())
+
+    assert set(metrics) == set(SCORING_RULE_KEYS) | set(expected_point) | {
+        "fit_time", "predict_time", "train_time",
+    }
+    assert {key: metrics[key] for key in SCORING_RULE_KEYS} == pytest.approx(expected_rules)
+    assert {key: metrics[key] for key in expected_point} == pytest.approx(expected_point)
+    model.predict_ensemble.assert_called_once()
+    model.predict.assert_not_called()
+
+
+def test_run_fold_requires_predictive_samples():
+    model = Mock()
+    model.predict_ensemble.side_effect = NotImplementedError("Predictive samples are required")
+    features = pd.DataFrame({"feature": [0.0, 1.0]})
+    targets = pd.DataFrame([[0.0, 0.0], [1.0, 1.0]])
+
+    results = run_fold(
+        features, features.copy(), targets, targets.copy(),
+        {"point_only": lambda: model}, seed=0,
+    )
+    metrics = results["point_only"]
+
+    assert metrics["error_type"] == "NotImplementedError"
+    assert metrics["error"] == "Predictive samples are required"
+    assert "elementwise_mae" not in metrics
+    model.predict.assert_not_called()

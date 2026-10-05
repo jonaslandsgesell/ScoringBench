@@ -18,7 +18,7 @@ import pandas as pd
 import torch
 from sklearn.impute import SimpleImputer
 
-from .metrics import SCORING_RULE_KEYS, compute_metrics, compute_point_metrics
+from .metrics import compute_metrics
 from .wrappers import MultivariateWrapper
 
 
@@ -54,8 +54,8 @@ def run_fold(
 
     Each factory returns a fresh :class:`MultivariateWrapper`. Models emit a
     ``MultivariateSamplePrediction`` via ``predict_ensemble``; scoring is done
-    on those draws directly. If ``predict_ensemble`` is not implemented, we fall
-    back to point metrics only (scoring-rule columns are set to None).
+    on those draws directly. Models without predictive samples are reported as
+    failures, like other fit or prediction errors.
     """
     _impute_inplace(X_train, X_test)
 
@@ -81,19 +81,9 @@ def run_fold(
             fit_time = time.perf_counter() - t0
 
             t1 = time.perf_counter()
-            try:
-                pred = model.predict_ensemble(X_test)
-                predict_time = time.perf_counter() - t1
-                metrics = compute_metrics(pred, y_test_np)
-            except NotImplementedError:
-                # predict_ensemble bailed out before doing work; the fallback
-                # point predict is the real inference cost, so time that.
-                t1 = time.perf_counter()
-                y_pred = np.asarray(model.predict(X_test), dtype=np.float64)
-                predict_time = time.perf_counter() - t1
-                metrics = compute_point_metrics(y_test_np, y_pred)
-                for key in SCORING_RULE_KEYS:
-                    metrics[key] = None
+            pred = model.predict_ensemble(X_test)
+            predict_time = time.perf_counter() - t1
+            metrics = compute_metrics(pred, y_test_np)
 
             metrics["fit_time"] = fit_time
             metrics["predict_time"] = predict_time

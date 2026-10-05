@@ -176,9 +176,11 @@ def force_precision(dtype: torch.dtype = torch.float64):
 # ---------------------------------------------------------------------------
 
 def compute_metrics(dist: DistributionPrediction, y_true: np.ndarray) -> dict:
-    """All metrics from a DistributionPrediction."""
+    """All metrics; MAE uses conditional medians, RMSE and R² use means."""
+    point_metrics = compute_point_metrics(y_true, dist.mean)
+    point_metrics["mae"] = float(mean_absolute_error(y_true, dist.median))
     return {
-        **compute_point_metrics(y_true, dist.mean),
+        **point_metrics,
         **compute_scoring_rules(dist, y_true),
     }
 

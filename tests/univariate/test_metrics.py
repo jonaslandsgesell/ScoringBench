@@ -6,7 +6,7 @@ import pytest
 from scipy import stats
 
 from scoringbench.univariate import __version__
-from scoringbench.univariate.metrics import compute_point_metrics, compute_scoring_rules
+from scoringbench.univariate.metrics import compute_metrics, compute_point_metrics, compute_scoring_rules
 from scoringbench.univariate.wrappers import DistributionPrediction
 
 # Force CPU so the test runs on machines without a working CUDA device.
@@ -32,6 +32,69 @@ def test_compute_point_metrics_basic():
     assert math.isclose(res["rmse"], math.sqrt(0.5), rel_tol=1e-9)
     # For this simple example R^2 is -1.0
     assert math.isclose(res["r2"], -1.0, rel_tol=1e-9)
+
+
+def test_compute_metrics_uses_conditional_median_for_mae(monkeypatch):
+    bin_edges = np.array([0.0, 1.0, 9.0])
+    bin_midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    probas = np.array([[0.75, 0.25], [0.25, 0.75]])
+    mean = probas @ bin_midpoints
+    dist = DistributionPrediction(
+        probas=probas,
+        bin_edges=bin_edges,
+        bin_midpoints=bin_midpoints,
+        mean=mean,
+        train_range=(0.0, 9.0),
+    )
+    y_true = np.array([0.0, 9.0])
+    median = np.array([2.0 / 3.0, 11.0 / 3.0])
+    monkeypatch.setattr(
+        "scoringbench.univariate.metrics.compute_scoring_rules",
+        lambda dist, y_true: {},
+    )
+
+    res = compute_metrics(dist, y_true)
+    mean_metrics = compute_point_metrics(y_true, mean)
+
+    assert res["mae"] == pytest.approx(np.abs(y_true - median).mean())
+    assert res["mae"] != pytest.approx(mean_metrics["mae"])
+    assert res["rmse"] == mean_metrics["rmse"]
+    assert res["r2"] == mean_metrics["r2"]
+
+
+@pytest.mark.parametrize("bin_edges, probas, expected", [
+    ([0.0, 1.0, 9.0], [[0.75, 0.25], [0.25, 0.75]], [2.0 / 3.0, 11.0 / 3.0]),
+    ([[0.0, 1.0, 9.0], [10.0, 12.0, 20.0]],
+     [[0.75, 0.25], [0.25, 0.75]], [2.0 / 3.0, 44.0 / 3.0]),
+    ([0.0, 1.0, 1.0, 5.0, 6.0], [[0.0, 0.8, 0.2, 0.0], [0.0, 0.0, 0.0, 2.0]],
+     [1.0, 5.5]),
+    ([0.0, 1.0, 4.0, 7.0], [[0.5, 0.0, 0.5]], [1.0]),
+])
+def test_histogram_conditional_median(bin_edges, probas, expected):
+    dist = DistributionPrediction.from_histogram(
+        bin_edges, probas, train_range=(-10.0, 30.0),
+    )
+    np.testing.assert_allclose(dist.median, expected, rtol=1e-12)
+
+
+def test_quantile_conditional_median_uses_original_levels():
+    dist = DistributionPrediction.from_multi_quantile(
+        [[0.0, 1.0, 9.0], [2.0, 4.0, 12.0]],
+        [0.1, 0.5, 0.8],
+        train_range=(-10.0, 30.0),
+    )
+    np.testing.assert_array_equal(dist.median, [1.0, 4.0])
+
+
+@pytest.mark.parametrize("n_bins", [1, 20])
+def test_sample_conditional_median_is_independent_of_binning(n_bins):
+    samples = np.array([[0.0, 0.0, 0.0, 2.0, 10.0],
+                        [1.0, 2.0, 3.0, 4.0, 20.0],
+                        [7.0, 7.0, 7.0, 7.0, 7.0]])
+    dist = DistributionPrediction.from_samples(
+        samples, n_bins=n_bins, train_range=(-10.0, 30.0),
+    )
+    np.testing.assert_array_equal(dist.median, np.median(samples, axis=1))
 
 
 def test_distribution_prediction_container():

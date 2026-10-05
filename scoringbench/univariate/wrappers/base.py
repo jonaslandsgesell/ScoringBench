@@ -97,6 +97,7 @@ class DistributionPrediction:
     def __post_init__(self):
         self._native: DistributionPredictionView | None = None
         self._resampled: DistributionPredictionView | None = None
+        self._median: np.ndarray | None = None
         if self.train_range is None:
             raise ValueError(
                 "DistributionPrediction.train_range is required and must be the "
@@ -123,8 +124,13 @@ class DistributionPrediction:
         edges, probas = cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels)
         mids = 0.5 * (edges[..., :-1] + edges[..., 1:])
         out_mean = (probas * mids).sum(axis=-1) if mean is None else np.asarray(mean, float).reshape(-1)
-        return cls._from_native(edges, probas, out_mean, train_range,
-                                cdf_nodes=(cdf_support_point, cdf_levels), **kw)
+        prediction = cls._from_native(edges, probas, out_mean, train_range,
+                                      cdf_nodes=(cdf_support_point, cdf_levels), **kw)
+        prediction._median = np.array([
+            np.interp(0.5, levels, support)
+            for support, levels in zip(cdf_support_point, cdf_levels)
+        ])
+        return prediction
 
     @classmethod
     def from_samples(cls, samples, n_bins=100, mean=None, *, train_range, **kw):
@@ -146,8 +152,10 @@ class DistributionPrediction:
             e, p = interpolate_cdf_to_grid_with_equally_sized_bins(x, c, n_bins)
             edges[i], probas[i] = e[0], p[0]
         out_mean = samples.mean(axis=1) if mean is None else np.asarray(mean, float).reshape(-1)
-        return cls._from_native(edges, probas, out_mean, train_range,
-                                cdf_nodes=node_rows, is_sample_based=True, **kw)
+        prediction = cls._from_native(edges, probas, out_mean, train_range,
+                                      cdf_nodes=node_rows, is_sample_based=True, **kw)
+        prediction._median = np.median(samples, axis=1)
+        return prediction
 
     @classmethod
     def from_histogram(cls, bin_edges, probas, mean=None, *, train_range,
@@ -170,6 +178,25 @@ class DistributionPrediction:
         mids = 0.5 * (np.asarray(edges)[..., :-1] + np.asarray(edges)[..., 1:])
         return cls(probas=probas, bin_edges=edges, bin_midpoints=mids,
                    mean=mean, train_range=train_range, **kw)
+
+    @property
+    def median(self) -> np.ndarray:
+        """Conditional medians, computed before any density-grid resampling."""
+        if self._median is None:
+            probas = np.atleast_2d(np.asarray(self.probas, dtype=np.float64))
+            cdf = np.concatenate(
+                [np.zeros((probas.shape[0], 1)), np.cumsum(probas, axis=1)],
+                axis=1,
+            )
+            half_mass = 0.5 * cdf[:, -1]
+            bin_index = (cdf[:, 1:] < half_mass[:, None]).sum(axis=1)
+            rows = np.arange(probas.shape[0])
+            fraction = (half_mass - cdf[rows, bin_index]) / probas[rows, bin_index]
+            edges = np.broadcast_to(np.asarray(self.bin_edges, dtype=np.float64), cdf.shape)
+            left = edges[rows, bin_index]
+            right = edges[rows, bin_index + 1]
+            self._median = left + fraction * (right - left)
+        return self._median
 
     # -- native view (grid-robust rules) ------------------------------------
     @property
