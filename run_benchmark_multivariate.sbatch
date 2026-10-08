@@ -32,13 +32,13 @@
 #SBATCH --error=slurm_logs/%x-%A_%a.err
 
 # Hardcoded run configuration
-SAMPLE_SIZE="1000"        # "3000" is original
-TARGET_DIM="3"            # target dimension d (number of jointly-modelled targets)
+SAMPLE_SIZE="1500"        # "3000" is original
+TARGET_DIM="8"            # target dimension d (number of jointly-modelled targets)
 # dataset source:
 #   "synthetic"           — copula-coupled residuals (independence fails by construction)
-#   "native_scoringbench" — real jointly-measured multi-target OpenML datasets
+#   "scoringbench"        — real jointly-measured multi-target OpenML datasets
 #                           (targets taken straight from multivariate_datasets.json)
-SOURCE="native_scoringbench" #"synthetic"
+SOURCE="synthetic" #"scoringbench"
 
 # Output dir mirrors the runner's default naming so sweeps never collide.
 OUTPUT_DIR="./output_multivariate_${SOURCE}_d${TARGET_DIM}_n${SAMPLE_SIZE}"

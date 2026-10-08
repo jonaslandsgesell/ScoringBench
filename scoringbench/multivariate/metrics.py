@@ -205,7 +205,7 @@ def _avg_marginal_energy_scores(
             term2 = pairwise_norm_expectation(samples_k, beta)    # (n_test,)
             es = term1 - 0.5 * term2
             per_dim[k] = es.mean()
-        out[f"avg_marginal_energy_score_beta_{_fmt(beta)}"] = float(per_dim.mean())
+        out[f"average_marginal_energy_score_beta_{_fmt(beta)}"] = float(per_dim.mean())
     return out
 
 
@@ -274,7 +274,7 @@ def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray
 # Metric keys produced by compute_scoring_rules.
 SCORING_RULE_KEYS = (
     *[f"energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
-    *[f"avg_marginal_energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
+    *[f"average_marginal_energy_score_beta_{_fmt(b)}" for b in ENERGY_BETAS],
     *[f"variogram_score_p_{_fmt(p)}" for p in VARIOGRAM_ORDERS],
     "dawid_sebastiani",
 )

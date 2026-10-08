@@ -47,10 +47,10 @@ def parse_args():
         help="2-fold CV — quick smoke test over all datasets",
     )
     p.add_argument(
-        "--source", default="native_scoringbench", choices=sorted(SOURCES),
-        help="Dataset source: 'native_scoringbench' (curated real jointly-"
-               "measured multi-target OpenML datasets) or 'synthetic' (joint "
-               "random-vine features and targets). Default: native_scoringbench.",
+        "--source", default="scoringbench", choices=sorted(SOURCES),
+        help="Dataset source: 'scoringbench' (curated real jointly-measured "
+               "multi-target OpenML datasets) or 'synthetic' (joint random-vine "
+               "features and targets). Default: scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,

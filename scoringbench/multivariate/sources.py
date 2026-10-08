@@ -6,7 +6,7 @@ Two are provided:
 * ``"synthetic"`` — nonlinear means plus feature-independent residuals from
     randomized simplified R-vines with standard-normal margins (see
   :mod:`scoringbench.multivariate.synthetic_targets`).
-* ``"native_scoringbench"`` — **real jointly-measured targets**: curated
+* ``"scoringbench"`` — **real jointly-measured targets**: curated
   OpenML datasets that were uploaded as multi-target regression and that a
   measured chained-vs-independent screen shows actually need the joint model
   (see :mod:`scoringbench.multivariate.native_scoringbench`). Nothing here is

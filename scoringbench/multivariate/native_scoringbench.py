@@ -1,5 +1,5 @@
 """Curated **real** multi-target regression datasets (source
-``native_scoringbench``).
+``scoringbench``).
 
 Sources 1 and 2 of the multivariate benchmark are both *constructions*: source 1
 promotes features of a 1-D dataset into targets, source 2 draws copula-coupled
@@ -33,7 +33,7 @@ import pandas as pd
 
 from . import config as cfg
 
-SOURCE_NAME = "native_scoringbench"
+SOURCE_NAME = "scoringbench"
 
 #: Curated manifest (see module docstring for the bar an entry must clear).
 MANIFEST_PATH = Path(__file__).with_name("multivariate_datasets.json")
@@ -49,7 +49,7 @@ def load_manifest(path: str | Path | None = None) -> list[dict[str, Any]]:
 
     An absent manifest is not an error: it means the curation pipeline has not
     run in this checkout. The source then enumerates nothing and the runner
-    simply has no ``native_scoringbench`` datasets to score, rather than
+    simply has no ``scoringbench`` datasets to score, rather than
     failing.
     """
     p = Path(path) if path is not None else MANIFEST_PATH

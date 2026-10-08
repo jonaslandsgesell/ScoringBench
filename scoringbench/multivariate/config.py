@@ -32,7 +32,16 @@ TARGET_DIM = 2
 # (The energy-score term-2 estimator 1/(m(m-1)) Σ_{i≠j} is unbiased for every
 # m ≥ 2, but its variance — and the variogram/DSS moment estimates — still
 # shrink with m, so a shared m is required for a fair leaderboard.)
-N_DRAWS = 300
+N_DRAWS = 600
+
+# ---------------------------------------------------------------------------
+# Monte-Carlo convergence diagnostic (MPSRF / multivariate Gelman–Rubin)
+# ---------------------------------------------------------------------------
+# Diagnostic parameters (n_groups, epsilon, max_instances, max_samples,
+# batch_size) live in ``scoringbench.multivariate.convergence`` as
+# DEFAULT_* constants — they are properties of the diagnostic algorithm, not
+# of the benchmark.  Only the on/off switch belongs here.
+CONV_ENABLED = True          # set False to skip adaptive top-up in wrappers
 
 # ---------------------------------------------------------------------------
 # Shared baseline-wrapper settings (both sources)
@@ -43,7 +52,6 @@ N_DRAWS = 300
 # conditional models the sampled joint is order-dependent (exposure bias
 # compounds down the chain).  Averaging over a few orders desensitises the
 # estimate at a proportional fit-cost increase (CHAINED_N_ORDERS × d models).
-# Set to 1 to recover the classic single fixed-order chain.
 CHAINED_N_ORDERS = 3
 
 # Tiny uniform jitter added to the copula PIT pseudo-observations before the
@@ -51,44 +59,6 @@ CHAINED_N_ORDERS = 3
 # degenerate constant rows.  0 disables jitter.
 COPULA_PIT_JITTER = 1e-4
 
-# ---------------------------------------------------------------------------
-# Source 1: scoringbench (real-data feature promotion)
-# ---------------------------------------------------------------------------
-
-# When promoting feature columns to target dimensions we residualise each
-# candidate target against the *remaining* features and measure the residual
-# cross-target Spearman dependence.  A plain OLS residualizer only removes the
-# *linear* conditional mean, so any nonlinear signal in X leaks into the
-# residuals and is misread as cross-target dependence.  A small, fast gradient-
-# boosted-tree regressor (XGBoost) captures nonlinear conditional means, leaving
-# cleaner residuals whose remaining Spearman correlation reflects genuine
-# residual dependence.  These knobs keep the O(p^2 * n_promote) inner fits cheap;
-# residual outputs are cached within a selection run so repeated (target,
-# feature-set) combinations are only fit once.
-RESIDUALIZER_N_ESTIMATORS = 100
-RESIDUALIZER_MAX_DEPTH = 4
-RESIDUALIZER_LEARNING_RATE = 0.3
-RESIDUALIZER_SUBSAMPLE = 1.0
-# RESIDUALIZER_N_JOBS is intentionally not used: the residualizer is called in
-# a tight greedy loop and nthread=1 per fit is faster than spawning a full
-# thread pool for each small fit (benchmarked ~40x speedup on this machine).
-# Parallelism is available at the outer CV / dataset level instead.
-
-# Maximum number of rows used to *fit* the residualizer (predict is always on
-# all rows so Spearman ranks remain representative).  Reduces cost for large
-# datasets without biasing the rank-correlation criterion.
-RESIDUALIZER_MAX_ROWS = 2000
-
-# Feature-count threshold above which the residualizer falls back from XGBoost
-# to plain OLS.  In the greedy loop the pre-screening step (below) already
-# limits the candidate pool, so X_rest is typically small; this threshold is a
-# safety net for datasets that are very wide even after screening.
-RESIDUALIZER_LINEAR_FALLBACK_THRESHOLD = 50
-
-# Size of the candidate pool fed into the expensive greedy XGBoost loop.
-# Columns are pre-screened by marginal Spearman with y; only the top-k survive.
-# Set to a very large number to disable pre-screening.
-RESIDUALIZER_PRESCREENING_KEEP = 20  # overridden to max(20, 3*n_promote) if larger
 
 # ---------------------------------------------------------------------------
 # Source 2: synthetic (nonlinear means with randomized R-vine residuals)

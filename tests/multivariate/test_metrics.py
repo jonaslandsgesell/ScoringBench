@@ -224,7 +224,7 @@ def test_energy_score_clamping_against_exact_calibrated_distribution(beta, n_tar
         exact_joint, abs=1e-12,
     )
     assert _avg_marginal_energy_scores(samples, targets, [beta])[
-        f"avg_marginal_energy_score_beta_{beta:g}"
+        f"average_marginal_energy_score_beta_{beta:g}"
     ] == pytest.approx(exact_marginal, abs=1e-12)
 
     clipping_bias = scale * max(0.0, 2.0 ** (beta - 1.0) - 1.0) / 16.0
@@ -253,7 +253,7 @@ def test_energy_score_retains_negative_estimates(n_targets):
     assert metrics["energy_score_beta_1.5"] == pytest.approx(
         n_targets ** 0.75 * expected_marginal,
     )
-    assert metrics["avg_marginal_energy_score_beta_1.5"] == pytest.approx(expected_marginal)
+    assert metrics["average_marginal_energy_score_beta_1.5"] == pytest.approx(expected_marginal)
 
 
 @pytest.mark.parametrize("n_targets", [1, 2])
@@ -267,7 +267,7 @@ def test_energy_score_is_unbiased_over_two_draw_forecasts(n_targets):
         assert metrics[f"energy_score_beta_{beta:g}"] == pytest.approx(
             n_targets ** (beta / 2.0) * expected_marginal,
         )
-        assert metrics[f"avg_marginal_energy_score_beta_{beta:g}"] == pytest.approx(
+        assert metrics[f"average_marginal_energy_score_beta_{beta:g}"] == pytest.approx(
             expected_marginal,
         )
 

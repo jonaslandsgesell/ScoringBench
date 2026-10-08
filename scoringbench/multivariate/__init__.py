@@ -12,6 +12,7 @@ Design invariants for everything here:
 
 from . import (
     config,
+    convergence,
     cv,
     estimators,
     metrics,
@@ -25,6 +26,7 @@ from . import (
 
 __all__ = [
     "config",
+    "convergence",
     "cv",
     "estimators",
     "metrics",

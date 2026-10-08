@@ -11,10 +11,20 @@ Subclasses only implement :meth:`_draw_samples(X, n) -> (n_test, n, d)`.
 from __future__ import annotations
 
 import time
+import warnings
 
 import numpy as np
 
+from .. import config as _config
 from ..config import N_DRAWS
+from ..convergence import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_EPSILON,
+    DEFAULT_MAX_INSTANCES,
+    DEFAULT_MAX_SAMPLES,
+    DEFAULT_N_GROUPS,
+    assess_sample_prediction,
+)
 from ..prediction import MultivariateSamplePrediction
 from .base import MultivariateWrapper
 
@@ -46,7 +56,16 @@ class SampleBasedWrapper(MultivariateWrapper):
         raise NotImplementedError
 
     def _collect_samples(self, X) -> np.ndarray:
-        """Accumulate draws in chunks under the wall-clock budget -> (n_test, m, d)."""
+        """Accumulate draws in chunks under the wall-clock budget -> (n_test, m, d).
+
+        After the initial ``N_SAMPLES`` draws, if ``config.CONV_ENABLED`` is
+        set the multivariate R̂ (Vats & Knudson 2020, det-form) is evaluated on
+        a subsample of test instances.  If R̂ has not converged (max over
+        instances >= ``CONV_EPSILON``), additional draws are collected in
+        ``CONV_BATCH_SIZE`` chunks until convergence, the wall-clock budget, or
+        ``CONV_MAX_SAMPLES`` is reached.  No draws are discarded (i.i.d. MC,
+        not MCMC).
+        """
         target = int(self.N_SAMPLES)
         chunk = int(self.SAMPLE_CHUNK) or target
         collected: list[np.ndarray] = []
@@ -68,7 +87,37 @@ class SampleBasedWrapper(MultivariateWrapper):
                 break
         if not collected:
             raise RuntimeError("No samples were drawn.")
-        return np.concatenate(collected, axis=1)
+        samples = np.concatenate(collected, axis=1)
+
+        # --- adaptive top-up: draw more until R̂ < CONV_EPSILON ---------------
+        if not getattr(_config, "CONV_ENABLED", False):
+            return samples
+
+        while samples.shape[1] < DEFAULT_MAX_SAMPLES:
+            if time.monotonic() - start >= self.MAX_SAMPLE_SECONDS:
+                break
+            pred_tmp = MultivariateSamplePrediction(samples=samples)
+            try:
+                diag = assess_sample_prediction(
+                    pred_tmp,
+                    n_groups=DEFAULT_N_GROUPS,
+                    epsilon=DEFAULT_EPSILON,
+                    max_instances=DEFAULT_MAX_INSTANCES,
+                )
+            except ValueError as exc:
+                warnings.warn(
+                    f"convergence check skipped (adaptive top-up): {exc}",
+                    RuntimeWarning, stacklevel=2,
+                )
+                break
+            if diag.rhat_max < DEFAULT_EPSILON:
+                break
+            extra = np.asarray(self._draw_samples(X, DEFAULT_BATCH_SIZE), dtype=np.float64)
+            if extra.ndim == 2:
+                extra = extra[:, None, :]
+            samples = np.concatenate([samples, extra], axis=1)
+
+        return samples
 
     def predict_ensemble(self, X) -> MultivariateSamplePrediction:
         samples = self._collect_samples(X)
