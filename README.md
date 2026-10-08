@@ -21,6 +21,32 @@ ScoringBench is a compact benchmarking suite for probabilistic regression on tab
 - `run_bench_regression_multivariate.py`: run the multivariate (d-dimensional target) benchmark. Defaults to writing `output_multivariate_d{d}_n{sample_size}/`. See the [Multivariate benchmark](#multivariate-benchmark-d-dimensional-targets) section.
 - `autorank_leaderboard.py`: compute statistical rankings with critical-difference diagrams; generates JSON data and LaTeX tables in `<output_dir>/figures/leaderboard/`. Use `--output_dir` to choose the input/output folder (default `output_3000`). Works for both univariate and multivariate outputs.
 
+Raw `coverage_*` columns are reported in leaderboard outputs as
+`mean_absolute_coverage_error_*` (for example,
+`coverage_80` becomes `mean_absolute_coverage_error_80`). Both the autorank
+and Mean-Std rankings use
+`mean_cv(abs(coverage - nominal))` **within each dataset**, with equal weight
+per available fold and lower error preferred. Absolute errors are taken
+before fold averaging, so over-/under-coverage cannot cancel between folds.
+Coverages are not pooled across datasets.
+
+**MACE (mean absolute coverage error, averaged over the different nominal coverage levels)** is reported as
+`mean_absolute_coverage_error_average`, with lower values
+preferred. For each CV fold it averages
+`abs(empirical_coverage - nominal_coverage)` over the six central interval
+levels 20%, 40%, 60%, 80%, 90%, and 95%. The leaderboard then averages these
+fold-level MACE values within each dataset before comparing models:
+`mean_cv(mean_levels(abs(coverage - nominal)))`. This is not the absolute error of fold-averaged coverage. All six levels are required; an incomplete
+fold has missing MACE rather than an average over fewer levels.
+
+MACE is computed post hoc only by the leaderboard from existing fold coverage
+columns; benchmark scoring and persisted fold results are unchanged. Rerun
+`python autorank_leaderboard.py --output_dir output_3000` to generate the MACE
+rankings, JSON, and figures. Individual levels remain available under
+`mean_absolute_coverage_error_*`; the combined metric is
+`mean_absolute_coverage_error_average`.
+MACE is a diagnostic, not a proper scoring rule.
+
 ## Related tools
 
 - [autorank](https://sherbold.github.io/autorank/) — statistical ranking and critical-difference diagrams

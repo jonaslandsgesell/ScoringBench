@@ -10,6 +10,7 @@ import argparse
 import importlib.util
 import io
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
+
+logger = logging.getLogger(__name__)
+MACE_LEVELS = (20, 40, 60, 80, 90, 95)
+
+
+def _with_mace(df):
+    """Derive per-fold MACE, including for legacy results without that column."""
+    columns = [f"coverage_{level}" for level in MACE_LEVELS]
+    if not any(column in df.columns for column in columns):
+        return df
+    coverage = df.reindex(columns=columns)
+    missing = coverage.isna().any(axis=1)
+    if missing.any():
+        logger.warning(
+            "MACE unavailable for %d fold rows: all six coverage levels are required.",
+            int(missing.sum()),
+        )
+    values = coverage.to_numpy(dtype=float)
+    if np.isinf(values).any() or ((values < 0) | (values > 1)).any():
+        raise ValueError("MACE requires empirical coverage fractions in [0, 1] or NaN.")
+    # np.mean propagates missing levels instead of changing the metric per row.
+    mace = np.mean(np.abs(values - np.asarray(MACE_LEVELS) / 100), axis=1)
+    return df.assign(mace=mace)
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +70,7 @@ def _collect_all_rows(root):
         if os.path.isfile(entry_path) and entry.endswith('.parquet'):
             model_name = entry[:-8]
             try:
-                df = pd.read_parquet(entry_path)
+                df = _with_mace(pd.read_parquet(entry_path))
                 if df.empty: continue
                 if 'model' not in df.columns: df['model'] = model_name
                 for _, r in df.iterrows():
@@ -54,14 +78,17 @@ def _collect_all_rows(root):
                     if 'fold' in row and isinstance(row['fold'], (int, float)):
                         row['fold'] = f"fold_{int(row['fold'])}"
                     rows.append(row)
-            except Exception: continue
+            except Exception as exc:
+                logger.warning("Unable to collect results from %s: %s", entry_path, exc)
+                continue
     return rows
 
 
-def load_metric_matrix(root, metric):
+def load_metric_matrix(root, metric, *, coverage_target: float | None = None):
     """
     Load metric data and return a pivot table (rows=datasets, columns=models)
     where each cell is the mean score across folds for that (dataset, model) pair.
+    With coverage_target, take absolute error on each fold before averaging.
     
     Robust handling: 
     - Only includes models that have at least 90% dataset coverage for this metric.
@@ -78,6 +105,8 @@ def load_metric_matrix(root, metric):
         model = entry[:-8]
         try:
             df = pd.read_parquet(entry_path)
+            if metric == "mace":
+                df = _with_mace(df)
             if df.empty or metric not in df.columns: continue
             for _, row in df.iterrows():
                 data.append({
@@ -86,11 +115,15 @@ def load_metric_matrix(root, metric):
                     "model": model,
                     "score": float(row[metric]),
                 })
-        except Exception: continue
+        except Exception as exc:
+            logger.warning("Unable to load %s from %s: %s", metric, entry_path, exc)
+            continue
 
     if not data: return None, None
 
     df_metric = pd.DataFrame(data)
+    if coverage_target is not None:
+        df_metric['score'] = (df_metric['score'] - coverage_target).abs()
     # Step 1: aggregate across folds → (dataset, model, avg_score)
     df_agg = df_metric.groupby(['dataset', 'model'])['score'].mean().reset_index()
     pivot = df_agg.pivot(index='dataset', columns='model', values='score')
@@ -181,6 +214,8 @@ def load_metric_long_format(root, metric):
         model = entry[:-8]
         try:
             df = pd.read_parquet(entry_path)
+            if metric == "mace":
+                df = _with_mace(df)
             if df.empty or metric not in df.columns: continue
             models_seen.add(model)
             for _, row in df.iterrows():
@@ -190,7 +225,9 @@ def load_metric_long_format(root, metric):
                     "model": model,
                     "score": float(row[metric]),
                 })
-        except Exception: continue
+        except Exception as exc:
+            logger.warning("Unable to load %s from %s: %s", metric, entry_path, exc)
+            continue
 
     if not data: return None, None
     return pd.DataFrame(data), list(models_seen)
@@ -225,10 +262,14 @@ def rank_with_autorank(pivot, metric, order, hib, alpha):
 # Ranking approach 2: Mean-Std magnitude-based ranking
 # ---------------------------------------------------------------------------
 
-def rank_with_mean_std(df_long, hib=True):
+def rank_with_mean_std(df_long, hib=True, *, coverage_target: float | None = None):
     """
     Ranks models by first aggregating folds (to avoid pseudoreplication)
     and then performing a cross-dataset magnitude-stable comparison.
+
+    For coverage, pass raw fold coverages and coverage_target. The score is
+    mean_fold(abs(coverage - target)), matching the autorank branch.
+    Coverage errors are always lower-is-better.
     
     Stability improvements:
     - Filters models by 90% dataset coverage (matches autorank's robustness)
@@ -236,6 +277,9 @@ def rank_with_mean_std(df_long, hib=True):
     - Handles NaN values robustly when averaging normalized scores
     """
     try:
+        if coverage_target is not None:
+            df_long = df_long.assign(score=(df_long['score'] - coverage_target).abs())
+            hib = False
         # 1. Aggregate folds to the Dataset level (The "Anti-Pseudoreplication" step)
         df_agg = df_long.groupby(['model', 'dataset'])['score'].mean().reset_index()
 
@@ -468,13 +512,23 @@ def main():
     for entry in os.listdir(root):
         if entry.endswith('.parquet'):
             try:
-                df = pd.read_parquet(os.path.join(root, entry))
+                df = _with_mace(pd.read_parquet(os.path.join(root, entry)))
                 for k in df.select_dtypes(include=['number']).columns:
                     if k not in ('fold', 'index'): discovered_metrics.add(k)
-            except Exception: continue
+            except Exception as exc:
+                logger.warning("Unable to discover metrics in %s: %s", entry, exc)
+                continue
 
-    for metric in sorted(discovered_metrics):
-        pivot, models_in_metric = load_metric_matrix(root, metric)
+    for source_metric in sorted(discovered_metrics):
+        is_coverage = source_metric.startswith("coverage_")
+        level = source_metric.removeprefix("coverage_") if is_coverage else None
+        target = int(level) / 100.0 if level is not None else None
+        metric = (
+            f"mean_absolute_coverage_error_{level}" if is_coverage else source_metric
+        )
+        if source_metric == "mace":
+            metric = "mean_absolute_coverage_error_average"
+        pivot, models_in_metric = load_metric_matrix(root, source_metric, coverage_target=target)
         if pivot is None: continue
 
         # After load_metric_matrix prints any model-dropping warnings, print
@@ -489,18 +543,8 @@ def main():
         except Exception:
             pass
 
-        # Determine metric ordering and apply any score transformation
-        is_coverage = metric.startswith("coverage_")
+        # Coverage errors were transformed before fold averaging in the loader.
         hib = metric in ("r2", "dispersion", "pit_ks_pvalue")
-
-        if is_coverage:
-            # Transform to absolute distance from nominal level: lower = better
-            try:
-                target = int(metric.split("_")[1]) / 100.0
-            except Exception:
-                target = 0.5
-            pivot = (pivot - target).abs()
-            hib = False
 
         order = 'descending' if hib else 'ascending'
         out_dir = os.path.join(root, "figures", "leaderboard")
@@ -565,20 +609,14 @@ def main():
 
         # --- Approach 2: Mean-Std magnitude-based ranking ---
         try:
-            df_long, models_in_long = load_metric_long_format(root, metric)
+            df_long, models_in_long = load_metric_long_format(root, source_metric)
             if df_long is None:
                 print(f"Warning: could not load long format data for {metric}")
                 mean_rankedDF = pd.DataFrame(columns=["rank", "model", "mean_std_diff", "n_datasets"])
             else:
-                # Apply transformation if needed (for coverage metrics)
-                if is_coverage:
-                    try:
-                        target = int(metric.split("_")[1]) / 100.0
-                    except Exception:
-                        target = 0.5
-                    df_long['score'] = (df_long['score'] - target).abs()
-                
-                mean_rankedDF = rank_with_mean_std(df_long, hib)
+                mean_rankedDF = rank_with_mean_std(
+                    df_long, hib, coverage_target=target
+                )
 
                 print(f"\n--- {metric} (Mean-Std Magnitude Ranking) ---")
                 print(mean_rankedDF[["rank", "model", "mean_std_diff"]].to_string(index=False))

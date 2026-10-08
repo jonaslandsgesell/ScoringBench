@@ -232,7 +232,9 @@ MODELS = {
     "kumo_tabular_small": lambda: KumoTabularSmallWrapper(),
     "kumo_tabular_medium": lambda: KumoTabularMediumWrapper(),
     "kumo_tabular_large": lambda: KumoTabularLargeWrapper(),
-    "tabldm_v1": lambda: TabLDMWrapper(),
+    # Explicit index: TabLDM calls torch.cuda.set_device(device), which
+    # rejects a bare "cuda" (its default when device=None).
+    "tabldm_v1": lambda: TabLDMWrapper(device="cuda:0"),
     "tabdptv1_3": lambda: TabDPTWrapper(n_ensembles=8),
     "exaonetabular": lambda: EXAONETabularWrapper(device="cuda:0"),
     "limix2": lambda: LimiXWrapper(),

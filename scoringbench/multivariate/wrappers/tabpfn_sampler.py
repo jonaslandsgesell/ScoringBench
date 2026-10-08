@@ -20,6 +20,8 @@ import numpy as np
 
 from .base_sampler import BaseSampler
 
+_TABPFN_MODULES_PURGED = False
+
 
 class TabPFNSampler(BaseSampler):
     """Conditional sampler over TabPFN's native bar distribution."""
@@ -28,9 +30,16 @@ class TabPFNSampler(BaseSampler):
         import torch
 
         # Ensure the pip-installed tabpfn is used (mirrors the univariate wrapper).
-        for k in list(sys.modules.keys()):
-            if k.startswith("tabpfn"):
-                sys.modules.pop(k)
+        # Purge only once per process: re-importing on every instantiation would
+        # also reset tabpfn's module-level built-model cache
+        # (``TABPFN_MODEL_CACHE_SIZE``), so each sampler would hold its own copy
+        # of the weights (~0.9 GB each for v3.5).
+        global _TABPFN_MODULES_PURGED
+        if not _TABPFN_MODULES_PURGED:
+            for k in list(sys.modules.keys()):
+                if k.startswith("tabpfn"):
+                    sys.modules.pop(k)
+            _TABPFN_MODULES_PURGED = True
         from tabpfn import TabPFNRegressor
 
         kwargs.pop("device", None)
