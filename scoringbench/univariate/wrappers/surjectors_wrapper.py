@@ -205,6 +205,7 @@ class SurjectorsWrapper(ProbabilisticWrapper):
         return self
 
     def _density_on_grid(self, X) -> np.ndarray:
+        """Evaluate row-scaled densities for subsequent grid-mass normalization."""
         import jax
         from jax import numpy as jnp
 
@@ -223,7 +224,18 @@ class SurjectorsWrapper(ProbabilisticWrapper):
             Xg = np.repeat(xb, G, axis=0).astype("float32")
             lp = fn.apply(params, None, method="log_prob", y=jnp.asarray(Yg), x=jnp.asarray(Xg))
             dens[start:stop] = np.asarray(jax.device_get(lp)).reshape(m, G)
-        return np.exp(dens)
+        row_max = np.max(dens, axis=1, keepdims=True)
+        invalid = np.isnan(dens).any(axis=1) | ~np.isfinite(row_max[:, 0])
+        if invalid.any():
+            rows = np.flatnonzero(invalid)
+            raise ValueError(
+                "Surjectors produced invalid log-densities for prediction rows "
+                f"{rows[:10].tolist()}; each row needs finite density support "
+                "and must not contain NaN or positive infinity."
+            )
+        # The converter normalizes each row, so this scale cancels while
+        # preventing all-zero underflow (or overflow) during exponentiation.
+        return np.exp(dens - row_max)
 
     def predict_distribution(self, X) -> DistributionPrediction:
         if self._params is None:
@@ -234,7 +246,4 @@ class SurjectorsWrapper(ProbabilisticWrapper):
         )
 
     def predict(self, X) -> np.ndarray:
-        # .mean is grid-independent; use the fitted target grid's hull as a
-        # valid train_range placeholder for this internal call.
-        cr = (float(self._grid_o.min()), float(self._grid_o.max()))
         return self.predict_distribution(X).mean

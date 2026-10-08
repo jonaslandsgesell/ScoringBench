@@ -72,7 +72,7 @@ class DistributionPrediction:
        the padded train range). 
 
     Quantile heads (``XGBQuantileVector``, CatBoost, NGBoost, TabICL, pytabkit,
-    XGBLSS, crepes, Exaone, Nori, ...) and sample heads are NOT grid-native: they
+    XGBLSS, Exaone, Nori, ...), CREPES discrete CPDs and sample heads are NOT grid-native: they
     live in forecast family M1/M2 and do not guarantee to have forecasts in  L1/L2, so their implied density
     may carry Dirac atoms (tied quantiles, repeated draws) that would blow up the
     density based scoring rules (DPD, pseudospherical, CDE loss).  

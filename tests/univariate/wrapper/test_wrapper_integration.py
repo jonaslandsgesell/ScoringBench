@@ -149,12 +149,13 @@ def _make_tabldm():
     """Xiaomi-TabLDM regressor — in-context multi-quantile head.
 
     Downloads the checkpoint from the Hugging Face Hub on first use. Uses the
-    plain in-context path (``enhance_candidates=False``, the default) so
+    plain in-context path (``enhance_candidates=False``, the wrapper default) so
     distributional quantile output is available.
     """
     pytest.importorskip("tabldm")
     from scoringbench.univariate.wrappers.tabldm import TabLDMWrapper
-    return TabLDMWrapper(device=_cuda_or_cpu())
+    device = _cuda_or_cpu()
+    return TabLDMWrapper(device="cuda:0" if device == "cuda" else device)
 
 
 def _make_causilo():
@@ -214,7 +215,6 @@ def _make_crepes():
 
     return CrepesWrapper(
         base_model=RandomForestRegressor(n_estimators=50, random_state=42),
-        n_quantiles=99,
         calibration_split=0.2,
         random_state=42,
         use_mondrian_categorizer=False,
@@ -228,7 +228,6 @@ def _make_crepes_mondrian():
 
     return CrepesWrapper(
         base_model=RandomForestRegressor(n_estimators=50, random_state=42),
-        n_quantiles=99,
         calibration_split=0.2,
         random_state=42,
         use_mondrian_categorizer=True,

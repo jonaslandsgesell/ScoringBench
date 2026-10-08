@@ -31,6 +31,7 @@ Installation (either works — the wrapper prefers a local checkout if present):
 from __future__ import annotations
 
 import sys
+from numbers import Integral
 from pathlib import Path
 
 import numpy as np
@@ -64,15 +65,22 @@ class TabLDMWrapper(ProbabilisticWrapper):
 
     Notes
     -----
-    * Distributional output requires the plain in-context path
-      (``enhance_candidates=False``, the library default). The enhanced
-      NNLS-ensembling path collapses to ``output_type="mean"`` only, so leave
-      ``enhance_candidates`` at its default when distributional metrics matter.
+    * The wrapper explicitly sets ``enhance_candidates=False`` for quantile
+      output. The enhanced NNLS path returns only point predictions and is
+      rejected by this distributional wrapper.
     * The checkpoint is downloaded from the Hugging Face Hub on first use unless a
       local ``model_path`` is given.
     """
 
     def __init__(self, *, n_quantiles: int = 200, **kwargs):
+        if not isinstance(n_quantiles, Integral) or n_quantiles < 1:
+            raise ValueError("n_quantiles must be a positive integer.")
+        if kwargs.get("enhance_candidates", False):
+            raise ValueError(
+                "TabLDMWrapper requires enhance_candidates=False: the enhanced "
+                "NNLS path returns only point predictions, not quantiles."
+            )
+        kwargs["enhance_candidates"] = False
         from tabldm import TabLDMRegressor
 
         # Dense, evenly spaced interior quantile levels in (0, 1); the library
@@ -97,20 +105,29 @@ class TabLDMWrapper(ProbabilisticWrapper):
         # Robustly coerce to a (n_samples, n_alphas) float array. The library may
         # return the array directly or a {"quantiles": array} dict.
         if isinstance(raw_q, dict):
-            q_arr = raw_q.get("quantiles", next(iter(raw_q.values())))
+            if "quantiles" not in raw_q:
+                raise ValueError("TabLDM output is missing the requested 'quantiles' key.")
+            q_arr = raw_q["quantiles"]
         else:
             q_arr = raw_q
 
-        if isinstance(q_arr, list):
-            q = np.vstack([np.asarray(r, dtype=float).ravel() for r in q_arr])
-        else:
+        try:
             q = np.asarray(q_arr, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("TabLDM quantiles must be a rectangular numeric matrix.") from exc
 
-        if q.ndim == 1:
+        expected_shape = (len(X_arr), len(self._ALPHAS))
+        if q.ndim == 1 and len(X_arr) == 1:
             q = q[np.newaxis, :]
-        # Orient to (n_samples, n_alphas) if it came back transposed.
-        if q.shape[1] != len(self._ALPHAS) and q.shape[0] == len(self._ALPHAS):
+        if q.ndim == 2 and q.shape != expected_shape and q.shape == expected_shape[::-1]:
             q = q.T
+        if q.shape != expected_shape:
+            raise ValueError(
+                f"TabLDM quantiles must have shape {expected_shape}; got {q.shape}. "
+                "Point predictions cannot be used as a predictive distribution."
+            )
+        if not np.isfinite(q).all():
+            raise ValueError("TabLDM quantiles contain non-finite values.")
 
         # Enforce monotonicity defensively (the library already fixes crossing).
         q = np.sort(q, axis=1)
