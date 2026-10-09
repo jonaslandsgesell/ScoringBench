@@ -2,8 +2,8 @@ import pandas as pd
 import pytest
 
 from autorank_leaderboard import (
-    MACE_LEVELS,
-    _with_mace,
+    COVERAGE_LEVELS,
+    _with_amce,
     load_metric_long_format,
     load_metric_matrix,
     rank_with_mean_std,
@@ -64,18 +64,18 @@ def test_noncoverage_ordering_unchanged(hib, first):
     assert ranked["n_datasets"].tolist() == [5, 5]
 
 
-def test_mace_is_derived_per_fold_then_averaged_without_rewriting(tmp_path):
+def test_amce_is_derived_per_fold_then_averaged_without_rewriting(tmp_path):
     for model, offsets in {"variable": [-0.04, 0.04], "biased": [0.02, 0.02]}.items():
         pd.DataFrame([
             {"dataset": "toy", "fold": fold,
-             **{f"coverage_{level}": level / 100 + offset for level in MACE_LEVELS}}
+             **{f"coverage_{level}": level / 100 + offset for level in COVERAGE_LEVELS}}
             for fold, offset in enumerate(offsets)
         ]).to_parquet(tmp_path / f"{model}.parquet", index=False)
     before = {path: path.read_bytes() for path in tmp_path.glob("*.parquet")}
-    matrix, _ = load_metric_matrix(tmp_path, "mace")
+    matrix, _ = load_metric_matrix(tmp_path, "amce")
     assert matrix.loc["toy", "variable"] == pytest.approx(0.04)
     assert matrix.loc["toy", "biased"] == pytest.approx(0.02)
-    long, _ = load_metric_long_format(tmp_path, "mace")
+    long, _ = load_metric_long_format(tmp_path, "amce")
     expected = long.groupby(["dataset", "model"])["score"].mean().unstack()
     pd.testing.assert_frame_equal(matrix, expected)
     ranking = rank_with_mean_std(long, hib=False)
@@ -84,33 +84,33 @@ def test_mace_is_derived_per_fold_then_averaged_without_rewriting(tmp_path):
         assert path.read_bytes() == content
 
 
-def test_mace_uses_all_levels_and_does_not_mutate_input():
+def test_amce_uses_all_levels_and_does_not_mutate_input():
     empirical = [0.1, 0.5, 0.6, 0.7, 0.95, 1.0]
     raw = pd.DataFrame({f"coverage_{level}": [value]
-                        for level, value in zip(MACE_LEVELS, empirical)})
+                        for level, value in zip(COVERAGE_LEVELS, empirical)})
     original = raw.copy(deep=True)
-    derived = _with_mace(raw)
-    assert derived["mace"].iloc[0] == pytest.approx(0.4 / 6)
+    derived = _with_amce(raw)
+    assert derived["amce"].iloc[0] == pytest.approx(0.4 / 6)
     pd.testing.assert_frame_equal(raw, original)
     # Recompute rather than trusting a stale stored score.
-    assert _with_mace(raw.assign(mace=99))["mace"].iloc[0] == pytest.approx(0.4 / 6)
+    assert _with_amce(raw.assign(amce=99))["amce"].iloc[0] == pytest.approx(0.4 / 6)
 
 
-def test_mace_missing_levels_are_not_silently_averaged(caplog):
-    raw = pd.DataFrame({f"coverage_{level}": [level / 100] for level in MACE_LEVELS})
+def test_amce_missing_levels_are_not_silently_averaged(caplog):
+    raw = pd.DataFrame({f"coverage_{level}": [level / 100] for level in COVERAGE_LEVELS})
     raw.loc[0, "coverage_60"] = float("nan")
-    assert pd.isna(_with_mace(raw)["mace"].iloc[0])
-    assert pd.isna(_with_mace(raw.drop(columns="coverage_60"))["mace"].iloc[0])
+    assert pd.isna(_with_amce(raw)["amce"].iloc[0])
+    assert pd.isna(_with_amce(raw.drop(columns="coverage_60"))["amce"].iloc[0])
     assert "all six coverage levels are required" in caplog.text
-    assert "mace" not in _with_mace(pd.DataFrame({"rmse": [1.0]}))
+    assert "amce" not in _with_amce(pd.DataFrame({"rmse": [1.0]}))
 
 
 @pytest.mark.parametrize("invalid", [-0.1, 1.1, float("inf")])
-def test_mace_rejects_invalid_coverage(invalid):
-    raw = pd.DataFrame({f"coverage_{level}": [level / 100] for level in MACE_LEVELS})
+def test_amce_rejects_invalid_coverage(invalid):
+    raw = pd.DataFrame({f"coverage_{level}": [level / 100] for level in COVERAGE_LEVELS})
     raw.loc[0, "coverage_40"] = invalid
     with pytest.raises(ValueError, match="fractions"):
-        _with_mace(raw)
+        _with_amce(raw)
 
 
 def test_main_renames_coverage_outputs_but_reads_raw_columns(tmp_path, monkeypatch, capsys):
@@ -122,7 +122,7 @@ def test_main_renames_coverage_outputs_but_reads_raw_columns(tmp_path, monkeypat
     for model, offset in [("a", 0.01), ("b", 0.02)]:
         pd.DataFrame([
             {"dataset": f"d{dataset}", "fold": fold, "rmse": 1 + offset,
-             **{f"coverage_{level}": level / 100 + offset for level in MACE_LEVELS}}
+             **{f"coverage_{level}": level / 100 + offset for level in COVERAGE_LEVELS}}
             for dataset in range(5)
             for fold in range(2)
         ]).to_parquet(tmp_path / f"{model}.parquet", index=False)
@@ -148,8 +148,8 @@ def test_main_renames_coverage_outputs_but_reads_raw_columns(tmp_path, monkeypat
     monkeypatch.setattr(sys, "argv", ["autorank_leaderboard.py", "--output_dir", str(tmp_path)])
     leaderboard.main()
 
-    expected = {f"mean_absolute_coverage_error_{level}" for level in MACE_LEVELS} | {
-        "mean_absolute_coverage_error_average", "rmse",
+    expected = {f"absolute_marginal_coverage_error_{level}" for level in COVERAGE_LEVELS} | {
+        "mean_absolute_marginal_coverage_error", "rmse",
     }
     assert set(seen) == expected
     output = capsys.readouterr().out
@@ -164,6 +164,6 @@ def test_main_renames_coverage_outputs_but_reads_raw_columns(tmp_path, monkeypat
         assert f"--- {metric} (Autorank)" in output
         assert f"--- {metric} (Mean-Std Magnitude Ranking)" in output
     assert not list(dest.glob("*_coverage_[0-9]*"))
-    assert not list(dest.glob("*_mace.*"))
+    assert not list(dest.glob("*_amce.*"))
     for path, content in before.items():
         assert path.read_bytes() == content

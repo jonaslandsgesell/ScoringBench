@@ -61,6 +61,80 @@ class CrepesWrapper(ProbabilisticWrapper):
         self._wrapped_model = None
         self._difficulty_estimator = None
         self._mondrian_categorizer = None
+        self._effective_no_bins = None
+
+    @staticmethod
+    def _coerce_cpds(cpds, n_obs):
+        """Validate the container shape returned by ``predict_cpds`` and normalise
+        it to a sequence with one entry per observation."""
+        if not isinstance(cpds, (np.ndarray, list, tuple)):
+            raise ValueError("CREPES must return one CPD vector per observation.")
+        if (isinstance(cpds, np.ndarray) and cpds.ndim == 1
+                and cpds.dtype != object and n_obs == 1):
+            cpds = cpds[np.newaxis, :]
+        if len(cpds) != n_obs:
+            raise ValueError(f"CREPES returned {len(cpds)} CPDs for {n_obs} observations.")
+        return cpds
+
+    @staticmethod
+    def _as_cpd_vector(row):
+        """Return ``row`` as a 1-D finite float vector, or ``None`` if it is an
+        invalid CPD (e.g. ``None`` from an empty Mondrian category)."""
+        if row is None:
+            return None
+        try:
+            values = np.asarray(row, dtype=float)
+        except (TypeError, ValueError):
+            return None
+        if values.ndim != 1 or not values.size or not np.isfinite(values).all():
+            return None
+        return values
+
+    def _fit_mondrian_categorizer(self, X_train, de, no_bins):
+        """Fit a MondrianCategorizer with ``no_bins`` bins.
+
+        CREPES consumes NumPy's global RNG for bin-boundary tie-breaking. The
+        caller is responsible for saving and restoring the global RNG state; here
+        we only (re)seed it so bin boundaries are reproducible for a given
+        ``random_state``.
+        """
+        from crepes.extras import MondrianCategorizer
+
+        mc = MondrianCategorizer()
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
+        mc.fit(X_train, de=de, no_bins=int(no_bins))
+        return mc
+
+    def _select_mondrian_categorizer(self, X_train, X_cal, de, min_samples_per_bin):
+        """Return ``(mc, effective_no_bins)`` by shrinking ``no_bins`` until the
+        calibration split populates every interval the categorizer can emit.
+
+        Returns ``(None, 1)`` when no multi-bin categorizer is adequately
+        populated, which disables Mondrian categorization (equivalent to a single
+        global category). The caller must save/restore NumPy's global RNG around
+        this method, since fitting and applying the categorizer consume it.
+        """
+        for candidate_bins in range(int(self.mondrian_no_bins), 0, -1):
+            if candidate_bins == 1:
+                # One bin is equivalent to no Mondrian categorization.
+                return None, 1
+            candidate_mc = self._fit_mondrian_categorizer(X_train, de, candidate_bins)
+            # Number of intervals the categorizer can emit from .apply().
+            thresholds = np.asarray(candidate_mc.bin_thresholds)
+            n_intervals = max(len(thresholds) - 1, 1)
+            if self.random_state is not None:
+                np.random.seed(self.random_state)
+            cal_bins = np.asarray(candidate_mc.apply(X_cal))
+            _, counts = np.unique(cal_bins, return_counts=True)
+            # Accept only if there are at least two usable categories and every
+            # emittable interval is populated by enough calibration residuals, so
+            # no test point can fall into an empty Mondrian group.
+            if (n_intervals >= 2
+                    and len(counts) == n_intervals
+                    and counts.min() >= min_samples_per_bin):
+                return candidate_mc, candidate_bins
+        return None, 1  # pragma: no cover - range always includes 1
 
     def fit(self, X, y) -> "CrepesWrapper":
         """Fit the regressor and optional difficulty/Mondrian components on the
@@ -83,6 +157,7 @@ class CrepesWrapper(ProbabilisticWrapper):
         self._wrapped_model = None
         self._difficulty_estimator = None
         self._mondrian_categorizer = None
+        self._effective_no_bins = None
         y = np.asarray(y, dtype=float)
         self._set_train_range(y)
 
@@ -110,24 +185,37 @@ class CrepesWrapper(ProbabilisticWrapper):
             de.fit(X_train, y=y_train, k=min(25, len(X_train)))
 
         mc = None
+        effective_no_bins = None
         if self.use_mondrian_categorizer and de is not None:
             try:
-                from crepes.extras import MondrianCategorizer
+                from crepes.extras import MondrianCategorizer  # noqa: F401
             except ImportError as exc:
                 raise ImportError(
                     "Failed to import MondrianCategorizer from crepes.extras. "
                     "Install crepes with extras support."
                 ) from exc
-            
-            mc = MondrianCategorizer()
-            # CREPES uses NumPy's global RNG for bin-boundary tie-breaking.
-            state = np.random.get_state()
+
+            # Adaptive bin reduction: CREPES only retains Mondrian categories that
+            # appear in the calibration data, yet ``MondrianCategorizer.apply`` can
+            # assign a *test* point to any interval between its stored thresholds —
+            # including intervals that calibration never populated — which yields an
+            # empty CPD (``None``) and crashes ``predict``. We therefore shrink
+            # ``no_bins`` until the calibration split populates *every* interval the
+            # categorizer can emit, each with at least ``min_samples_per_bin``
+            # residuals. A single bin (no_bins == 1) degenerates to the global,
+            # non-Mondrian CPS, which is always valid.
+            #
+            # Both fitting and applying a MondrianCategorizer consume NumPy's global
+            # RNG (bin-boundary tie-breaking). Save and restore it around the whole
+            # search so fitting leaves the global RNG state untouched.
+            min_samples_per_bin = 2
+            rng_state = np.random.get_state()
             try:
-                if self.random_state is not None:
-                    np.random.seed(self.random_state)
-                mc.fit(X_train, de=de, no_bins=int(self.mondrian_no_bins))
+                mc, effective_no_bins = self._select_mondrian_categorizer(
+                    X_train, X_cal, de, min_samples_per_bin
+                )
             finally:
-                np.random.set_state(state)
+                np.random.set_state(rng_state)
 
         wrapped_model.calibrate(
             X_cal, y_cal, cps=True, de=de, mc=mc, seed=self.random_state
@@ -135,6 +223,7 @@ class CrepesWrapper(ProbabilisticWrapper):
         self._wrapped_model = wrapped_model
         self._difficulty_estimator = de
         self._mondrian_categorizer = mc
+        self._effective_no_bins = effective_no_bins
 
         return self
 
@@ -150,21 +239,12 @@ class CrepesWrapper(ProbabilisticWrapper):
         if self._wrapped_model is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
-        cpds = self._wrapped_model.predict_cpds(X)
-        if not isinstance(cpds, (np.ndarray, list, tuple)):
-            raise ValueError("CREPES must return one CPD vector per observation.")
-        if (isinstance(cpds, np.ndarray) and cpds.ndim == 1
-                and cpds.dtype != object and len(X) == 1):
-            cpds = cpds[np.newaxis, :]
-        if len(cpds) != len(X):
-            raise ValueError(f"CREPES returned {len(cpds)} CPDs for {len(X)} observations.")
+        cpds = self._coerce_cpds(self._wrapped_model.predict_cpds(X), len(X))
+
         atoms = []
         for i, row in enumerate(cpds):
-            try:
-                values = np.asarray(row, dtype=float)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"Invalid nonnumeric CREPES CPD for observation {i}.") from exc
-            if values.ndim != 1 or not values.size or not np.isfinite(values).all():
+            values = self._as_cpd_vector(row)
+            if values is None:
                 raise ValueError(
                     f"Invalid CREPES CPD for observation {i}: expected a nonempty "
                     "finite vector. Its Mondrian group may have no calibration samples."

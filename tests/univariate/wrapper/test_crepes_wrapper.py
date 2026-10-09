@@ -184,12 +184,35 @@ def test_invalid_cpd_does_not_become_a_fake_finite_distribution(cpds):
         m.predict_distribution(np.zeros((2, 2)))
 
 
-def test_mondrian_unseen_calibration_group_fails_explicitly():
+def test_mondrian_adaptive_reduction_avoids_empty_calibration_groups():
+    # A small dataset cannot populate 10 Mondrian bins without leaving some
+    # calibration-empty intervals, which would otherwise yield None CPDs and
+    # crash predict. The wrapper must adaptively shrink no_bins (never falling
+    # back to a hidden global distribution) so every emittable Mondrian group is
+    # populated and every prediction is a valid, finite distribution.
     x, y = data(20)
     m = CrepesWrapper(DummyRegressor(), random_state=0,
                       use_mondrian_categorizer=True, mondrian_no_bins=10).fit(x, y)
+    assert m._effective_no_bins < 10
+    assert m._effective_no_bins >= 1
+    dist = m.predict_distribution(x)
+    assert dist.probas.shape[0] == len(x)
+    assert np.isfinite(dist.probas).all()
+    np.testing.assert_allclose(dist.probas.sum(axis=1), 1)
+    assert np.isfinite(dist.mean).all()
+
+
+def test_empty_mondrian_group_still_raises_explicitly():
+    # If an empty Mondrian group ever slips through (CREPES returns a None CPD
+    # for an observation), the wrapper must fail loudly rather than silently
+    # substituting a global/fake distribution.
+    m = CrepesWrapper(DummyRegressor(), use_mondrian_categorizer=True)
+    m._wrapped_model = SimpleNamespace(
+        predict_cpds=lambda X: np.array([None, np.array([1., 2.])], dtype=object)
+    )
+    m._set_train_range(np.array([0., 10.]))
     with pytest.raises(ValueError, match="Mondrian group"):
-        m.predict_distribution(x)
+        m.predict_distribution(np.zeros((2, 2)))
 
 
 def test_seeded_mondrian_ties_are_reproducible_and_preserve_numpy_rng():

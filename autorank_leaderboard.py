@@ -22,27 +22,40 @@ from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
 
 logger = logging.getLogger(__name__)
-MACE_LEVELS = (20, 40, 60, 80, 90, 95)
+# Nominal central-interval coverage levels (%) reported per fold as
+# coverage_{level}. Each is a *marginal* coverage probability: one nominal
+# level, marginalized over all test rows of the fold.
+COVERAGE_LEVELS = (20, 40, 60, 80, 90, 95)
 
 
-def _with_mace(df):
-    """Derive per-fold MACE, including for legacy results without that column."""
-    columns = [f"coverage_{level}" for level in MACE_LEVELS]
+def _with_amce(df):
+    """Derive the per-fold mean absolute marginal coverage error.
+
+    For each fold, |empirical_coverage - nominal| is the absolute *marginal*
+    coverage error at a single level; averaging those over ``COVERAGE_LEVELS``
+    gives the mean absolute marginal coverage error (column ``amce``). Legacy
+    results without that column are augmented on the fly.
+    """
+    columns = [f"coverage_{level}" for level in COVERAGE_LEVELS]
     if not any(column in df.columns for column in columns):
         return df
     coverage = df.reindex(columns=columns)
     missing = coverage.isna().any(axis=1)
     if missing.any():
         logger.warning(
-            "MACE unavailable for %d fold rows: all six coverage levels are required.",
+            "Mean absolute marginal coverage error unavailable for %d fold rows: "
+            "all six coverage levels are required.",
             int(missing.sum()),
         )
     values = coverage.to_numpy(dtype=float)
     if np.isinf(values).any() or ((values < 0) | (values > 1)).any():
-        raise ValueError("MACE requires empirical coverage fractions in [0, 1] or NaN.")
+        raise ValueError(
+            "Mean absolute marginal coverage error requires empirical coverage "
+            "fractions in [0, 1] or NaN."
+        )
     # np.mean propagates missing levels instead of changing the metric per row.
-    mace = np.mean(np.abs(values - np.asarray(MACE_LEVELS) / 100), axis=1)
-    return df.assign(mace=mace)
+    amce = np.mean(np.abs(values - np.asarray(COVERAGE_LEVELS) / 100), axis=1)
+    return df.assign(amce=amce)
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +83,7 @@ def _collect_all_rows(root):
         if os.path.isfile(entry_path) and entry.endswith('.parquet'):
             model_name = entry[:-8]
             try:
-                df = _with_mace(pd.read_parquet(entry_path))
+                df = _with_amce(pd.read_parquet(entry_path))
                 if df.empty: continue
                 if 'model' not in df.columns: df['model'] = model_name
                 for _, r in df.iterrows():
@@ -105,8 +118,8 @@ def load_metric_matrix(root, metric, *, coverage_target: float | None = None):
         model = entry[:-8]
         try:
             df = pd.read_parquet(entry_path)
-            if metric == "mace":
-                df = _with_mace(df)
+            if metric == "amce":
+                df = _with_amce(df)
             if df.empty or metric not in df.columns: continue
             for _, row in df.iterrows():
                 data.append({
@@ -214,8 +227,8 @@ def load_metric_long_format(root, metric):
         model = entry[:-8]
         try:
             df = pd.read_parquet(entry_path)
-            if metric == "mace":
-                df = _with_mace(df)
+            if metric == "amce":
+                df = _with_amce(df)
             if df.empty or metric not in df.columns: continue
             models_seen.add(model)
             for _, row in df.iterrows():
@@ -512,7 +525,7 @@ def main():
     for entry in os.listdir(root):
         if entry.endswith('.parquet'):
             try:
-                df = _with_mace(pd.read_parquet(os.path.join(root, entry)))
+                df = _with_amce(pd.read_parquet(os.path.join(root, entry)))
                 for k in df.select_dtypes(include=['number']).columns:
                     if k not in ('fold', 'index'): discovered_metrics.add(k)
             except Exception as exc:
@@ -523,11 +536,16 @@ def main():
         is_coverage = source_metric.startswith("coverage_")
         level = source_metric.removeprefix("coverage_") if is_coverage else None
         target = int(level) / 100.0 if level is not None else None
+        # Each coverage_{level} is a marginal coverage probability (one nominal
+        # level, marginalized over all test rows), so its absolute deviation
+        # from nominal is an "absolute marginal coverage error". The "amce"
+        # aggregate averages those absolute errors over the nominal-level grid,
+        # i.e. the mean absolute marginal coverage error.
         metric = (
-            f"mean_absolute_coverage_error_{level}" if is_coverage else source_metric
+            f"absolute_marginal_coverage_error_{level}" if is_coverage else source_metric
         )
-        if source_metric == "mace":
-            metric = "mean_absolute_coverage_error_average"
+        if source_metric == "amce":
+            metric = "mean_absolute_marginal_coverage_error"
         pivot, models_in_metric = load_metric_matrix(root, source_metric, coverage_target=target)
         if pivot is None: continue
 
