@@ -288,6 +288,14 @@ def _make_condensite_lgbm():
     return CondensiteLGBMWrapper()
 
 
+def _make_condensite_pit_boosting():
+    # condensité has no __version__; PITBoosting exists from 0.1.1 on
+    if not hasattr(pytest.importorskip("condensite"), "PITBoosting"):
+        pytest.skip("condensite>=0.1.1 required")
+    from scoringbench.univariate.wrappers.condensite_pit_boosting_wrapper import CondensitePITBoostingWrapper
+    return CondensitePITBoostingWrapper()
+
+
 def _make_surjectors(flow):
     """Build a zero-argument factory for a Surjectors flow (uses its preset)."""
     def factory():
@@ -393,6 +401,11 @@ MODEL_FACTORIES += [
 # condensité CDE-as-regression with a LightGBM regressor.
 MODEL_FACTORIES += [
     pytest.param(("CondensiteLGBMWrapper", _make_condensite_lgbm), id="CondensiteLGBMWrapper"),
+]
+
+# condensité corrected by a second condensité fit in PIT space.
+MODEL_FACTORIES += [
+    pytest.param(("CondensitePITBoostingWrapper", _make_condensite_pit_boosting), id="CondensitePITBoostingWrapper"),
 ]
 
 # Surjectors (JAX) conditional normalizing flow — one registry entry per flow.

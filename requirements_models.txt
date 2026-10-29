@@ -18,7 +18,7 @@ pymc>=5.0
 pymc-bart>=0.11.0
 ForestDiffusion>=1.0.6  # XGBoost-based tabular diffusion/flow generative model (conditional gen via X_covs)
 flexcode>=0.2.3
-condensite>=0.0.2  # pulls in lightgbm
+condensite>=0.1.1  # pulls in lightgbm
 cde>=1.0.1
 surjectors>=0.3.3  # pulls in jax, dm-haiku, distrax, optax
 exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular.git
