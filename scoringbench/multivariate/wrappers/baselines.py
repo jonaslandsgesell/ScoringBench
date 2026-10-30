@@ -182,6 +182,55 @@ class IndependentMultiOutputWrapper(_ComposedMultiOutputWrapper):
         # Stack along a new last axis -> (n_test, m, d).
         return np.stack(per_dim, axis=-1)
 
+    def conditional_crps(self, X, Y) -> float:
+        """Conditional CRPS (cCRPS) of the independent model's joint.
+
+        cCRPS factorizes the joint via the chain rule and sums the univariate
+        CRPS of each sequential conditional ``p(y_{π(t)} | y_{π(<t)}, x)``.  The
+        independent model *asserts* no cross-target dependence — each marginal is
+        fit on the features only, so its conditional ``p(y_k | y_{<t}, x)`` equals
+        the marginal ``p(y_k | x)`` regardless of the earlier coordinates.  The
+        chain-rule conditionals therefore collapse to the marginals and cCRPS is
+        exactly the **summed marginal CRPS** (order-independent):
+
+            cCRPS(P̂_indep, y | x) = Σ_k CRPS( F_{Y_k|X}, y_k ).
+
+        This needs **no distributional assumption** — the marginals are genuine
+        conditional CDFs read in closed form via :meth:`BaseSampler.crps` — so,
+        unlike a native joint sampler (e.g. ``forest_diffusion``, which exposes no
+        per-coordinate conditional CDF), the independent baseline *can* report
+        cCRPS.  Reporting it alongside the chained wrapper's cCRPS is a
+        fair comparison: both are scored under the same strictly proper joint
+        rule against the same realized targets, so the gap is precisely the value
+        of conditioning on previous targets (``cCRPS`` ≠ summed marginal CRPS for
+        a dependence-aware model; equal, by construction, for this one).
+
+        Parameters
+        ----------
+        X : (n_test, p) array-like
+            Test covariates (already imputed by the CV harness).
+        Y : (n_test, d) array-like
+            Observed test targets.
+
+        Returns
+        -------
+        float
+            Mean over test instances of ``Σ_k CRPS_k``.  Lower is better.
+        """
+        if not self._samplers:
+            raise RuntimeError("conditional_crps requires a fitted wrapper.")
+        X = as_2d_features(X)
+        Y = as_2d_targets(Y)
+        if Y.shape[1] != self._d:
+            raise ValueError(
+                f"Y has {Y.shape[1]} targets but the wrapper was fit on d={self._d}."
+            )
+        ccrps = np.zeros(X.shape[0], dtype=np.float64)
+        for target_dim in range(self._d):
+            ccrps += np.asarray(
+                self._samplers[target_dim].crps(X, Y[:, target_dim]), dtype=np.float64)
+        return float(ccrps.mean())
+
 
 # ---------------------------------------------------------------------------
 # Mode B: copula over conditional marginals
@@ -401,17 +450,18 @@ class ChainedMultiOutputWrapper(_ComposedMultiOutputWrapper):
         self._chains = []
         for order in self._orders:
             chain = []
-            for t, k in enumerate(order):
-                prev = order[:t]                        # dims placed before k
+            for position, target_dim in enumerate(order):
+                preceding_dims = order[:position]       # dims placed before this one
                 # Augment covariates with the TRUE earlier targets in this
                 # order (teacher forcing), matching the sampling-time layout.
-                X_aug = X if t == 0 else np.concatenate([X, Y[:, prev]], axis=1)
-                s = self._make_sampler()
-                s.fit(X_aug, Y[:, k])
-                chain.append(s)
+                X_aug = (X if position == 0
+                         else np.concatenate([X, Y[:, preceding_dims]], axis=1))
+                sampler = self._make_sampler()
+                sampler.fit(X_aug, Y[:, target_dim])
+                chain.append(sampler)
             self._chains.append(chain)
         # Keep a flat sampler list too so shared introspection still works.
-        self._samplers = [s for chain in self._chains for s in chain]
+        self._samplers = [sampler for chain in self._chains for sampler in chain]
 
     def _draw_one_order(self, X, order, chain, m, rng):
         """``(n_test, m, d)`` draws for a single chain order.
@@ -455,6 +505,71 @@ class ChainedMultiOutputWrapper(_ComposedMultiOutputWrapper):
                 drawn[r0:r1, :, k] = draw_k.reshape(r1 - r0, m)
                 X_aug = np.concatenate([X_aug, draw_k[:, None]], axis=1)
         return drawn
+
+    def conditional_crps(self, X, Y) -> float:
+        """Conditional CRPS (cCRPS) of the chained joint predictive law.
+
+        The chain-rule factorization ``p(y | x) = Π_t p(y_{π(t)} | y_{π(<t)}, x)``
+        turns the joint into a sequence of *univariate* conditionals.  The cCRPS
+        (Roordink & Hess 2023) is the sum of the univariate CRPS of each of those
+        sequential conditionals, evaluated against the observed coordinate while
+        conditioning on the **observed** earlier coordinates (teacher forcing on
+        the true ``y_{π(<t)}``, not on drawn values)::
+
+            cCRPS(P̂, y | x) = Σ_t CRPS( P̂(y_{π(t)} | y_{π(<t)}, x), y_{π(t)} ).
+
+        This is a strictly proper scoring rule for the *joint* law and, unlike the
+        sum of marginal CRPS, genuinely rewards the learned cross-target
+        dependence (each conditional sees the true preceding targets).  Each
+        per-coordinate CRPS is read off the base sampler's piecewise-linear
+        predictive CDF in closed form via :meth:`BaseSampler.crps` — a true CRPS
+        with no Gaussian assumption and no Monte-Carlo sampling, the direct
+        analogue of the univariate benchmark's CRPS.
+
+        Because the conditioning is on *observed* targets (available only at
+        scoring time, with the realised ``y``), cCRPS is a property of the fitted
+        conditional chain, not of the emitted sample ensemble — so it lives here
+        on the chained wrapper rather than in the sample-based ``metrics`` module,
+        and is reported **only** for chained models.  When the wrapper averages
+        over ``n_orders`` permutations, the cCRPS is averaged over the orders
+        (each order is an exact, equivalent factorization of the same joint).
+
+        Parameters
+        ----------
+        X : (n_test, p) array-like
+            Test covariates (already imputed by the CV harness).
+        Y : (n_test, d) array-like
+            Observed test targets.
+
+        Returns
+        -------
+        float
+            Mean over test instances of ``Σ_t CRPS_t``, averaged over chain
+            orders.  Lower is better.
+        """
+        if not self._chains:
+            raise RuntimeError("conditional_crps requires a fitted chained wrapper.")
+        X = as_2d_features(X)
+        Y = as_2d_targets(Y)
+        if Y.shape[1] != self._d:
+            raise ValueError(
+                f"Y has {Y.shape[1]} targets but the wrapper was fit on d={self._d}."
+            )
+        n_test = X.shape[0]
+
+        per_order = np.zeros(len(self._chains), dtype=np.float64)
+        for order_index, (order, chain) in enumerate(zip(self._orders, self._chains)):
+            ccrps = np.zeros(n_test, dtype=np.float64)
+            for position, target_dim in enumerate(order):
+                preceding_dims = order[:position]
+                # Condition each sequential conditional on the TRUE earlier
+                # targets (teacher forcing), matching the fit-time augmentation.
+                X_aug = (X if position == 0
+                         else np.concatenate([X, Y[:, preceding_dims]], axis=1))
+                ccrps += np.asarray(
+                    chain[position].crps(X_aug, Y[:, target_dim]), dtype=np.float64)
+            per_order[order_index] = float(ccrps.mean())
+        return float(per_order.mean())
 
     def _draw(self, X, m, rng):
         if len(self._chains) == 1:

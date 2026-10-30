@@ -16,7 +16,7 @@ from ``scoringbench.univariate``.
 from __future__ import annotations
 
 from .base import MultivariateWrapper, as_2d_features, as_2d_targets
-from .base_sampler import BaseSampler
+from .base_sampler import BaseSampler, CDFNodes, crps_piecewise_linear
 from .baselines import (
     ChainedMultiOutputWrapper,
     CopulaMultiOutputWrapper,
@@ -32,6 +32,8 @@ __all__ = [
     "MultivariateWrapper",
     "SampleBasedWrapper",
     "BaseSampler",
+    "CDFNodes",
+    "crps_piecewise_linear",
     "CausiloSampler",
     "TabPFNSampler",
     "TabICLSampler",

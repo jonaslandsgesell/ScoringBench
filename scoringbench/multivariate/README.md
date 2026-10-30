@@ -7,6 +7,52 @@ from draws (energy score, variogram score, Dawid-Sebastiani).
 Everything lives under `scoringbench/multivariate/`; edit
 `scoringbench/multivariate/models.py` (`MODELS`) to add / swap models.
 
+### Direct multivariate model
+
+Besides the `independent` / `copula` / `chained` compositions of per-dimension
+samplers, one **native** multivariate sampler models the whole `d`-dim target
+block directly (single registry entry, no composition variants):
+
+- **`forest_diffusion`** — Forest-Diffusion / Forest-Flow joint diffusion.
+
+### Conditional CRPS (cCRPS) — chained and independent models
+
+The `chained` wrapper additionally reports **`conditional_crps`**, a strictly
+proper scoring rule for the *joint* law. Using the chain-rule factorization
+`p(y|x) = Π_t p(y_{π(t)} | y_{π(<t)}, x)`, cCRPS sums the univariate CRPS of each
+sequential conditional, **teacher-forced on the observed earlier targets**:
+
+```
+cCRPS(P̂, y | x) = Σ_t CRPS( P̂(y_{π(t)} | y_{π(<t)}, x), y_{π(t)} )
+```
+
+Each per-coordinate CRPS is read off the base sampler's piecewise-linear
+predictive CDF in **closed form** (no Gaussian assumption, no Monte-Carlo
+estimate — the direct analogue of the univariate benchmark's CRPS). Because it
+conditions on *observed* targets (available only at scoring time), cCRPS is a
+property of the fitted conditionals, not of the emitted sample ensemble, so it is
+computed on the wrapper (`.conditional_crps(X, Y)`) rather than in the
+sample-based `metrics` module.
+
+Two wrappers expose it, and they are directly comparable (same strictly proper
+joint rule, same realized targets):
+
+- **`chained`** — the genuine dependence-aware factorization above.
+- **`independent`** — its conditionals collapse to the marginals
+  (`p(y_k | y_{<t}, x) = p(y_k | x)`), so cCRPS is exactly the **summed marginal
+  CRPS** `Σ_k CRPS(F_{Y_k|X}, y_k)` (order-independent, no distributional
+  assumption needed — the marginals are genuine conditional CDFs). This is the
+  natural baseline: the `independent` − `chained` gap on `conditional_crps` is
+  precisely the value of conditioning on previous targets (`cCRPS` ≠ summed
+  marginal CRPS for a dependence-aware model; equal, by construction, here).
+
+It is deliberately **not** implemented for the native joint sampler
+(`forest_diffusion`) or `copula`: those expose no per-coordinate sequential
+conditional CDF, so computing cCRPS would require extra distributional/derivation
+machinery (copula h-functions) this benchmark avoids. The leaderboard ranks
+`conditional_crps` over `chained` + `independent`; the other models simply omit
+the column.
+
 ## Dataset sources (`--source`)
 
 The multivariate targets can come from two interchangeable **sources**, selected
@@ -199,6 +245,7 @@ python aggregate_datasets.py \
     --out_dir output_multivariate_d3_n3000
 
 # Statistical rankings + critical-difference diagrams over all multivariate
-# scoring rules (energy_score_beta_*, variogram_score_p_*, dawid_sebastiani, ...)
+# scoring rules (energy_score_beta_*, variogram_score_p_*, dawid_sebastiani,
+# and conditional_crps for the chained models, ...)
 python autorank_leaderboard.py --output_dir output_multivariate_d3_n3000
 ```

@@ -85,6 +85,21 @@ def run_fold(
             predict_time = time.perf_counter() - t1
             metrics = compute_metrics(pred, y_test_np)
 
+            # Conditional CRPS (cCRPS) needs the fitted sequential conditionals
+            # scored on the observed targets, not just the emitted sample
+            # ensemble, so it is reported by any wrapper that exposes
+            # ``conditional_crps`` — currently the chained AND independent
+            # wrappers — and omitted by the rest.  The leaderboard therefore
+            # ranks cCRPS over the chained + independent variants.
+            if hasattr(model, "conditional_crps"):
+                try:
+                    metrics["conditional_crps"] = float(
+                        model.conditional_crps(X_test, y_test_np)
+                    )
+                except Exception as exc:  # never let cCRPS sink a fold
+                    print(f"    [{name}] conditional_crps skipped: "
+                          f"{type(exc).__name__}: {exc}")
+
             metrics["fit_time"] = fit_time
             metrics["predict_time"] = predict_time
             metrics["train_time"] = fit_time + predict_time
