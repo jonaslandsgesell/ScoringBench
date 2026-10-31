@@ -42,6 +42,7 @@ import numpy as np
 import torch
 
 from .estimators import (
+    _compute_device,
     cross_norm_expectation,
     force_precision,
     pairwise_abs_pow_expectation,
@@ -248,20 +249,10 @@ def _dawid_sebastiani(samples: torch.Tensor, y: torch.Tensor) -> dict:
     return {"dawid_sebastiani": float(dss.mean())}
 
 
-def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray) -> dict:
-    """Energy, variogram, and Dawid–Sebastiani scores (all lower-is-better).
-
-    Scoring is a lightweight, numerically sensitive post-processing step run on
-    the CPU in float64: the differences ``term1 − term2`` / ``(obs − exp)²`` /
-    the DSS quadratic-form-plus-logdet demand double precision, and keeping them
-    off the GPU sidesteps device-kernel incompatibilities (the heavy model
-    *sampling* is what runs on the GPU, inside the wrappers).
-    """
-    samples = torch.as_tensor(pred.samples, dtype=torch.float64)
-    y = np.asarray(y_true, dtype=float)
-    if y.ndim == 1:
-        y = y[:, None]
-    y_t = torch.as_tensor(y, dtype=torch.float64)
+def _scoring_rules_on_device(samples_np: np.ndarray, y: np.ndarray, device: torch.device) -> dict:
+    """Run every scoring kernel on ``device`` in float64 and return floats."""
+    samples = torch.as_tensor(samples_np, dtype=torch.float64, device=device)
+    y_t = torch.as_tensor(y, dtype=torch.float64, device=device)
 
     metrics: dict = {}
     metrics.update(_energy_scores(samples, y_t, ENERGY_BETAS))
@@ -269,6 +260,39 @@ def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray
     metrics.update(_variogram_scores(samples, y_t, VARIOGRAM_ORDERS))
     metrics.update(_dawid_sebastiani(samples, y_t))
     return metrics
+
+
+def compute_scoring_rules(pred: MultivariateSamplePrediction, y_true: np.ndarray) -> dict:
+    """Energy, variogram, and Dawid–Sebastiani scores (all lower-is-better).
+
+    Numerically sensitive post-processing — the differences ``term1 − term2`` /
+    ``(obs − exp)²`` / the DSS quadratic-form-plus-logdet demand double precision
+    — so every kernel runs in **float64**.  The dominant cost is the O(m²)
+    energy-score term 2, a batched matmul (see
+    :func:`~.estimators.pairwise_norm_expectation`) that is substantially faster
+    on CUDA, so the rules run on the GPU when one is available
+    (:func:`~.estimators._compute_device`, matching the univariate benchmark).
+    All kernels are float64 on either device, so the device only changes speed,
+    not the values (up to floating-point associativity).  If a CUDA run runs out
+    of memory the computation is retried on the CPU, so results are always
+    produced.
+    """
+    y = np.asarray(y_true, dtype=float)
+    if y.ndim == 1:
+        y = y[:, None]
+
+    device = _compute_device()
+    if device.type != "cuda":
+        return _scoring_rules_on_device(pred.samples, y, device)
+    try:
+        return _scoring_rules_on_device(pred.samples, y, device)
+    except torch.cuda.OutOfMemoryError:
+        warnings.warn(
+            "multivariate scoring ran out of CUDA memory; retrying on CPU.",
+            RuntimeWarning, stacklevel=2,
+        )
+        torch.cuda.empty_cache()
+        return _scoring_rules_on_device(pred.samples, y, torch.device("cpu"))
 
 
 # Metric keys produced by compute_scoring_rules.
