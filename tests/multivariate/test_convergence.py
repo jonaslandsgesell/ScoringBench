@@ -135,7 +135,9 @@ class TestAssessSamplePrediction:
         rng = np.random.default_rng(10)
         cov = _elongated_cov(p=3, stretch=10.0)
         pred = _make_pred(n_test=50, m=1000, p=3, cov=cov, rng=rng)
-        diag = assess_sample_prediction(pred, n_groups=4, epsilon=1.01)
+        # Seed the diagnostic's random draw-partition so the result is
+        # reproducible (an unseeded rng partitions from OS entropy).
+        diag = assess_sample_prediction(pred, n_groups=4, epsilon=1.01, rng=0)
         assert isinstance(diag, SampleDiagnostic)
         assert diag.rhat < 1.01, f"median R̂={diag.rhat:.4f}"
         assert diag.rhat_max < 1.05, f"max R̂={diag.rhat_max:.4f}"
@@ -148,7 +150,12 @@ class TestAssessSamplePrediction:
         rng = np.random.default_rng(11)
         cov = _elongated_cov(p=3, stretch=10.0)
         pred = _make_pred(n_test=50, m=20, p=3, cov=cov, rng=rng)
-        diag = assess_sample_prediction(pred, n_groups=4, epsilon=1.01)
+        # Seed the diagnostic's random draw-partition for reproducibility: with
+        # only 5 draws per group the per-instance R̂ is noisy and frac_converged
+        # sits near the 0.5 boundary, so an unseeded (OS-entropy) partition made
+        # this assertion flaky.  Over 200 seeds frac_converged averages ~0.36 and
+        # stays < 0.5 for ~99% of them; rng=0 gives a stable 0.16.
+        diag = assess_sample_prediction(pred, n_groups=4, epsilon=1.01, rng=0)
         # With only 5 draws per group the between-group variance is noisy;
         # most instances should NOT be flagged as converged.
         assert diag.frac_converged < 0.5, (
@@ -160,7 +167,7 @@ class TestAssessSamplePrediction:
         rng = np.random.default_rng(12)
         cov = np.eye(2)
         pred = _make_pred(n_test=200, m=400, p=2, cov=cov, rng=rng)
-        diag = assess_sample_prediction(pred, n_groups=4, max_instances=30)
+        diag = assess_sample_prediction(pred, n_groups=4, max_instances=30, rng=0)
         assert 0.0 <= diag.frac_converged <= 1.0
 
     def test_too_few_draws_raises(self):

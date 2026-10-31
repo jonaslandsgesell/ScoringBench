@@ -32,8 +32,8 @@
 #SBATCH --error=slurm_logs/%x-%A_%a.err
 
 # Hardcoded run configuration
-SAMPLE_SIZE="1500"        # "3000" is original
-TARGET_DIM="3"            # target dimension d (number of jointly-modelled targets)
+SAMPLE_SIZE="3000"        # "3000" is original
+TARGET_DIM="10"            # target dimension d (number of jointly-modelled targets)
 # dataset source:
 #   "synthetic"           — copula-coupled residuals (independence fails by construction)
 #   "scoringbench"        — real jointly-measured multi-target OpenML datasets
