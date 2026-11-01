@@ -1,0 +1,101 @@
+[
+  {
+    "model_name": "independent_tabpfn_v3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2605.13986",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "copula_tabpfn_v3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2605.13986",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "chained_tabpfn_v3",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2605.13986",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_3",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "independent_tabpfn_realv2_5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "copula_tabpfn_realv2_5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "chained_tabpfn_realv2_5",
+    "organization": "Prior Labs",
+    "links": {
+      "paper": "https://arxiv.org/abs/2507.03971",
+      "huggingface": "https://huggingface.co/Prior-Labs/tabpfn_2_5",
+      "github": "https://github.com/PriorLabs/TabPFN"
+    }
+  },
+  {
+    "model_name": "independent_tabicl",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2602.11139",
+      "huggingface": "https://huggingface.co/jingang/TabICL",
+      "github": "https://github.com/soda-inria/tabicl"
+    }
+  },
+  {
+    "model_name": "copula_tabicl",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2602.11139",
+      "huggingface": "https://huggingface.co/jingang/TabICL",
+      "github": "https://github.com/soda-inria/tabicl"
+    }
+  },
+  {
+    "model_name": "chained_tabicl",
+    "organization": null,
+    "links": {
+      "paper": "https://arxiv.org/abs/2602.11139",
+      "huggingface": "https://huggingface.co/jingang/TabICL",
+      "github": "https://github.com/soda-inria/tabicl"
+    }
+  },
+  {
+    "model_name": "forest_diffusion",
+    "organization": "Samsung SAIL Montreal",
+    "links": {
+      "paper": "https://arxiv.org/abs/2309.09968",
+      "huggingface": null,
+      "github": "https://github.com/SamsungSAILMontreal/ForestDiffusion"
+    }
+  },
+  {
+    "model_name": "drforest",
+    "organization": "Silas Koemen",
+    "links": {
+      "paper": "https://arxiv.org/abs/2005.14458",
+      "huggingface": null,
+      "github": "https://github.com/silaskoemen/drforest"
+    }
+  }
+]

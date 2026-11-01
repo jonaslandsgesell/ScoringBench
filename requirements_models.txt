@@ -17,6 +17,7 @@ nflows>=0.14
 pymc>=5.0
 pymc-bart>=0.11.0
 ForestDiffusion>=1.0.6  # XGBoost-based tabular diffusion/flow generative model (conditional gen via X_covs)
+drforest>=0.2.0  # Distributional Random Forest (MMD-split, Rust core); native multivariate sampler via leaf weights
 flexcode>=0.2.3
 condensite>=0.1.1  # pulls in lightgbm
 cde>=1.0.1

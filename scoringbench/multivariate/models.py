@@ -16,13 +16,18 @@ Strategies
   analogue of the product rule ``Π_k p(y_k | x, y_{<k})``; captures
   cross-dimensional dependence.
 
-Direct multivariate model
---------------------------
+Direct multivariate models
+---------------------------
 * **forest_diffusion** — :class:`ForestDiffusionMultiOutputWrapper`: a *native*
   multivariate sampler (Forest-Diffusion / Forest-Flow) that diffuses the whole
   ``d``-dimensional target block jointly, conditioned on the features.  It is
   **not** crossed with the composition strategies — there is a single
   ``forest_diffusion`` entry, no independent / copula / chained variants.
+* **drforest** — :class:`DRForestMultiOutputWrapper`: a *native* multivariate
+  sampler (Distributional Random Forest, ``drforest`` package) that grows an
+  MMD-split forest on the joint target block and draws via the per-row leaf
+  weights (weighted bootstrap of the training targets).  Also a single
+  ``drforest`` entry, no composition variants.
 
 Base samplers
 -------------
@@ -44,6 +49,7 @@ from . import config as cfg
 from .wrappers import (
     ChainedMultiOutputWrapper,
     CopulaMultiOutputWrapper,
+    DRForestMultiOutputWrapper,
     ForestDiffusionMultiOutputWrapper,
     IndependentMultiOutputWrapper,
     TabICLSampler,
@@ -133,6 +139,17 @@ def _forest_diffusion() -> ForestDiffusionMultiOutputWrapper:
     )
 
 
+def _drforest() -> DRForestMultiOutputWrapper:
+    # Native multivariate sampler: an MMD-split distributional random forest is
+    # grown on the joint d-dim target block and sampled via per-row leaf weights
+    # (weighted bootstrap). Like forest_diffusion, a single direct model — no
+    # independent / copula / chained variants.
+    return DRForestMultiOutputWrapper(
+        n_draws=int(cfg.N_DRAWS),
+        random_state=int(cfg.SEED),
+    )
+
+
 #: Comment out entries you do not want to run locally.
 MODELS: dict[str, Callable[[], object]] = {}
 for _base_name, _base_factory in BASE_SAMPLERS.items():
@@ -140,5 +157,6 @@ for _base_name, _base_factory in BASE_SAMPLERS.items():
     MODELS[f"copula_{_base_name}"] = _make_copula(_base_factory)
     MODELS[f"chained_{_base_name}"] = _make_chained(_base_factory)
 
-# Direct multivariate sampler (no composition strategy applied).
+# Direct multivariate samplers (no composition strategy applied).
 MODELS["forest_diffusion"] = _forest_diffusion
+MODELS["drforest"] = _drforest

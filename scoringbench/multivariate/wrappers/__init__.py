@@ -23,6 +23,7 @@ from .baselines import (
     IndependentMultiOutputWrapper,
 )
 from .causilo_sampler import CausiloSampler
+from .drforest_sampler import DRForestMultiOutputWrapper
 from .forest_diffusion_sampler import ForestDiffusionMultiOutputWrapper
 from .sample_based import SampleBasedWrapper
 from .tabicl_sampler import TabICLSampler
@@ -41,6 +42,7 @@ __all__ = [
     "CopulaMultiOutputWrapper",
     "ChainedMultiOutputWrapper",
     "ForestDiffusionMultiOutputWrapper",
+    "DRForestMultiOutputWrapper",
     "as_2d_features",
     "as_2d_targets",
 ]
