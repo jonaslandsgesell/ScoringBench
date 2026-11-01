@@ -20,6 +20,7 @@ import torch
 
 from . import config as cfg
 from .datasets import load_dataset
+from .discreteness import target_discreteness
 from .cv import run_cv, run_fold
 from .results import (
     build_results_rows,
@@ -80,6 +81,22 @@ def run_benchmark(
         try:
             X, y = load_dataset(ds_config)
             print(f"Loaded: {len(X)} rows × {X.shape[1]} features")
+
+            # Discreteness is a DATASET-level property: compute it ONCE on the
+            # full target (not a fold subsample) so the flag is invariant across
+            # CV repeats/folds. A discrete / lattice-valued target has no proper
+            # continuous density, so the density-based scoring rules are skipped
+            # for it (see scoringbench.univariate.discreteness).
+            disc = target_discreteness(y, name=name)
+            score_density = not disc["is_discrete"]
+            if disc["is_discrete"]:
+                print(f"  ⊘ discrete target (rule={disc['rule']}, "
+                      f"n_unique={disc['n_unique']}, frac_unique={disc['frac_unique']:.3g}, "
+                      f"max_atom_mass={disc['max_atom_mass']:.3g}, span={disc['span']:.3g}, "
+                      f"ecf_peak={disc['ecf_peak']:.3g}) "
+                      f"→ skipping density-based scoring rules")
+            # The flag reaches every result row via each model's metrics dict
+            # (cv.run_fold stamps ``discrete_y``), so no config plumbing needed.
 
             # Effective sample size: per-dataset override or global
             effective_sample_size = ds_config.get('sample_size', sample_size) or 0
@@ -173,6 +190,7 @@ def run_benchmark(
                         X.iloc[train_idx], X.iloc[test_idx],
                         y.iloc[train_idx], y.iloc[test_idx],
                         models_to_run, seed,
+                        score_density=score_density,
                     )
 
                     for k, v in new_fold_data.items():

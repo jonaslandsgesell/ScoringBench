@@ -22,7 +22,10 @@ import torch
 from sklearn.model_selection import KFold
 from sklearn.impute import SimpleImputer
 
-from .metrics import compute_metrics, compute_point_metrics, ENERGY_BETAS, DPD_BETAS, CRTS_ALPHAS
+from .metrics import (
+    compute_metrics, compute_point_metrics,
+    ENERGY_BETAS, DPD_BETAS, CRTS_ALPHAS, DENSITY_BASED_KEYS, PIT_KEYS,
+)
 from .wrappers import ProbabilisticWrapper
 
 
@@ -37,8 +40,20 @@ def run_fold(
     y_test: pd.Series,
     model_factories: dict[str, Callable],
     seed: int,
+    score_density: bool = True,
 ) -> dict:
     """Fit and evaluate every model on one fold.
+
+    ``score_density`` (a dataset-level property computed once on the full target;
+    see :mod:`scoringbench.univariate.discreteness`) gates the density-based
+    scoring rules.  When ``False`` the target is discrete / lattice-valued, the
+    DENSITY_BASED_KEYS are not proper and the PIT KS diagnostic (PIT_KEYS) is
+    invalid (its continuity null false-rejects even a perfect forecast), so both
+    families are emitted as ``None`` for every model; downstream ranking drops
+    the dataset from those leaderboards only (``autorank`` ``dropna(how='any')``
+    per metric) while keeping it in the grid-robust ones.  Each model's metrics
+    also carry ``discrete_y`` for transparency in the raw parquet and the
+    flattened result rows.
 
     Each factory produces a fresh ProbabilisticWrapper.
     If predict_distribution() is not implemented, falls back to point metrics
@@ -101,7 +116,7 @@ def run_fold(
             try:
                 dist = model.predict_distribution(X_test)
                 predict_time = time.perf_counter() - t1
-                metrics = compute_metrics(dist, y_test_np)
+                metrics = compute_metrics(dist, y_test_np, score_density=score_density)
             except NotImplementedError:
                 # predict_distribution bailed out; the fallback point predict is
                 # the real inference work, so time THAT (the aborted call above
@@ -121,6 +136,14 @@ def run_fold(
                     *[f"crts_alpha_{a}" for a in CRTS_ALPHAS],
                 ):
                     metrics[key] = None
+
+            # Discrete / lattice target: density rules are not proper -> emit
+            # None uniformly so the parquet column exists and downstream ranking
+            # drops this dataset from the density leaderboards only.
+            if not score_density:
+                for key in (*DENSITY_BASED_KEYS, *PIT_KEYS):
+                    metrics[key] = None
+            metrics["discrete_y"] = not score_density
 
             metrics["fit_time"] = fit_time
             metrics["predict_time"] = predict_time
@@ -145,6 +168,7 @@ def run_fold(
             fold_results[name] = {
                 "error": str(e),
                 "error_type": type(e).__name__,
+                "discrete_y": not score_density,
                 "train_time": None,
                 "fit_time": None,
                 "predict_time": None,

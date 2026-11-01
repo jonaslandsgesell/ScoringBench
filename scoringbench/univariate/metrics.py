@@ -128,6 +128,19 @@ BOUNDED_DIAGNOSTIC_KEYS = (
     "pit_ks_pvalue",
     *[f"coverage_{c}" for c in COVERAGE_LEVELS],
 )
+# PIT_KEYS are the one diagnostic family that is NOT merely coarse but genuinely
+# invalid on a discrete / lattice-valued target.  The PIT KS test's null is
+# "forecast ideal AND continuous": its calibration of the KS statistic to
+# Uniform(0, 1) assumes a continuous predictive CDF.  Against atoms the mid-PIT
+# values sit on a lattice, so even a PERFECTLY calibrated forecast lands far from
+# Uniform and the test false-rejects (verified: uniform forecast on {1..6} ->
+# stat 0.175, p ~1e-107).  They are therefore skipped alongside the
+# DENSITY_BASED_KEYS whenever the target is discrete (``score_density=False``).
+# Unlike PIT, coverage_*/sharpness/dispersion stay bounded and honest under a
+# collapsing support, and the grid-robust proper scores (crps, crts_*,
+# energy_*, interval_*, wcrps_*) are proper for discrete distributions too, so
+# only PIT is dropped.
+PIT_KEYS = ("pit_ks_stat", "pit_ks_pvalue")
 
 # Peak number of temporaries of the returned matrix's shape held concurrently by
 # uniform_slab_pairwise_distance (left/right corners, two _pow_diff calls, num,
@@ -174,13 +187,20 @@ def force_precision(dtype: torch.dtype = torch.float64):
 # Public API
 # ---------------------------------------------------------------------------
 
-def compute_metrics(dist: DistributionPrediction, y_true: np.ndarray) -> dict:
-    """All metrics; MAE uses conditional medians, RMSE and R² use means."""
+def compute_metrics(dist: DistributionPrediction, y_true: np.ndarray,
+                    score_density: bool = True) -> dict:
+    """All metrics; MAE uses conditional medians, RMSE and R² use means.
+
+    ``score_density`` is forwarded to :func:`compute_scoring_rules`.  Set it
+    ``False`` for targets with atoms / lattice structure (see
+    :mod:`scoringbench.univariate.discreteness`), where the DENSITY_BASED_KEYS
+    are not proper and are omitted from the returned dict.
+    """
     point_metrics = compute_point_metrics(y_true, dist.mean)
     point_metrics["mae"] = float(mean_absolute_error(y_true, dist.median))
     return {
         **point_metrics,
-        **compute_scoring_rules(dist, y_true),
+        **compute_scoring_rules(dist, y_true, score_density=score_density),
     }
 
 
@@ -565,6 +585,7 @@ def compute_scoring_rules(
     dist: DistributionPrediction,
     y_true: np.ndarray,
     representation: str = "auto",
+    score_density: bool = True,
 ) -> dict:
     """Compute all distributional scoring rules from a DistributionPrediction.
 
@@ -592,6 +613,18 @@ def compute_scoring_rules(
           the common grid (used to prove the two paths agree for grid-robust
           rules when the input is already regular).
 
+    score_density :
+        When ``False`` the DENSITY_BASED_KEYS are never computed and never
+        returned, and the PIT KS diagnostic (PIT_KEYS) is skipped too: only the
+        grid-robust family + the remaining bounded diagnostics are scored, on
+        ``dist.native``.  This is the path for targets with atoms / lattice
+        structure (see :mod:`scoringbench.univariate.discreteness`), where the
+        density ``f = p/w`` the DPD / pseudospherical / CDE rules read is not a
+        proper density to score against, and the PIT KS test's continuity null
+        makes it false-reject even a perfectly calibrated forecast.  It overrides
+        ``representation`` (an atom-bearing target has no well-defined density
+        view).
+
     Notes
     -----
     Before scoring, each view's grid is extended with zero-mass bins (via
@@ -602,6 +635,16 @@ def compute_scoring_rules(
         raise ValueError(
             f"representation must be 'auto', 'native' or 'resampled', got {representation!r}"
         )
+
+    if not score_density:
+        # Atom-bearing / lattice target: density rules are not proper here, and
+        # the PIT KS test is invalid (it false-rejects a continuous null against
+        # lattice PIT values; see PIT_KEYS).  Score the grid-robust + diagnostic
+        # family on the native grid, then drop both families from the result
+        # (callers emit None for them).
+        native = _score_one_view(dist.native, y_true, compute_density=False)
+        drop = set(DENSITY_BASED_KEYS) | set(PIT_KEYS)
+        return {k: v for k, v in native.items() if k not in drop}
 
     if representation == "resampled":
         # Everything on the common grid, density rules included.
@@ -1548,6 +1591,9 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute
         crts_scores = compute_crts(cdf, bin_edges, y, y_bin, shared)
 
         # ---- PIT KS test (Dawid 1984; Diebold et al. 1998) ----
+        # Always computed here on the native view; the discrete path drops the
+        # two PIT_KEYS from the returned dict (the KS test is invalid on lattice
+        # targets -- see PIT_KEYS), exactly as it drops the density keys.
         pit_ks = compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
 
         return {

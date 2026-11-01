@@ -22,6 +22,33 @@ from autorank import autorank, plot_stats, create_report, latex_table
 from scipy import stats
 
 logger = logging.getLogger(__name__)
+
+# Density-based scoring rules (cde_loss, dpd_beta_*, pseudospherical_alpha_*)
+# AND the PIT KS diagnostic (pit_ks_stat / pit_ks_pvalue) are only valid against
+# a *continuous* target, so scoringbench emits them as NaN on datasets whose
+# target is discrete / lattice-valued (flagged per row via ``discrete_y``; see
+# scoringbench.univariate.discreteness, and cv.py which nulls exactly
+# ``(*DENSITY_BASED_KEYS, *PIT_KEYS)`` on discrete rows). The completeness
+# threshold below must therefore be measured over the non-discrete datasets
+# only for every one of those keys, otherwise they look "incomplete" and get
+# dropped -- which is why PIT disappeared from the leaderboard once datasets
+# started being flagged discrete. We import the authoritative key lists from
+# scoringbench; if that import fails (e.g. torch missing in a ranking-only env)
+# we fall back to an empty set, which preserves the prior behavior of counting
+# every dataset for every metric.
+try:
+    from scoringbench.univariate.metrics import (
+        DENSITY_BASED_KEYS as _DENSITY_BASED_KEYS,
+        PIT_KEYS as _PIT_KEYS,
+    )
+    _DISCRETE_NAN_KEYS = set(_DENSITY_BASED_KEYS) | set(_PIT_KEYS)
+except Exception as _exc:  # pragma: no cover - import guard
+    logger.warning(
+        "Could not import DENSITY_BASED_KEYS / PIT_KEYS from scoringbench (%s); "
+        "these metrics will use the all-dataset completeness threshold.", _exc,
+    )
+    _DISCRETE_NAN_KEYS = set()
+
 # Nominal central-interval coverage levels (%) reported per fold as
 # coverage_{level}. Each is a *marginal* coverage probability: one nominal
 # level, marginalized over all test rows of the fold.
@@ -75,6 +102,19 @@ def _load_write_latex_writer():
         return None
 
 
+def _discrete_datasets(df):
+    """Dataset names flagged ``discrete_y`` in this frame.
+
+    ``discrete_y`` is a dataset-level property (invariant to model / fold), so
+    any flagged row marks its dataset discrete. Returns an empty set when the
+    column is absent (legacy parquets), so callers fall back to prior behavior.
+    """
+    if 'discrete_y' not in df.columns or 'dataset' not in df.columns:
+        return set()
+    flagged = df['discrete_y'].fillna(False).astype(bool)
+    return set(df.loc[flagged, 'dataset'].tolist())
+
+
 def _collect_all_rows(root):
     rows = []
     if not os.path.exists(root): return rows
@@ -111,6 +151,7 @@ def load_metric_matrix(root, metric, *, coverage_target: float | None = None):
     Returns: (pivot_table, included_models) or (None, None) if no data available.
     """
     data = []
+    discrete_datasets = set()
     for entry in os.listdir(root):
         entry_path = os.path.join(root, entry)
         if not os.path.isfile(entry_path) or not entry.endswith('.parquet'):
@@ -121,6 +162,7 @@ def load_metric_matrix(root, metric, *, coverage_target: float | None = None):
             if metric == "amce":
                 df = _with_amce(df)
             if df.empty or metric not in df.columns: continue
+            discrete_datasets |= _discrete_datasets(df)
             for _, row in df.iterrows():
                 data.append({
                     "dataset": row.get('dataset', 'unknown'),
@@ -135,6 +177,13 @@ def load_metric_matrix(root, metric, *, coverage_target: float | None = None):
     if not data: return None, None
 
     df_metric = pd.DataFrame(data)
+    # Density-based rules and the PIT KS diagnostic are NaN by construction on
+    # discrete datasets, so count the completeness threshold over non-discrete
+    # datasets only (no-op when the discrete_y column is absent, preserving
+    # legacy behavior).
+    if metric in _DISCRETE_NAN_KEYS and discrete_datasets:
+        df_metric = df_metric[~df_metric['dataset'].isin(discrete_datasets)]
+        if df_metric.empty: return None, None
     if coverage_target is not None:
         df_metric['score'] = (df_metric['score'] - coverage_target).abs()
     # Step 1: aggregate across folds → (dataset, model, avg_score)
@@ -220,6 +269,7 @@ def load_metric_long_format(root, metric):
     """
     data = []
     models_seen = set()
+    discrete_datasets = set()
     for entry in os.listdir(root):
         entry_path = os.path.join(root, entry)
         if not os.path.isfile(entry_path) or not entry.endswith('.parquet'):
@@ -231,6 +281,7 @@ def load_metric_long_format(root, metric):
                 df = _with_amce(df)
             if df.empty or metric not in df.columns: continue
             models_seen.add(model)
+            discrete_datasets |= _discrete_datasets(df)
             for _, row in df.iterrows():
                 data.append({
                     "dataset": row.get('dataset', 'unknown'),
@@ -243,7 +294,14 @@ def load_metric_long_format(root, metric):
             continue
 
     if not data: return None, None
-    return pd.DataFrame(data), list(models_seen)
+    df_long = pd.DataFrame(data)
+    # Mirror load_metric_matrix: for density + PIT metrics, drop discrete
+    # datasets so rank_with_mean_std measures its own 90% completeness threshold
+    # over the non-discrete datasets only (no-op without a discrete_y column).
+    if metric in _DISCRETE_NAN_KEYS and discrete_datasets:
+        df_long = df_long[~df_long['dataset'].isin(discrete_datasets)]
+        if df_long.empty: return None, None
+    return df_long, list(models_seen)
 
 
 # ---------------------------------------------------------------------------

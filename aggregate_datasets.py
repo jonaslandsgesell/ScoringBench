@@ -105,7 +105,13 @@ def aggregate(raw_dir: Path, out_dir: Path) -> dict[str, int]:
         if not frames:
             continue
 
-        # Combine all datasets for this model
+        # Combine all datasets for this model.
+        # Drop all-NA / empty columns from each frame before concat so pandas
+        # infers result dtypes from the populated frames only (the pre-2.x
+        # behavior). Columns union across frames is preserved: a column that is
+        # all-NA in one frame but populated in another is still kept (filled
+        # with NaN where absent).
+        frames = [f.dropna(axis=1, how="all") for f in frames if not f.empty]
         combined = pd.concat(frames, ignore_index=True)
 
         # Drop rows that only ran with errors (non-null `error`), and
