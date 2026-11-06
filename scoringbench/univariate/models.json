@@ -558,15 +558,6 @@
     }
   },
   {
-    "model_name": "condensite_lgbm_v0_0_2",
-    "organization": null,
-    "links": {
-      "paper": "https://arxiv.org/abs/2511.18530",
-      "huggingface": null,
-      "github": "https://github.com/Scriddie/condensite"
-    }
-  },
-  {
     "model_name": "condensite_pitbst_v0_1_1",
     "organization": null,
     "links": {

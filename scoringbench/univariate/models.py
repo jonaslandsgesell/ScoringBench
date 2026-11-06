@@ -55,7 +55,6 @@ from .wrappers import (
     ForestDiffusionWrapper,
     CDEWrapper,
     FlexCodeWrapper,
-    CondensiteLGBMWrapper,
     CondensitePITBoostingWrapper,
     SurjectorsWrapper,
     EXAONETabularWrapper,
@@ -350,8 +349,6 @@ MODELS = {
 
     **dict_cde_models,
     **dict_flexcode_models,
-    "condensite_lgbm_v0_0_2": lambda: CondensiteLGBMWrapper(),
-    # condensité corrected by a second condensité fit in PIT space (condensite.PITBoosting)
     "condensite_pitbst_v0_1_1": lambda: CondensitePITBoostingWrapper(),
     **dict_surjectors_models,
 }
