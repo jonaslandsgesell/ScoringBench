@@ -451,10 +451,21 @@ def compute_energy_score_histogram_corrected(
             ar_c = ur_c.abs()
             outside_c = (ul_c * ur_c) > 0            # y outside [a, b]
             big_c = torch.maximum(al_c, ar_c)
-            small_c = torch.minimum(al_c, ar_c)
             big_pos_c = big_c > 0
             safe_big_c = torch.where(big_pos_c, big_c, torch.ones_like(big_c))
-            r_c = (small_c - big_c) / safe_big_c     # ∈ [−1, 0]
+            # r = (small − big) / big ∈ [−1, 0], the argument of the expm1/log1p
+            # evaluation of the OUTSIDE branch (the only consumer of r_c).  Do NOT
+            # form it as ``min(|u_l|,|u_r|) − max(|u_l|,|u_r|)``: when y lies far
+            # OUTSIDE a narrow bin both offsets are large (~|y − bin|) and nearly
+            # equal, so that subtraction catastrophically cancels and the width it
+            # is meant to recover is lost (observed: CRPS → 0 on a near-tied
+            # quantile bin far from y).  For an outside bin the magnitudes differ
+            # by EXACTLY the bin width ``w = b − a`` (both offsets share a sign and
+            # are b−a apart), so ``big − small = w`` exactly — use the width
+            # directly.  For an INSIDE bin this r_c is wrong but unused (the kink
+            # SUM form ``in_num_c`` is selected there), and the clamp keeps the
+            # unused value in range.
+            r_c = (-we_c / safe_big_c).clamp(min=-1.0, max=0.0)
             mid_c = mids_ext if shared else bin_mids[i:end]
             t1_cache.append((i, end, p_c, y_c, we_c, zw_c, al_c, ar_c, outside_c, 
                             safe_big_c, big_pos_c, r_c, mid_c))

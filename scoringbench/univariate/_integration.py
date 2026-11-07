@@ -235,7 +235,48 @@ def uniform_slab_pairwise_distance(
     #   h(d_lh) − h(d_ll):  hi = right_lo − left_lo,  lo = right_lo − left_hi  (≥0)
     top = _pow_diff(right_hi - left_lo, right_hi - left_hi)
     bot = _pow_diff(right_lo - left_lo, right_lo - left_hi)
-    num_disjoint = top - bot
+    num_grouped = top - bot
+
+    # The grouped form ``top − bot`` is itself cancellation-free *inside* each
+    # bracket, but the OUTER subtraction cancels catastrophically when the RIGHT
+    # slab is narrow relative to the gap (``wR ≪ g``): ``top`` and ``bot`` are
+    # then two nearly-equal powers of order ``g^{β+2}`` whose difference is only
+    # ``O(g^{β} wL wR)``.  This is exactly what a quantile model with (near-)tied
+    # outer quantiles produces — two sorted-but-almost-equal edges carrying mass
+    # far from the target — and it drove the observed CRPS blow-up (energy
+    # β-term disagreed with the identical CRTS α=2 by ~6 orders of magnitude on a
+    # handful of quantile-model cells).
+    #
+    # In that whole regime (gap ≥ both widths) evaluate the second difference in
+    # a form with NO wide-magnitude subtraction.  Writing g = gap, and using
+    # c = g + wL, span = g + wL + wR, the exact second difference factorises as
+    #
+    #   num = g^{β+2} · [ expm1((β+2)·log1p(wR/c)) · expm1((β+2)·log1p(wL/g))
+    #                     − (1 + wR/c)^{β+2} · expm1((β+2)·log1p(wL·wR/(g·span))) ]
+    #
+    # where the two subtracted terms scale like (β+2)²·uv and (β+2)·uv
+    # (u=wL/g, v=wR/g), i.e. they differ by the factor (β+2) ∈ (2, 4] and so the
+    # subtraction loses < 1 digit — verified machine-precise (worst ~4e-15)
+    # against 50-digit mpmath across the gap ≥ widths regime, vs up to ~300 %
+    # relative error for ``top − bot`` there.  Outside that regime (widths ≳ gap)
+    # ``top − bot`` is well-conditioned and is kept.  Touching pairs (g = 0) take
+    # the ``top − bot`` branch, which is exact at a shared corner.
+    g_gap = right_lo - left_hi                      # ≥ 0 on a disjoint pair
+    wL_d = left_hi - left_lo
+    wR_d = right_hi - right_lo
+    # Floors guard log1p/pow at positions that do NOT use this branch (torch.where
+    # evaluates both arms); where the branch IS used, g_gap ≥ max(wL,wR) > 0.
+    safe_g = g_gap.clamp(min=eps)
+    c_cf = (safe_g + wL_d).clamp(min=eps)
+    span_cf = (safe_g + wL_d + wR_d).clamp(min=eps)
+    e_r = torch.expm1(p * torch.log1p(wR_d / c_cf))
+    e_l = torch.expm1(p * torch.log1p(wL_d / safe_g))
+    e_x = torch.expm1(p * torch.log1p(wL_d * wR_d / (safe_g * span_cf)))
+    fac = (1.0 + wR_d / c_cf).pow(p)
+    num_cf = safe_g.pow(p) * (e_r * e_l - fac * e_x)
+
+    use_cf = g_gap >= torch.maximum(wL_d, wR_d)
+    num_disjoint = torch.where(use_cf, num_cf, num_grouped)
     disjoint_val = num_disjoint / (q * p * wi * wj)
 
     # Exact-float disjoint predicate (cancellation-free): the slabs are disjoint
