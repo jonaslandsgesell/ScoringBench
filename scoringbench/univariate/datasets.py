@@ -36,6 +36,14 @@ SKIPPED_OPENML_IDS = {
     42369,  # weather_izmir: identical data to KEEL 'Wizmir' (same 1461 rows,
             # 9 features, same X/y and row order); name-only dedup misses it
             # (similarity 0.53 < 0.85). Keep the KEEL copy, drop this one.
+    1213,   # BNG(mv): Bayesian-Network-Generator *synthetic resampling* of the
+            # base 'mv' dataset, which is already in the suite as pmlb '344_mv'.
+            # It is not an independent task — counting both double-weights the
+            # 'mv' data-generating process in mean ranks. The name-based dedup
+            # can't catch it: _normalize_name strips the '344' prefix ('344_mv'
+            # -> 'mv', 2 chars) and the substring check only runs for names
+            # >3 chars, so 'mv' never matches 'bngmv'. Keep the real base
+            # '344_mv', drop this synthetic copy.
 }
 
 
