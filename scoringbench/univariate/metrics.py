@@ -130,17 +130,20 @@ BOUNDED_DIAGNOSTIC_KEYS = (
 )
 # PIT_KEYS are the one diagnostic family that is NOT merely coarse but genuinely
 # invalid on a discrete / lattice-valued target.  The PIT KS test's null is
-# "forecast ideal AND continuous": its calibration of the KS statistic to
-# Uniform(0, 1) assumes a continuous predictive CDF.  Against atoms the mid-PIT
-# values sit on a lattice, so even a PERFECTLY calibrated forecast lands far from
-# Uniform and the test false-rejects (verified: uniform forecast on {1..6} ->
-# stat 0.175, p ~1e-107).  They are therefore skipped alongside the
+# "forecast ideal": a smoothed, continuous predictive CDF cannot be ideal for a
+# lattice-valued target, so its PIT values sit on a lattice, even a PERFECTLY
+# smoothed forecast lands far from Uniform and the test false-rejects (verified:
+# uniform forecast on {1..6} -> stat 0.175, p ~1e-107).  They are therefore
+# skipped alongside the
 # DENSITY_BASED_KEYS whenever the target is discrete (``score_density=False``).
 # Unlike PIT, coverage_*/sharpness/dispersion stay bounded and honest under a
 # collapsing support, and the grid-robust proper scores (crps, crts_*,
 # energy_*, interval_*, wcrps_*) are proper for discrete distributions too, so
 # only PIT is dropped.
 PIT_KEYS = ("pit_ks_stat", "pit_ks_pvalue")
+
+# Seed of the Uniform(0, 1) draws V in the randomized PIT (Czado et al. 2009).
+PIT_RANDOMIZATION_SEED = 0
 
 # Peak number of temporaries of the returned matrix's shape held concurrently by
 # uniform_slab_pairwise_distance (left/right corners, two _pow_diff calls, num,
@@ -1256,9 +1259,12 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
         F(y) = cdf_{k_y - 1} + p_{k_y} * (y - left_edge_{k_y}) / w_{k_y}
     Values outside the support are clamped to [0, 1].
 
-    At atoms use mid-PIT, ``(F(y-) + F(y)) / 2``, including all coincident
-    bins. The uniform KS p-value is calibrated for continuous forecasts;
-    with atoms it is a diagnostic, not a calibrated discrete-distribution test.
+    At atoms use the randomized PIT of Czado et al. (2009),
+    ``u = F(y-) + V * (F(y) - F(y-))`` with ``V ~ Uniform(0, 1)``, including all
+    coincident bins.  ``u`` is exactly Uniform(0, 1) for an ideal forecast even
+    with atoms, and equals ``F(y)`` for continuous forecasts.  ``V`` is drawn from
+    a generator seeded with ``PIT_RANDOMIZATION_SEED`` so the diagnostic is
+    reproducible.
 
     Returns
     -------
@@ -1295,10 +1301,21 @@ def compute_pit_ks(probas, cdf, bin_edges, bin_widths, y_bin, y, shared, ns_idx)
         atom_limits,
     )
     cdf_before = cdf.gather(1, indices) - mass
-    pit = (cdf_before + mass * fraction).mean(dim=1).clamp(0.0, 1.0)
+    # Column 0 is F(y-) and column 1 is F(y); they coincide off atoms.
+    f_at = (cdf_before + mass * fraction).clamp(0.0, 1.0)
+    f_left = torch.minimum(f_at[:, 0], f_at[:, 1])
+    f_right = torch.maximum(f_at[:, 0], f_at[:, 1])
 
-    pit = torch.where(y < support_lo, 0.0, pit)
-    pit = torch.where(y > support_hi, 1.0, pit)
+    f_left = torch.where(y < support_lo, 0.0, f_left)
+    f_right = torch.where(y < support_lo, 0.0, f_right)
+    f_left = torch.where(y > support_hi, 1.0, f_left)
+    f_right = torch.where(y > support_hi, 1.0, f_right)
+
+    v = torch.as_tensor(
+        np.random.default_rng(PIT_RANDOMIZATION_SEED).random(f_left.shape[0]),
+        dtype=f_left.dtype, device=f_left.device,
+    )
+    pit = f_left + v * (f_right - f_left)
 
     pit_np = pit.detach().cpu().numpy().astype(np.float64)
     ks = stats.kstest(pit_np, "uniform")

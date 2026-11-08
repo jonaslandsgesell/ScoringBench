@@ -199,7 +199,10 @@ def _interpolate_cdf_to_grid_with_equally_sized_bins(x, c, lo, hi, n_bins):
     edges = _uniform_grid(np.asarray(lo, float)[:, None], np.asarray(hi, float)[:, None], n_bins)
     probas = np.empty((rows, n_bins), dtype=np.float64)
     for i in range(rows):
-        cc = _evaluate_monotone_cdf(x[0] if x_shared else x[i], c[i], edges[i])
+        node_row = x[0] if x_shared else x[i]
+        cc = _evaluate_monotone_cdf(node_row, c[i], edges[i])
+        if node_row[0] == node_row[-1] == edges[i, 0]:
+            cc[0] = c[i, 0]
         m = np.maximum(np.diff(cc), 0.0)
         s = m.sum()
         probas[i] = m / s if s > 0.0 else 1.0 / n_bins
