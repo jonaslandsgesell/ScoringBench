@@ -44,6 +44,12 @@ SKIPPED_OPENML_IDS = {
             # -> 'mv', 2 chars) and the substring check only runs for names
             # >3 chars, so 'mv' never matches 'bngmv'. Keep the real base
             # '344_mv', drop this synthetic copy.
+    44141,  # Brazilian_houses: target 'total' = hoa + rent_amount +
+            # property_tax + fire_insurance (up to +-1 BRL rounding; 90% of rows
+            # within 1 BRL), all four being feature columns. Target leakage:
+            # no aleatoric uncertainty to forecast (best R^2 = 0.9997), so the
+            # distributional scores only rank how finely a model resolves
+            # integer rounding noise.
 }
 
 

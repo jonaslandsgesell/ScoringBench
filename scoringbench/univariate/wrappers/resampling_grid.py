@@ -138,12 +138,16 @@ def _evaluate_monotone_cdf(x_row, c_row, edges_row):
     xs_s = np.ldexp(xs, -shift)
     edges_s = np.ldexp(edges_row, -shift)
 
+    # Flat CDF beyond the hull: a cubic extrapolated far past the nodes swings to
+    # +-inf with the wrong sign, so clip the queries rather than the result.
+    edges_s = np.clip(edges_s, xs_s[0], xs_s[-1])
+
     # The shift can round two adjacent abscissae together; PCHIP needs them strict.
     if np.all(np.diff(xs_s) > 0.0):
         try:
             # Raise rather than let an inf/nan reach the clip as a plausible PMF.
             with np.errstate(over="raise", invalid="raise", divide="raise"):
-                c = PchipInterpolator(xs_s, cs, extrapolate=True)(edges_s)
+                c = PchipInterpolator(xs_s, cs, extrapolate=False)(edges_s)
             if not np.all(np.isfinite(c)):
                 raise FloatingPointError("non-finite PCHIP evaluation")
         except (FloatingPointError, ValueError):
