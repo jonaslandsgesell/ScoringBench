@@ -50,7 +50,7 @@ def test_compute_metrics_uses_conditional_median_for_mae(monkeypatch):
     median = np.array([2.0 / 3.0, 11.0 / 3.0])
     monkeypatch.setattr(
         "scoringbench.univariate.metrics.compute_scoring_rules",
-        lambda dist, y_true: {},
+        lambda dist, y_true, **kwargs: {},
     )
 
     res = compute_metrics(dist, y_true)
@@ -133,8 +133,11 @@ def test_dispersion_includes_per_row_bin_variances_and_atoms():
     )
     result = compute_scoring_rules(dist, np.array([0.5, 3.0, 3.0]), representation="native")
     expected_std = np.array([1.0, 2.0, 0.0]) / np.sqrt(12.0)
-    assert result["sharpness"] == pytest.approx(expected_std.mean(), abs=1e-12)
-    assert result["dispersion"] == pytest.approx(expected_std.std(), abs=1e-12)
+    # Tran et al. (2020): eq. (3) root of the mean variance, eq. (4) coefficient of variation.
+    assert result["sharpness"] == pytest.approx(np.sqrt(np.mean(expected_std ** 2)), abs=1e-12)
+    assert result["dispersion"] == pytest.approx(
+        expected_std.std(ddof=1) / expected_std.mean(), abs=1e-12,
+    )
 
 
 def test_sharpness_combines_within_and_between_bin_variances():

@@ -1559,9 +1559,11 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute
     # resampled branch of the ``auto`` path, which keeps only the density keys;
     # the energy score inside is the single most expensive term in the suite.
     def _grid_robust_block():
-        # ---- Sharpness & Dispersion (Tran et al. 2020) ----
-        # Sharpness: mean of per-sample predictive std.  Dispersion: std of the
-        # per-sample predictive std.  Scoped so the (n_samples, n_bins) products
+        # ---- Sharpness & Dispersion (Tran et al. 2020, eq. 3 and 4) ----
+        # Sharpness: sqrt(mean_n var_n), the root of the mean predictive variance.
+        # Dispersion: coefficient of variation sd_{N-1}(sigma_n) / mean(sigma_n) of the
+        # per-sample predictive std (0 when undefined: N < 2 or all sigma_n = 0).
+        # Scoped so the (n_samples, n_bins) products
         # ``probas * mids`` / ``probas * mids²`` are freed as soon as the two
         # scalars are read out.
         def _sharpness_dispersion():
@@ -1569,8 +1571,11 @@ def _compute_scoring_rules_torch(probas, bin_edges, bin_mids, y, shared, compute
             mean_ = (weights * mids).sum(dim=-1, keepdim=True)
             var_ = (weights * ((mids - mean_).square() + bw.square() / 12.0)).sum(dim=-1)
             std_per_sample = var_.sqrt()                          # (n_samples,)
-            # Use unbiased=False to avoid torch warning when n_samples is small
-            return std_per_sample.mean().item(), std_per_sample.std(unbiased=False).item()
+            mean_std = std_per_sample.mean()
+            if std_per_sample.numel() < 2 or mean_std.item() <= 0.0:
+                return var_.mean().sqrt().item(), 0.0
+            cv = std_per_sample.std(unbiased=True) / mean_std
+            return var_.mean().sqrt().item(), cv.item()
 
         sharpness, dispersion = _sharpness_dispersion()
 

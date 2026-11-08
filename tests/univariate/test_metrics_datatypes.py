@@ -79,20 +79,21 @@ def _crps(kernel, edges, probas, y):
 # CRPS / energy score
 # ---------------------------------------------------------------------------
 
-def test_crps_float32_corrupted_float64_correct():
-    """Deterministic sharp, large-scale histogram: float32 cancellation corrupts
-    CRPS (clamped to ~0) while float64 yields the correct large value; the
-    shipped (decorated) function matches float64."""
+def test_crps_float32_kernel_no_longer_cancels():
+    """Deterministic sharp, large-scale histogram: the cancellation arguments are
+    built from exact bin widths, so even the float32 kernel no longer collapses
+    CRPS to ~0.  Its residual error is float32 rounding of the *inputs* (edges at
+    1e7 have spacing 1, about one bin width), not catastrophic arithmetic
+    cancellation.  The shipped (decorated) function matches float64."""
     edges, mids, widths, probas = _uniform_histogram(scale=1.0e7, span=200.0, K=256)
     y = 1.0e7  # target at the centre
 
     crps_f32 = _crps(_energy_kernel(torch.float32), edges, probas, y)
     crps_f64 = _crps(_energy_kernel(torch.float64), edges, probas, y)
 
-    # float64 is correct and well away from zero (~16.7); float32 is badly wrong.
     assert crps_f64 > 1.0
-    assert crps_f32 < 0.5 * crps_f64
-    assert (crps_f64 - crps_f32) > 1.0
+    assert crps_f32 > 0.0
+    assert crps_f32 == pytest.approx(crps_f64, rel=5e-2)
 
     # Production path takes float32 inputs but must compute in float64.
     crps_prod = compute_energy_score_histogram_corrected(
@@ -102,20 +103,19 @@ def test_crps_float32_corrupted_float64_correct():
         betas=[1.0],
     )["energy_score_beta_1.0"]
     assert crps_prod >= 0.0
-    # Matches the float64 value (small residual is float32 *input* quantization,
-    # not the catastrophic arithmetic cancellation the float32 kernel suffers).
+    # Matches the float64 value (small residual is float32 *input* quantization).
     assert crps_prod == pytest.approx(crps_f64, rel=1e-3)
 
 
 def test_crps_random_sharp_histograms_float32_vs_float64():
     """Over many random sharp, large-scale histograms: float64 always honours
-    CRPS >= 0, and float32 diverges from it in a large fraction of cases — the
-    datatype demonstrably changes the output."""
+    CRPS >= 0 and the float32 kernel never collapses (c32 < c64 / 2) or goes
+    negative; its typical error is float32 input rounding only."""
     rng = np.random.default_rng(12345)
     k32, k64 = _energy_kernel(torch.float32), _energy_kernel(torch.float64)
     n_total = 200
-    n_diverge = 0
-    max_diff = 0.0
+    n_collapsed = 0
+    rel_errs = []
     for _ in range(n_total):
         K = int(rng.integers(600, 1001))
         scale = float(10.0 ** rng.uniform(4.0, 7.0))
@@ -127,14 +127,12 @@ def test_crps_random_sharp_histograms_float32_vs_float64():
         c64 = _crps(k64, edges, probas, y)
 
         assert c64 >= 0.0, f"float64 CRPS went negative: {c64}"
-        diff = abs(c32 - c64)
-        max_diff = max(max_diff, diff)
-        if diff > 0.5:
-            n_diverge += 1
+        assert c32 >= 0.0, f"float32 CRPS went negative: {c32}"
+        n_collapsed += c32 < 0.5 * c64
+        rel_errs.append(abs(c32 - c64) / c64)
 
-    # The float32 datatype problem is common and large, not a one-off.
-    assert n_diverge > n_total // 4
-    assert max_diff > 1.0
+    assert n_collapsed == 0
+    assert np.median(rel_errs) < 1e-2
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +158,7 @@ def _crps_by_definition(probas_row, edges, y, n_grid=2_000_001):
 
 def test_crps_float64_matches_independent_definition():
     """The float64 kernel equals an independent ground-truth CRPS (the ∫
-    definition), while the float32 kernel is far from it — proving float64 is the
-    correct one, not merely 'different'."""
+    definition); the float32 kernel stays within float32 input rounding of it."""
     rng = np.random.default_rng(0)
     scale, span, K = 1.0e7, 200.0, 400
     edges, mids, widths, _ = _uniform_histogram(scale, span, K)
@@ -176,10 +173,10 @@ def test_crps_float64_matches_independent_definition():
         c64 = _crps(k64, edges, p, y)
         c32 = _crps(k32, edges, p, y)
 
-        # float64 reproduces the ground truth; float32 is corrupted (clamped ~0).
+        # float64 reproduces the ground truth; float32 stays within input rounding.
         assert truth > 1.0
         assert c64 == pytest.approx(truth, rel=5e-3)
-        assert abs(c32 - truth) > 1.0
+        assert abs(c32 - truth) < 0.05 * truth
 
 
 # ---------------------------------------------------------------------------
@@ -256,10 +253,10 @@ def test_sharpness_and_dispersion_match_analytic_per_sample():
     )
     out = compute_scoring_rules(dist, np.full(n, scale))
 
-    # Closed-form per-sample std, then mean (sharpness) and population std (dispersion).
+    # Closed-form per-sample std; Tran et al. eq. (3) sharpness and eq. (4) C_v (N-1).
     std_i = spans * K / ((K - 1) * np.sqrt(12.0))
-    sharpness_ref = float(std_i.mean())
-    dispersion_ref = float(std_i.std(ddof=0))  # population std == torch std(unbiased=False)
+    sharpness_ref = float(np.sqrt(np.mean(std_i ** 2)))
+    dispersion_ref = float(std_i.std(ddof=1) / std_i.mean())
     assert dispersion_ref > 0.0
 
     # float64 pipeline matches the analytic values.
@@ -268,8 +265,7 @@ def test_sharpness_and_dispersion_match_analytic_per_sample():
 
     # float32 (E[X²]-E[X]² at this scale) is badly wrong for both.
     std_i_32 = np.array([_hist_std(probas[i], mids[i], np.float32) for i in range(n)])
-    assert abs(float(std_i_32.mean()) - sharpness_ref) > 0.5 * sharpness_ref
-    assert abs(float(std_i_32.std(ddof=0)) - dispersion_ref) > 0.5 * dispersion_ref
+    assert abs(float(np.sqrt(np.mean(std_i_32 ** 2))) - sharpness_ref) > 0.5 * sharpness_ref
 
 
 # ---------------------------------------------------------------------------
