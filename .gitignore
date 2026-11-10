@@ -14,3 +14,8 @@ output_multivariate/
 MONITOR_DONE
 AutogluonModels/
 catboost_info/
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/
