@@ -8,12 +8,10 @@ import numpy as np
 
 from .resampling_grid import (
     DistributionPredictionView,
-    interpolate_cdf_to_grid_with_equally_sized_bins,
     cdf_nodes_to_native_PMF_grid,
     quantiles_to_cdf_nodes,
     resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid,
-    samples_to_cdf_nodes,
-    with_tail_atoms,
+    samples_to_quantile_nodes,
 )
 
 
@@ -134,33 +132,32 @@ class DistributionPrediction:
         return prediction
 
     @classmethod
-    def from_samples(cls, samples, n_bins=100, mean=None, *, train_range, **kw):
-        """From conditional draws ``samples`` (n_test, n_draws).
+    def from_samples(cls, samples, n_bins=None, mean=None, *, train_range, **kw):
+        """From conditional draws ``samples`` (n_test, n_draws), via the quantile route.
 
-        Each row's empirical CDF (strictly increasing, de-tied) is the lossless
-        intermediate: the native PMF grid bins it onto ``n_bins`` uniform bins (a
-        bounded grid -- the native energy score is O(n_bins^2)) plus a zero-width
-        atom at the min / max draw holding the ``1/2n`` Hazen tail mass, so the
-        native CDF keeps the eCDF levels exactly.  The resampled view interpolates the
-        SAME eCDF nodes.  No histogram round-trip.
+        NATIVE view: the Hazen eCDF -- sorted draws at levels ``(k - 0.5) / N`` --
+        as quantile nodes, so CRPS/PIT score the draws themselves (ties stay atoms,
+        ``1/2N`` tail atoms at the extreme draws).  ``n_bins`` optionally caps the
+        node count with equal-mass Hazen quantiles; ``None`` keeps every draw.
+
+        DENSITY view: an eCDF has no density, and interpolating through every draw
+        is the inconsistent 1-spacing estimator.  It reads ``K = ceil(sqrt(N))``
+        equal-mass Hazen quantiles from the min draw (level ``1/2N``) to the max draw
+        (``1 - 1/2N``): the m-spacing estimator with ``m ~ sqrt(N)`` (Square-root choice),
+        consistent as ``N`` grows.  The ``1/2N`` tails become uniform slabs.
         """
         samples = np.atleast_2d(np.asarray(samples, dtype=np.float64))
-        n_bins = max(int(n_bins), 1)
-        # Per-row eCDF nodes have different lengths, so keep them as a list and
-        # bin each to the shared native bin count.
-        node_rows = [samples_to_cdf_nodes(row) for row in samples]
-        edge_rows, proba_rows = [], []
-        for x, c in node_rows:
-            e, p = interpolate_cdf_to_grid_with_equally_sized_bins(x, c, n_bins)
-            # The binning normalizes the interior to 1; restore its true mass
-            # c_last - c_0 before the tail atoms take the rest.
-            e, p = with_tail_atoms(e, p * (c[:, -1:] - c[:, :1]), c)
-            edge_rows.append(e[0])
-            proba_rows.append(p[0])
-        edges, probas = np.stack(edge_rows), np.stack(proba_rows)
+        n_draws = samples.shape[1]
+        n_native = n_draws if n_bins is None else max(int(n_bins), 1)
+        native_nodes = quantiles_to_cdf_nodes(*samples_to_quantile_nodes(samples, n_native))
+        edges, probas = cdf_nodes_to_native_PMF_grid(*native_nodes)
+        density_levels = np.linspace(0.5 / n_draws, 1.0 - 0.5 / n_draws,
+                                     int(np.ceil(np.sqrt(n_draws))) + 1)
+        density_nodes = quantiles_to_cdf_nodes(
+            np.quantile(samples, density_levels, axis=1, method="hazen").T, density_levels)
         out_mean = samples.mean(axis=1) if mean is None else np.asarray(mean, float).reshape(-1)
         prediction = cls._from_native(edges, probas, out_mean, train_range,
-                                      cdf_nodes=node_rows, is_sample_based=True, **kw)
+                                      cdf_nodes=density_nodes, is_sample_based=True, **kw)
         prediction._median = np.median(samples, axis=1)
         return prediction
 
@@ -242,7 +239,8 @@ class DistributionPrediction:
             if self.is_grid_native:
                 edges, probas = self.bin_edges, self.probas
             elif self.cdf_nodes is not None:
-                edges, probas = self._resample_stored_nodes(y_lo, y_hi, n)
+                edges, probas = resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(
+                    self.cdf_nodes[0], self.cdf_nodes[1], y_lo, y_hi, n)
             else:
                 x, c = _histogram_to_cdf_nodes(self.bin_edges, self.probas)
                 edges, probas = resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(x, c, y_lo, y_hi, n)
@@ -253,23 +251,6 @@ class DistributionPrediction:
                 is_sample_based=self.is_sample_based, is_grid_native=self.is_grid_native,
             )
         return self._resampled
-
-    def _resample_stored_nodes(self, y_lo, y_hi, n):
-        """Resample the stored CDF nodes onto the grow-only grid.
-
-        Quantile nodes share one 2-D array (a tuple); sample nodes are a per-row
-        list of ragged eCDFs, resampled row by row (each onto the shared count).
-        """
-        nodes = self.cdf_nodes
-        if isinstance(nodes, tuple):                        # shared 2-D nodes
-            return resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(nodes[0], nodes[1], y_lo, y_hi, n)
-        edges = np.empty((len(nodes), n + 1), dtype=np.float64)
-        probas = np.empty((len(nodes), n), dtype=np.float64)
-        for i, (x, c) in enumerate(nodes):
-            e, p = resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid(x, c, y_lo, y_hi, n)
-            edges[i] = e if np.ndim(e) == 1 else e[0]
-            probas[i] = p[0]
-        return edges, probas
 
 
 def _histogram_to_cdf_nodes(bin_edges, probas):

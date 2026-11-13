@@ -30,8 +30,8 @@ test:
   CDF (Gneiting & Raftery 2007 interval score).
 * wcrps_{left,right,center} = the Gneiting-Ranjan quantile-weighted pinball
   integral, recomputed here from the discrete quantile function.
-* PIT of a target ON an atom uses the mid-CDF convention (Czado 2009):
-  ``F(c_j-) + p_j / 2``.
+* PIT of a target ON an atom is the randomized PIT (Czado et al. 2009):
+  ``F(c_j-) + V * p_j`` with ``V ~ Uniform(0, 1)`` from ``PIT_RANDOMIZATION_SEED``.
 
 Every reference is a plain numpy double sum over the atoms; it shares no code
 with metrics.py, so agreement is a genuine cross-check that the native PMF grid's
@@ -46,6 +46,7 @@ import pytest
 from scoringbench.univariate.metrics import (
     CRTS_ALPHAS,
     ENERGY_BETAS,
+    PIT_RANDOMIZATION_SEED,
     compute_scoring_rules,
 )
 from scoringbench.univariate.wrappers import DistributionPrediction
@@ -163,10 +164,11 @@ def _wcrps_ref(centres, masses, y, weight):
 
 
 def _pit_ref(centres, masses, y):
-    """Exact mid-PIT: mass strictly below y plus half the mass at y."""
+    """Randomized PIT of one target: mass strictly below y plus V times the mass at y."""
     centres = np.asarray(centres)
     masses = np.asarray(masses)
-    return float(masses[centres < y].sum() + 0.5 * masses[centres == y].sum())
+    v = np.random.default_rng(PIT_RANDOMIZATION_SEED).random(1)[0]
+    return float(masses[centres < y].sum() + v * masses[centres == y].sum())
 
 
 # ---------------------------------------------------------------------------
@@ -244,12 +246,12 @@ def test_wcrps_on_atoms_matches_pinball_reference(weight, y):
 
 
 # ---------------------------------------------------------------------------
-# PIT (mid-CDF convention for a target ON an atom)
+# PIT (randomized PIT for a target ON an atom)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("y", [-2.0, 0.5, 3.0])
-def test_pit_on_atom_uses_mid_cdf_convention(y):
-    """Every atom, including both support boundaries, uses the exact mid-CDF."""
+def test_pit_on_atom_uses_randomized_pit(y):
+    """Every atom, including both support boundaries, uses the seeded randomized PIT."""
     import torch
 
     from scoringbench.univariate.metrics import compute_pit_ks
@@ -266,7 +268,7 @@ def test_pit_on_atom_uses_mid_cdf_convention(y):
 
     # Recover the single PIT value by monkey-checking through kstest inversion is
     # brittle; instead read it from the code's own frac logic by asserting the
-    # returned KS stat equals max(pit, 1-pit) for the mid-CDF pit.
+    # returned KS stat equals max(pit, 1-pit) for the randomized pit.
     out = compute_pit_ks(probas_t, cdf, edges_t.unsqueeze(0), widths.unsqueeze(0),
                          y_bin, yv, shared=False, ns_idx=ns_idx)
     ref = _pit_ref(c, p, y)
@@ -274,7 +276,7 @@ def test_pit_on_atom_uses_mid_cdf_convention(y):
     assert np.isfinite(ks) and np.isfinite(out["pit_ks_pvalue"])
     # One PIT value u vs Uniform(0,1): D = sup|F_emp - u_id| = max(u, 1 - u).
     assert abs(ks - max(ref, 1.0 - ref)) <= 1e-9, (
-        f"y={y}: KS stat {ks} != max(pit,1-pit) for mid-CDF pit {ref}"
+        f"y={y}: KS stat {ks} != max(pit,1-pit) for randomized pit {ref}"
     )
 
 
@@ -288,12 +290,13 @@ def test_pit_never_nan_on_all_atoms_grid():
         assert np.isfinite(out["pit_ks_pvalue"])
 
 
-def test_pit_pipeline_on_mixed_atom_uses_mid_cdf():
+def test_pit_pipeline_on_mixed_atom_uses_randomized_pit():
     dist = DistributionPrediction.from_histogram(
         [-1.0, 0.0, 0.0, 1.0], [[0.25, 0.5, 0.25]], train_range=(-1.0, 1.0),
     )
     result = compute_scoring_rules(dist, np.array([0.0]), representation="native")
-    assert result["pit_ks_stat"] == pytest.approx(0.5, abs=1e-12)
+    pit = 0.25 + 0.5 * np.random.default_rng(PIT_RANDOMIZATION_SEED).random(1)[0]
+    assert result["pit_ks_stat"] == pytest.approx(max(pit, 1.0 - pit), abs=1e-12)
 
 
 # ---------------------------------------------------------------------------

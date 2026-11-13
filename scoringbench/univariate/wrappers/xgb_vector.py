@@ -101,7 +101,7 @@ class XGBVectorWrapper(ProbabilisticWrapper):
 
 
 
-    def __init__(self, n_bins: int = 50, num_boost_round: int = 100, xgb_params: dict | None = None):
+    def __init__(self, n_bins: int = 100, num_boost_round: int = 100, xgb_params: dict | None = None):
         self.n_bins = n_bins
         self.num_boost_round = num_boost_round
         self.xgb_params = xgb_params or {}

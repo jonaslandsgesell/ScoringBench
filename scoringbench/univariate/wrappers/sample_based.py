@@ -25,7 +25,7 @@ from .base import DistributionPrediction, ProbabilisticWrapper
 
 def samples_to_distribution(
     samples: np.ndarray,
-    n_bins: int = 100,
+    n_bins: int | None = None,
     y_range: tuple[float, float] | None = None,
     *,
     train_range: tuple[float, float],
@@ -34,15 +34,14 @@ def samples_to_distribution(
 
     Thin adapter over :meth:`DistributionPrediction.from_samples`: it only
     replaces non-finite draws with a well-defined fallback, then hands the clean
-    draws to the constructor, which reads each row's empirical CDF and bins it
-    onto ``n_bins`` uniform native bins.
+    draws to the constructor, which reads them as Hazen quantiles.
 
     Parameters
     ----------
     samples : (n_test, n_draws) array
         Conditional samples of the target, one row per test instance.
-    n_bins : int
-        Number of equally wide native bins per sample (default 100).
+    n_bins : int, optional
+        Cap on native equal-mass nodes; ``None`` (default) keeps every draw.
     y_range : tuple[float, float], optional
         Fallback range for sanitizing non-finite samples.
     train_range : (y_lo, y_hi), required
@@ -89,15 +88,15 @@ class SampleBasedWrapper(ProbabilisticWrapper):
     MAX_SAMPLE_SECONDS : float
         Hard wall-clock cap on sampling (default 120 s). Once exceeded, the PMF
         is built from whatever draws were collected so far.
-    N_BINS : int
-        Number of equally *wide* native bins derived from the draws via
-        :func:`samples_to_distribution`.
+    N_BINS : int or None
+        Cap on native equal-mass nodes passed to
+        :func:`samples_to_distribution`; ``None`` keeps every draw.
     """
 
     N_SAMPLES: int = 300
     SAMPLE_CHUNK: int = 100
     MAX_SAMPLE_SECONDS: float = 120.0
-    N_BINS: int = 100
+    N_BINS: int | None = None
 
     def _draw_samples(self, X, n_samples: int) -> np.ndarray:
         """Return an ``(n_test, n_samples)`` array of conditional target draws."""

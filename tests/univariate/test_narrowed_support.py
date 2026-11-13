@@ -120,11 +120,15 @@ def make_narrow_support_histogram(y, bin_edges, support_fraction=0.5):
         if bin_center < narrow_lo or bin_center > narrow_hi:
             probas[:, j] = 0.0
     
-    # Renormalize to unit mass per sample
+    # Renormalize to unit mass per sample; a row whose target lies outside the
+    # narrow range is spread uniformly over it (a valid forecast missing y).
+    inside = (bin_centers >= narrow_lo) & (bin_centers <= narrow_hi)
     for i in range(len(y)):
         total = probas[i].sum()
         if total > 0:
             probas[i] /= total
+        else:
+            probas[i, inside] = 1.0 / inside.sum()
     
     return probas
 

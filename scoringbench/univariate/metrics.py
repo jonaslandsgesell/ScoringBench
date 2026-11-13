@@ -288,14 +288,17 @@ def compute_pseudospherical_scores(g_y: torch.Tensor, alphas: list,
                                    density_integral, eps: float) -> dict:
     """Good's (1971) pseudospherical score for histogram predictive densities.
 
-    Affinely-normalised form (Gneiting & Raftery 2007, eq. 12), for order α > 1:
+    Gneiting & Raftery (2007, Sec. 4) give ``PseudoS_α(f, y) = f(y)^{α-1} / ‖f‖_α^{α-1}``,
+    strictly proper relative to ``L_α = {f : ‖f‖_α = (∫ f^α)^{1/α} < ∞}``, α > 1.
+    We report the positive affine transform (propriety is preserved, and α → 1
+    recovers the log score):
 
         PseudoS_α(f, y) = 1/(α-1) · [ f(y)^{α-1} / (∫ f(t)^α dt)^{(α-1)/α} − 1 ].
 
     α = 2 is the classical spherical score; α → 1 degenerates to the
     (support-sensitive) log score, so α is restricted to > 1.  The score is
-    strictly proper (maximised at f = g by Hölder), scale-invariant, and
-    support-insensitive (the point term f(y)^{α-1} → 0 as f(y) → 0).  Propriety
+    scale-invariant and support-insensitive (the point term f(y)^{α-1} → 0 as
+    f(y) → 0, giving the finite value -1/(α-1)).  Propriety
     requires the SAME density f in both f(y) and ‖f‖_α, so ``g_y`` and
     ``density_integral`` must come from one density (see ``_density_terms``).
     Positively oriented, so we return ``-PseudoS_α`` to keep the module's

@@ -5,37 +5,40 @@ Every prediction reduces to ONE lossless intermediate: monotone CDF nodes
 From those nodes two grids are derived directly, with no round-trip through an
 intermediate histogram:
 
-* the NATIVE grid (:func:`cdf_nodes_to_native_PMF_grid` / :func:`interpolate_cdf_to_grid_with_equally_sized_bins`) --
-  scored by the grid-robust rules; atoms preserved (quantiles) or binned to a
-  bounded uniform grid (samples, whose eCDF can have as many nodes as draws and
-  would make the O(n_bins^2) native energy score explode), and
+* the NATIVE grid (:func:`cdf_nodes_to_native_PMF_grid`) -- the nodes used as
+  bin edges, atoms preserved; scored by the grid-robust rules, and
 * the RESAMPLED grid (:func:`resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid`) -- the same
   nodes linearly resampled onto ``num_equally_sized_bins`` uniform bins over the
   per-instance grow-only support; scored by the density rules.
 
-The three source builders (:func:`quantiles_to_cdf_nodes`,
-:func:`samples_to_cdf_nodes`) turn a wrapper's raw output into those nodes; a
+The source builders (:func:`quantiles_to_cdf_nodes`,
+:func:`samples_to_quantile_nodes`) turn a wrapper's raw output into those nodes; a
 grid-native model (TabPFN bar distribution) skips nodes entirely and its native
-PMF grid is kept verbatim for both views.
+PMF grid is kept verbatim for both views.  Samples are read as Hazen quantiles
+and then follow the quantile route.
 
 The raw nodes are used AS-IS: no ``C = 0/1`` anchoring and no invented tail.  A
 quantile grid reaches only ``[alpha_0, alpha_{K-1}]`` and an eCDF only
-``[1/2n, 1 - 1/2n]``.  On both NATIVE grids the residual tail mass is kept as
+``[1/2n, 1 - 1/2n]``.  On the NATIVE grid the residual tail mass is kept as
 zero-width atoms at the outermost nodes (:func:`with_tail_atoms`), so every
 reported level stays exact -- renormalizing instead would shift all interior
 levels and bias coverage/interval scores by ~``alpha_0 + 1 - alpha_{K-1}``.
-The RESAMPLED (density) grid needs positive widths, so it still folds the
-residual into its bins by the in-place normalize in
+The RESAMPLED (density) grid needs positive widths, so it spreads the same tail
+masses as uniform slabs between the outermost node and the support edge
+(:func:`_uniform_slab`); only a tail whose hull already reaches the support edge
+is folded into the interior by the normalize in
 :func:`_interpolate_cdf_to_grid_with_equally_sized_bins`.
 
 Public surface
 --------------
 ``DistributionPredictionView``
     The view on the probabilistic prediction (either native PMF grid for scoring rules for M1, M2 or resampled smoothed grid for L1,L2 scoring rules).
-``quantiles_to_cdf_nodes``, ``samples_to_cdf_nodes``
+``quantiles_to_cdf_nodes``, ``samples_to_quantile_nodes``
     Source -> monotone CDF nodes ``(cdf_support_point, cdf_levels)``.
-``cdf_nodes_to_native_PMF_grid``, ``interpolate_cdf_to_grid_with_equally_sized_bins``
-    CDF nodes -> native PMF grid (nodes-as-edges, or bounded uniform binning).
+``cdf_nodes_to_native_PMF_grid``
+    CDF nodes -> native PMF grid (nodes-as-edges).
+``interpolate_cdf_to_grid_with_equally_sized_bins``
+    CDF nodes -> equal-width bins over their own hull.
 ``resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid``
     CDF nodes -> the density-rule (resampled) grid.
 """
@@ -144,9 +147,19 @@ def _interpolate_cdf_to_grid_with_equally_sized_bins(x, c, lo, hi, n_bins):
         if node_row[0] == node_row[-1] == edges[i, 0]:
             cc[0] = c[i, 0]
         m = np.maximum(np.diff(cc), 0.0)
+        m += _uniform_slab(edges[i], edges[i, 0], node_row[0], c[i, 0])
+        m += _uniform_slab(edges[i], node_row[-1], edges[i, -1], 1.0 - c[i, -1])
         s = m.sum()
         probas[i] = m / s if s > 0.0 else 1.0 / n_bins
     return edges, probas
+
+
+def _uniform_slab(edges, a, b, mass):
+    """Bin masses of ``mass`` spread uniformly over ``[a, b]``; nothing if ``b <= a``."""
+    if not (b > a and mass > 0.0):
+        return 0.0
+    overlap = np.clip(np.minimum(edges[1:], b) - np.maximum(edges[:-1], a), 0.0, None)
+    return mass * overlap / (b - a)
 
 
 # ===========================================================================
@@ -170,26 +183,20 @@ def quantiles_to_cdf_nodes(q, alphas):
     return xx, cc
 
 
-def samples_to_cdf_nodes(row):
-    """Empirical CDF nodes of one row of draws; strictly increasing abscissae.
+def samples_to_quantile_nodes(samples, n_levels):
+    """Hazen quantiles of each row of draws at ``n_levels`` equal-mass levels.
 
-    The unique sorted draws become nodes with mid-rank (Hazen) CDF values
-    ``(cum - count/2) / n`` -- strictly in ``(0, 1)``, so the CDF is monotone and
-    (crucially) has NO tied abscissae, so binning it can never produce a
-    zero-width bin.  A single distinct value is a point mass; it is duplicated so
-    there are two abscissae to bin between.  The Hazen values are returned AS-IS
-    (``C`` never reaches ``0``/``1``); the ``1/2n`` tail beyond the extreme draws
-    becomes a zero-width atom at the min / max draw on the native grid
-    (:func:`with_tail_atoms`).
-
-    Returns ``(cdf_support_point, cdf_levels)`` -- each ``(1, u)`` for ``u`` distinct draws.
+    Levels are ``(k - 0.5) / K`` with ``K = min(n_levels, n_draws)``; at
+    ``K = n_draws`` the nodes are exactly the sorted draws (the Hazen eCDF), ties
+    included.  Returns ``(support (rows, K), levels (K,))`` for the quantile route.
     """
-    u, counts = np.unique(np.asarray(row, dtype=np.float64), return_counts=True)
-    if u.shape[0] == 1:
-        u = np.repeat(u, 2)
-        counts = np.array([1, 1])
-    c = (np.cumsum(counts) - 0.5 * counts) / counts.sum()
-    return u[None, :], c[None, :]
+    samples = np.atleast_2d(np.asarray(samples, dtype=np.float64))
+    k = max(1, min(int(n_levels), samples.shape[1]))
+    levels = (np.arange(k) + 0.5) / k
+    if k == samples.shape[1]:
+        # Exact draws: np.quantile would interpolate them with round-off.
+        return np.sort(samples, axis=1), levels
+    return np.quantile(samples, levels, axis=1, method="hazen").T, levels
 
 
 # ===========================================================================
@@ -251,12 +258,7 @@ def with_tail_atoms(edges, interior_probas, cdf_levels):
 def interpolate_cdf_to_grid_with_equally_sized_bins(cdf_support_point, cdf_levels, n_bins):
     """Bin CDF nodes onto ``n_bins`` uniform bins over their own hull.
 
-    The native PMF grid for sample-based wrappers: an eCDF can have as many nodes as
-    draws, and the native energy score is O(n_bins^2), so the nodes are binned to
-    a bounded uniform grid rather than used verbatim.  The nodes are strictly
-    increasing (:func:`samples_to_cdf_nodes`), so every bin has positive width.
-    The returned masses are normalized to 1 over the node hull; the native sample
-    path restores the Hazen tails as atoms with :func:`with_tail_atoms`.
+    Masses are the linear-CDF increments, normalized to 1 over the node hull.
 
     Returns ``(bin_edges, probas)`` -- edges ``(rows, n_bins + 1)``.
     """

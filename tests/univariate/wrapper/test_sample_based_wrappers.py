@@ -138,26 +138,15 @@ def test_samples_to_distribution_recovers_mean():
 
 
 # ---------------------------------------------------------------------------
-# eCDF -> uniform grid: explicit guarantee tests
+# Draws -> Hazen nodes: explicit guarantee tests
 #
-# The native PMF grid is the draws' own hull cut into ``n_bins`` EQUAL-WIDTH bins,
-# so every bin has width ``span / n_bins`` -- strictly positive whenever the
-# draws are not all identical.  The Hazen eCDF stops at ``count_min / 2n`` and
-# ``1 - count_max / 2n``; that unreported tail mass sits as one zero-width atom at
-# each end of the hull (at the min / max draw), so the interior bins carry exactly
-# the eCDF increments and every eCDF level is kept.  A row whose draws are ALL identical is a genuine
-# point mass: its hull collapses and the native PMF grid becomes a Dirac (zero-width
-# bins) rather than being widened by an invented, arbitrary pad.  That is the
-# correct native representation of an atom -- CRPS and the CDF-based rules score
-# a Dirac exactly -- and the density rules read ``.resampled`` (which always has
-# positive width from ``train_range``) instead of this grid.
+# The native PMF grid uses the sorted draws as quantile nodes at the Hazen levels
+# ``(k - 0.5) / n``: interior masses ``1 / n`` between consecutive draws, tied draws
+# as zero-width atoms, and ``1 / 2n`` tail atoms at the min / max draw.  An
+# outlying draw therefore no longer coarsens every other bin (the former
+# equal-width hull grid did).  Density rules read ``.resampled`` instead.
 #
-# The trade is that a bin may be empty (an atom's mass lands wholly in the one
-# bin containing it, leaving its neighbours dry).  That is fine: the mass is a
-# valid PMF summing to 1, and no density rule reads this grid directly.
-#
-# These tests exercise pathological *discrete / heavily tied* draws -- the case
-# that collapsed the old adaptive quantile grid -- across a range of n_bins.
+# These tests exercise pathological *discrete / heavily tied* draws.
 # ---------------------------------------------------------------------------
 
 # A gauntlet of adversarial sample rows (each row = draws for one test point).
@@ -171,111 +160,50 @@ _TIED_ROWS = [
 ]
 
 
-def _hazen_tail_masses(row):
-    """Expected tail atoms: ``count(min) / 2n`` and ``count(max) / 2n``."""
-    _, counts = np.unique(row, return_counts=True)
-    if counts.size == 1:                       # duplicated point mass: c = [1/4, 3/4]
-        return 0.25, 0.25
-    return counts[0] / (2 * counts.sum()), counts[-1] / (2 * counts.sum())
-
-
-@pytest.mark.parametrize("n_bins", [2, 10, 50, 100, 257])
 @pytest.mark.parametrize("row_idx", range(len(_TIED_ROWS)))
-def test_ecdf_grid_bins_positive_unless_the_draws_are_all_identical(row_idx, n_bins):
-    """Equal-width interior bins are strictly positive unless the draws coincide.
-
-    The native PMF grid is the draws' hull cut into ``n_bins`` equal bins, so widths
-    are positive whenever the hull is non-degenerate; the only zero-width bins are
-    the two Hazen tail atoms at the hull ends.  An all-identical row is a point
-    mass whose hull collapses; its native PMF grid is a Dirac (zero-width bins)
-    -- the correct atom representation, not an invented pad.
-    """
+def test_native_nodes_are_the_sorted_draws_with_hazen_tails(row_idx):
     row = _TIED_ROWS[row_idx][None, :]
-    dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
+    n = row.shape[1]
+    dist = samples_to_distribution(row, train_range=_train_range(row))
 
-    assert dist.bin_edges.shape == (1, n_bins + 3)
-    edges = dist.bin_edges[0]
+    edges, probas = dist.bin_edges[0], dist.probas[0]
+    np.testing.assert_array_equal(edges[1:-1], np.sort(row[0]))
     assert edges[0] == edges[1] == row.min()
     assert edges[-1] == edges[-2] == row.max()
-    widths = np.diff(edges[1:-1])
-    assert np.all(np.isfinite(widths))
-    assert np.all(widths >= 0.0)
-    if np.unique(row).size > 1:
-        assert np.all(widths > 0.0), (
-            f"zero-width bin for non-degenerate row {row_idx}, n_bins={n_bins}: "
-            f"min width {widths.min():.3e}"
-        )
-    else:  # all draws identical -> Dirac: the whole hull collapses to a point.
-        assert np.all(widths == 0.0), (
-            f"all-identical row {row_idx} should collapse to a Dirac"
-        )
+    np.testing.assert_allclose(probas[[0, -1]], 0.5 / n, rtol=1e-12)
+    np.testing.assert_allclose(probas[1:-1], 1.0 / n, rtol=1e-12)
+    if np.unique(row).size == 1:
+        assert np.all(np.diff(edges) == 0.0), "all-identical draws must stay a Dirac"
 
 
-@pytest.mark.parametrize("n_bins", [2, 10, 50, 100, 257])
 @pytest.mark.parametrize("row_idx", range(len(_TIED_ROWS)))
-def test_ecdf_grid_is_regular_and_holds_all_the_mass(row_idx, n_bins):
-    """Interior widths are uniform and the masses are a valid PMF summing to 1.
-
-    Empty bins are *allowed* here (that is the equal-width trade), so the
-    guarantee is non-negativity plus exact total mass, not positivity.  The
-    Hazen tails are the two outer atoms with exactly ``count / 2n`` each, and the
-    interior carries the rest, so no mass leaks off the hull however heavily the
-    draws tie.  A fully-degenerate (all identical) row collapses to a Dirac:
-    every width is exactly 0, which is still uniform (target span/n = 0).
-    """
+def test_native_cdf_hits_the_hazen_level_of_every_distinct_draw(row_idx):
+    """Each distinct draw carries its whole empirical mass ``count / n`` up to
+    the Hazen half-mass convention, so no mass leaks away from the draws."""
     row = _TIED_ROWS[row_idx][None, :]
+    n = row.shape[1]
+    dist = samples_to_distribution(row, train_range=_train_range(row))
+    edges, cdf = dist.bin_edges[0], np.r_[0.0, np.cumsum(dist.probas[0])]
+    values, counts = np.unique(row, return_counts=True)
+    for value, cum in zip(values, np.cumsum(counts)):
+        last = np.flatnonzero(edges == value)[-1]
+        expected = 1.0 if value == values[-1] else (cum - 0.5) / n
+        assert cdf[last] == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("n_bins", [2, 10, 50])
+def test_n_bins_caps_native_nodes_with_equal_mass_quantiles(n_bins):
+    row = np.random.default_rng(5).standard_cauchy((1, 300))
     dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
-
-    assert dist.probas.shape == (1, n_bins + 2)
-    assert np.all(dist.probas >= 0.0), f"negative mass: {dist.probas.min():.3e}"
-    np.testing.assert_allclose(dist.probas.sum(axis=1), 1.0, rtol=1e-12, atol=1e-12)
-    lower, upper = _hazen_tail_masses(row)
-    np.testing.assert_allclose(dist.probas[0, [0, -1]], [lower, upper], rtol=1e-12, atol=1e-15)
-
-    # Regularity is checked in *absolute* terms against the resolution of the
-    # edge coordinates, not as a relative spread of the widths.  For a
-    # degenerate row the hull collapses (target width 0) and every edge sits at
-    # the single draw value, so the deviation is 0 to within a linspace ULP.
-    edges = dist.bin_edges[:, 1:-1]
-    widths = np.diff(edges, axis=1)
-    target = (edges[:, -1] - edges[:, 0]) / n_bins
-    tol = 4.0 * np.spacing(np.abs(edges).max())
-    dev = np.abs(widths - target[:, None]).max()
-    assert dev <= tol, (
-        f"grid is not regular for row {row_idx}, n_bins={n_bins}: "
-        f"max |w - span/n| = {dev:.3e} > {tol:.3e}"
-    )
-
-
-@pytest.mark.parametrize("n_bins", [10, 100])
-@pytest.mark.parametrize("row_idx", range(len(_TIED_ROWS)))
-def test_ecdf_grid_mass_lands_where_the_draws_are(row_idx, n_bins):
-    """An atom's mass ends up in the bin that contains it.
-
-    Equal width means the shape of the draws is carried by the *masses*, so the
-    representation is only faithful if mass tracks the draws.  For every distinct
-    draw value, the bin bracketing it must carry mass -- and the bins carrying
-    mass must together account for essentially all of it.
-    """
-    row = _TIED_ROWS[row_idx][None, :]
-    dist = samples_to_distribution(row, n_bins=n_bins, train_range=_train_range(row))
-    # The uniform interior grid (the outer two bins are the Hazen tail atoms).
-    edges, probas = dist.bin_edges[0, 1:-1], dist.probas[0, 1:-1]
-
-    # Interior draws (the outermost ones sit on a bin boundary by construction).
-    for value in np.unique(row):
-        k = int(np.clip(np.searchsorted(edges, value, side="right") - 1, 0, n_bins - 1))
-        lo = max(k - 1, 0)
-        hi = min(k + 2, n_bins)
-        assert probas[lo:hi].sum() > 0.0, (
-            f"row {row_idx}: no mass near draw {value} (bin {k})"
-        )
+    assert dist.probas.shape == (1, n_bins + 1)
+    np.testing.assert_allclose(dist.probas[0, 1:-1], 1.0 / n_bins, rtol=1e-12)
+    np.testing.assert_allclose(dist.probas[0, [0, -1]], 0.5 / n_bins, rtol=1e-12)
 
 
 def test_ecdf_grid_metrics_finite_on_discrete_draws():
     """Every score (CRPS and the density-power-divergence rules alike) stays
-    finite on heavy ties, since the regular-grid PMF has strictly positive bin
-    widths (a zero-width or zero-mass bin would blow the density up)."""
+    finite on heavy ties: atoms are exact natively, and the density view reads
+    the positive-width resampled grid."""
     rng = np.random.default_rng(7)
     # 20 test points, 100 draws each, only ~5 unique values -> heavy ties.
     base = np.array([-3.0, -1.0, 0.0, 2.0, 4.0])
@@ -299,24 +227,18 @@ def test_ecdf_grid_metrics_finite_on_discrete_draws():
 
 
 def test_ecdf_grid_edges_bracket_support():
-    """Edges span the observed support; only the two tail atoms have zero width."""
+    """Edges span the observed support with ``1/2n`` tail atoms at the extremes."""
     row = np.array([[2.0, 2.0, 2.0, 5.0, 9.0, 9.0]])
     dist = samples_to_distribution(row, n_bins=8, train_range=_train_range(row))
     edges = dist.bin_edges[0]
     assert edges[0] == edges[1] == 2.0
     assert edges[-1] == edges[-2] == 9.0
-    assert np.all(np.diff(edges[1:-1]) > 0.0)
-    # Hazen tails: 3 draws at 2.0 -> 3/12, 2 draws at 9.0 -> 2/12.
-    np.testing.assert_allclose(dist.probas[0, [0, -1]], [3 / 12, 2 / 12], rtol=1e-12)
+    np.testing.assert_allclose(dist.probas[0, [0, -1]], [1 / 12, 1 / 12], rtol=1e-12)
 
 
 def test_ecdf_grid_energy_score_nonzero_on_tied_draws():
-    """Energy score stays finite and positive on discrete draws with tied values.
-
-    Tied values would collapse an adaptive quantile grid to zero-width interior
-    bins.  Resampling the eCDF onto a *regular* grid removes the degeneracy at
-    the source -- there is no zero width to repair -- so the energy score, which
-    reads bin midpoints and widths, stays well defined."""
+    """Energy score stays finite and positive on discrete draws with tied values,
+    which the native grid keeps as zero-width atoms."""
     # 5 unique values, tied so an adaptive quantile grid collapses interior bins.
     base = np.array([0.0, 0.0, 0.0, 10.0, 10.0])
     samples = np.tile(base, (8, 20))            # (8, 100), heavy ties

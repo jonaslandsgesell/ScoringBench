@@ -175,13 +175,13 @@ def _hazen_draws(mu, n_draws):
 
 
 def test_sample_grid_keeps_hazen_tails_as_atoms():
-    n_draws, n_bins = 100, 50
+    n_draws = 100
     draws = _hazen_draws([0.0, 4.0], n_draws)
-    dist = DistributionPrediction.from_samples(draws, n_bins=n_bins, train_range=(-5.0, 9.0))
+    dist = DistributionPrediction.from_samples(draws, train_range=(-5.0, 9.0))
     edges, probas = dist.native.bin_edges, dist.native.probas
 
-    assert probas.shape == (2, n_bins + 2)
-    assert edges.shape == (2, n_bins + 3)
+    assert probas.shape == (2, n_draws + 1)
+    assert edges.shape == (2, n_draws + 2)
     np.testing.assert_allclose(edges[:, 0], edges[:, 1])
     np.testing.assert_allclose(edges[:, -1], edges[:, -2])
     np.testing.assert_allclose(edges[:, 0], draws[:, 0])
