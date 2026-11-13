@@ -18,8 +18,10 @@ compute_scoring_rules(dist, y_true) -> dict
     energy scores, CRTS, DPD, wCRPS_left, wCRPS_right, wCRPS_center.
     dist is a DistributionPrediction from scoringbench.wrappers.
     bin_edges / bin_midpoints may be 1-D (shared grid) or 2-D (per-sample).
-    The grid is padded with zero-mass bins at evaluation time so that every
-    target y is interior to the integration domain.
+    CDF/distance scores use zero-mass padding for out-of-support targets.
+    Density point values and density-power integrals use dist.resampled:
+    after interpolation for quantile/sample forecasts (native bins for
+    grid-native heads), before any zero-mass padding.
     Uses PyTorch on GPU when available; falls back to CPU otherwise.
 
 pad_to_common_grid(probas, bin_edges, bin_mids, y, shared) -> (probas, bin_edges, bin_mids, shared)
@@ -565,18 +567,25 @@ def _score_one_view(view, y_true: np.ndarray, compute_density: bool,
     y          = torch.as_tensor(np.array(y_true, dtype=float), device=_device)  # np.array copies -> writable tensor
     shared     = bin_edges.ndim == 1
 
+    density_result = {}
+    if compute_density:
+        density_result = _compute_scoring_rules_torch(
+            probas, bin_edges, bin_mids, y, shared,
+            compute_density=True, compute_grid_robust=False,
+            is_grid_native=view.is_grid_native,
+        )
+    if not compute_grid_robust:
+        return density_result
+
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "  view: n_samples=%d  n_bins=%d  shared=%s  density=%s  grid_robust=%s",
             probas.shape[0], probas.shape[1], shared, compute_density, compute_grid_robust,
         )
 
-    # Extend each sample's grid to cover target y with zero-mass bins.
-    # This must happen *before* _compute_scoring_rules_torch so that every
-    # scoring rule (DPD, CRTS, CRPS, energy score, interval scores, PIT)
-    # sees the correct CDF values in the region beyond the model's reported
-    # support.  The padding is model-independent: it depends only on y_true,
-    # which is not known at train time.
+    # Extend the integration domain with zero-mass bins. Density point values
+    # were evaluated above on the unpadded input view (normally dist.resampled,
+    # already interpolated), so another observation's padding cannot change them.
     # gap_left/gap_right are ignored: CRTS derives the tail contribution from
     # the padded catch-all bins directly (no separate analytic correction).
     probas, bin_edges, bin_mids, shared, _gap_left, _gap_right = pad_to_common_grid(
@@ -585,10 +594,11 @@ def _score_one_view(view, y_true: np.ndarray, compute_density: bool,
 
     t0 = time.perf_counter()
     result = _compute_scoring_rules_torch(
-        probas, bin_edges, bin_mids, y, shared, compute_density=compute_density,
+        probas, bin_edges, bin_mids, y, shared, compute_density=False,
         compute_grid_robust=compute_grid_robust,
         is_grid_native=view.is_grid_native,
     )
+    result.update(density_result)
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("  torch backend      %.4fs (device=%s)",
                      time.perf_counter() - t0, _device)
@@ -610,10 +620,11 @@ def compute_scoring_rules(
       coverage_*, wcrps_*) and the BOUNDED diagnostics read only the CDF / exact
       slab geometry, so they are scored on the model's NATIVE grid where atoms
       are preserved and the model's sharpness is not blurred away.
-    * DENSITY_BASED rules (cde_loss, dpd_beta_*, pseudospherical_alpha_*) read
-      f = p/w, which is unbounded as w -> 0.  They are only comparable once every
-      model is on ONE shared grid, so they are scored on the REGRIDDED (common)
-      view.
+        * DENSITY_BASED rules (cde_loss, dpd_beta_*, pseudospherical_alpha_*) read
+            f = p/w from ``dist.resampled``. Quantile/sample forecasts use an
+            equal-count, per-instance grow-only grid; grid-native histograms retain
+            their own borders. Neither widths nor supports are shared across models.
+            This is a representation policy, not a claim of representation invariance.
 
     Parameters
     ----------
@@ -624,7 +635,7 @@ def compute_scoring_rules(
         * ``"native"``: score ``dist.native`` only; DENSITY_BASED_KEYS are NOT
           returned (they are undefined on an atom-bearing grid).
         * ``"resampled"``: score ``dist.resampled`` only; ALL keys returned on
-          the common grid (used to prove the two paths agree for grid-robust
+          the density view (used to compare the two paths for grid-robust
           rules when the input is already regular).
 
     score_density :
@@ -641,9 +652,13 @@ def compute_scoring_rules(
 
     Notes
     -----
-    Before scoring, each view's grid is extended with zero-mass bins (via
-    ``pad_to_common_grid``) so that every target y is interior to the integration
-    domain and a model cannot improve its score by reporting a narrower support.
+    CDF/distance scores extend their domain with zero-mass bins via
+    ``pad_to_common_grid``. Both terms of each density rule use the unpadded
+    ``dist.resampled`` view: after interpolation for quantile/sample forecasts,
+    or on native bins for grid-native heads. Point density is zero outside
+    that view's support; forecasts without continuous mass are rejected.
+    ``representation='native'`` or ``score_density=False`` still permits
+    scoring an all-atom forecast with the native rules.
     """
     if representation not in ("auto", "native", "resampled"):
         raise ValueError(
@@ -1379,11 +1394,17 @@ def unified_bin_density(probas, bin_widths, shared, eps, is_grid_native=False):
     # (restricted to the non-atom bins when atoms were dropped above).
     # Reading it straight from ``probas`` (rather than reconstructing
     # f_bins * w_eff) is the exact mass and avoids re-deriving it from the
-    # density.  Every surviving width is > eps, so the only clamp left is on Z,
-    # which guards against an all-zero PMF row (or an all-atom forecast).
+    # density. Reject a missing continuous component rather than scoring a
+    # non-normalized zero density; any positive continuous mass is normalized.
     masked = probas if keep is None else probas * keep
     Z = masked.sum(dim=-1, keepdim=True)
-    return f_bins / Z.clamp(min=eps), w_eff
+    if bool((Z <= 0.0).any()):
+        raise ValueError(
+            "Density scoring requires positive continuous probability mass; "
+            "an all-atom forecast has no continuous density. Use native "
+            "distribution scores with score_density=False."
+        )
+    return f_bins / Z, w_eff
 
 
 def _density_terms(probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps,
@@ -1401,6 +1422,13 @@ def _density_terms(probas, cdf, bin_edges, bin_widths, bw, y, y_bin, shared, eps
     f_bins, w_eff = unified_bin_density(probas, bin_widths, shared, eps,
                                         is_grid_native=is_grid_native)
     g_y = f_bins.gather(1, y_bin.unsqueeze(1)).squeeze(1)
+    edges = bin_edges[None, :] if shared else bin_edges
+    outside = (y < edges[:, 0]) | (y > edges[:, -1])
+    if is_grid_native:
+        at_atom = ((w_eff <= eps) & (probas > 0.0)
+                   & (edges[:, :-1] == y[:, None])).any(dim=-1)
+        outside = outside | at_atom
+    g_y = torch.where(outside, torch.zeros_like(g_y), g_y)
 
     def density_integral(power):
         return (f_bins.pow(power) * w_eff).sum(dim=-1)
@@ -1467,7 +1495,7 @@ def compute_cde_loss(probas, bin_widths, g_y, bw, shared, density_integral=None)
         term1 = (probas.pow(2) / bw).sum(dim=-1)                 # ∫ g² dz
     else:
         term1 = density_integral(2.0)                            # ∫ g² dz
-    term2 = 2.0 * g_y.clamp(min=eps)                         # 2·g(y)
+    term2 = 2.0 * g_y.clamp(min=0.0)                         # 2·g(y)
     cde_loss = (term1 - term2).mean().item()
     return cde_loss
 

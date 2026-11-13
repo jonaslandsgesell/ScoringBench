@@ -9,6 +9,7 @@ import torch
 from scipy import stats
 
 from scoringbench.univariate.metrics import (
+    PIT_RANDOMIZATION_SEED,
     _interval,
     compute_pit_ks,
     compute_quantile_wcrps,
@@ -241,6 +242,12 @@ def test_pit_uses_both_cdf_limits(shared, edges, masses, targets, expected_pit, 
         targets = targets + shifts
         y_bin = torch.searchsorted(edges[:, 1:].contiguous(), targets[:, None]).squeeze(1)
     y_bin = y_bin.clamp(0, len(masses) - 1)
+    edge_rows = np.broadcast_to(edges.numpy(), (n_samples, len(masses) + 1))
+    atom_at_target = ((np.diff(edge_rows, axis=-1) == 0.0)
+                      & (edge_rows[:, :-1] == targets.numpy()[:, None]))
+    jump_mass = (atom_at_target * np.asarray(masses)[None, :]).sum(axis=-1)
+    randomization = np.random.default_rng(PIT_RANDOMIZATION_SEED).random(n_samples)
+    expected_pit = np.asarray(expected_pit) + (randomization - 0.5) * jump_mass
     expected_ks = stats.kstest(expected_pit, "uniform")
     kstest = Mock(wraps=stats.kstest)
     monkeypatch.setattr("scoringbench.univariate.metrics.stats.kstest", kstest)

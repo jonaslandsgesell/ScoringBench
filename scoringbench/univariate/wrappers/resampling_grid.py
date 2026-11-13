@@ -10,7 +10,7 @@ intermediate histogram:
   bounded uniform grid (samples, whose eCDF can have as many nodes as draws and
   would make the O(n_bins^2) native energy score explode), and
 * the RESAMPLED grid (:func:`resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid`) -- the same
-  nodes PCHIP-resampled onto ``num_equally_sized_bins`` uniform bins over the
+  nodes linearly resampled onto ``num_equally_sized_bins`` uniform bins over the
   per-instance grow-only support; scored by the density rules.
 
 The three source builders (:func:`quantiles_to_cdf_nodes`,
@@ -45,7 +45,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.interpolate import PchipInterpolator
 
 
 # ===========================================================================
@@ -53,57 +52,25 @@ from scipy.interpolate import PchipInterpolator
 # ===========================================================================
 
 def _evaluate_monotone_cdf(x_row, c_row, edges_row):
-    """Evaluate a monotone CDF at ``edges_row`` with a shape-preserving cubic.
+    """Evaluate a monotone CDF at ``edges_row`` by linear interpolation.
 
     ``x_row`` is non-decreasing abscissae and ``c_row`` the matching
     non-decreasing CDF values (both 1-D); ``edges_row`` are the query points.
 
-    Why PCHIP rather than linear interpolation
-    ------------------------------------------
-    A linear CDF makes the implied density piecewise *constant*, so a sharp mode
-    is flattened onto the bin holding it -- the density at the target is then
-    wrong even though the per-bin mass is right.  A monotone cubic (PCHIP) fits a
-    C1 curve through the same nodes without overshooting, so ``diff(C)`` follows
-    the true density's shape between the predicted levels while staying
-    non-negative.  Masses are the exact CDF increment at the bin edges,
-    ``C(e_{k+1}) - C(e_k)``, not a sampled derivative.
-    ``tests/univariate/test_interpolation_scheme_selection.py`` compares this
-    against linear and derivative-sampling variants and selects it.
+    Linear interpolation of the CDF nodes (Izbicki et al. 2026,
+    https://arxiv.org/pdf/2603.26611) gives a
+    piecewise-constant density ``dalpha/dq`` between nodes. Masses are the exact CDF
+    increments at the bin edges, ``C(e_{k+1}) - C(e_k)``.
 
     Ties (atoms) are collapsed, then deliberately smoothed
     ------------------------------------------------------
-    PCHIP needs *strictly* increasing abscissae, but a CDF read off quantiles /
-    histogram edges may repeat an ``x`` where an atom lives.  Each run of tied
-    abscissae is collapsed to its single coordinate carrying the run's *last* CDF
-    value -- ``np.interp``'s "last matching node wins" rule -- so the cumulative
-    mass AT the atom is exact, and a target on the atom is scored against the bin
-    ``searchsorted(edges[1:], y)`` credits it to.
-
-    The jump does NOT survive as a jump.  PCHIP then interpolates smoothly through
-    the collapsed nodes, spreading the atom's mass over the interval below it: at
-    200 bins only ~0.5% of it reaches the single bin holding the atom.  That is
-    the point -- this resampler feeds the resampled view, whose job is to
-    neutralise atoms so the width-dividing density rules see a finite ``p/w``
-    (see the container comment in ``base.py``).  Predictions that must keep their
-    jumps are scored on the native view, which is never resampled.
-
-    With two or fewer distinct abscissae there is no cubic to fit and the
-    evaluation falls back to ``np.interp``.
-
-    Extreme coordinates
-    -------------------
-    PCHIP evaluates its cubic in the local variable ``t = x - x_i``, so ``t**3``
-    overflows to ``inf`` for spacings past ``~1e103`` and ``inf * 0.0 = nan``,
-    which the clip below silently turns into a flat PMF.  Rescaling ``x`` by a
-    power of two fixes it exactly -- the interpolant is equivariant in ``x`` and
-    ``np.ldexp`` only edits the exponent, so the result is bit-identical.
-
-    That normalises the overall magnitude but not the *ratio* of adjacent
-    spacings, and the node slopes ``dC / h_k`` still overflow when one gap
-    underflows against another (``[-1e-9, 0, 1e300]``).  No rescaling helps there,
-    so we fall back to a linear CDF: still monotone and mass-exact, forfeiting
-    only the density shape that
-    ``tests/univariate/test_interpolation_scheme_selection.py`` selects PCHIP for.
+    A CDF read off quantiles / histogram edges may repeat an ``x`` where an atom
+    lives.  Each run of tied abscissae is collapsed to its single coordinate
+    carrying the run's *last* CDF value -- ``np.interp``'s "last matching node
+    wins" rule -- so the cumulative mass AT the atom is exact.  The jump does NOT
+    survive as a jump: the atom's mass is spread linearly over the interval below
+    it, and the equal-width grid then caps the density at ``p/w``.  Predictions
+    that must keep their jumps are scored on the native view, never resampled.
     """
     # Collapse tied abscissae (atoms) to their single coordinate.  np.unique
     # returns the sorted unique abscissae; the scatter below maps each input node
@@ -129,35 +96,8 @@ def _evaluate_monotone_cdf(x_row, c_row, edges_row):
         # or above) so the mass lands entirely in the single bin whose right edge
         # first reaches the atom.
         return np.where(edges_row < xs[0], c_row[0], c_row[-1])
-    if xs.size < 3:
-        return np.interp(edges_row, xs, cs)
-
-    # Exponent-only rescaling, so the significands (and the cubic) are unchanged.
-    scale = np.max(np.abs(xs))
-    shift = np.frexp(scale)[1] if (np.isfinite(scale) and scale > 0.0) else 0
-    xs_s = np.ldexp(xs, -shift)
-    edges_s = np.ldexp(edges_row, -shift)
-
-    # Flat CDF beyond the hull: a cubic extrapolated far past the nodes swings to
-    # +-inf with the wrong sign, so clip the queries rather than the result.
-    edges_s = np.clip(edges_s, xs_s[0], xs_s[-1])
-
-    # The shift can round two adjacent abscissae together; PCHIP needs them strict.
-    if np.all(np.diff(xs_s) > 0.0):
-        try:
-            # Raise rather than let an inf/nan reach the clip as a plausible PMF.
-            with np.errstate(over="raise", invalid="raise", divide="raise"):
-                c = PchipInterpolator(xs_s, cs, extrapolate=False)(edges_s)
-            if not np.all(np.isfinite(c)):
-                raise FloatingPointError("non-finite PCHIP evaluation")
-        except (FloatingPointError, ValueError):
-            c = np.interp(edges_s, xs_s, cs)
-    else:
-        c = np.interp(edges_s, xs_s, cs)
-
-    # PCHIP is monotone on its nodes, but extrapolation past the ends can leave
-    # [0, 1]; clip so the differenced masses stay a valid PMF.
-    return np.clip(c, cs[0], cs[-1])
+    # np.interp is flat (C_first / C_last) beyond the hull.
+    return np.interp(edges_row, xs, cs)
 
 
 
@@ -182,7 +122,7 @@ def _interpolate_cdf_to_grid_with_equally_sized_bins(x, c, lo, hi, n_bins):
 
     The ONE binning primitive.  Both native paths that need a uniform grid (the
     sample histogram) and the resampled (grow-only) grid call it: each row's CDF
-    is evaluated at the uniform edges with the shape-preserving interpolant
+    is evaluated at the uniform edges with the linear interpolant
     (:func:`_evaluate_monotone_cdf`) and forward-differenced into a normalized
     PMF.  Because ``C`` is monotone the masses are the exact non-negative
     increments ``C(e_{k+1}) - C(e_k)``.

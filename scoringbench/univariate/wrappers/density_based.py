@@ -31,7 +31,7 @@ def grid_density_to_distribution(
     The prediction is flagged GRID-NATIVE, but note this is NOT a discretized
     head: these models are CONTINUOUS densities, and the grid is the wrapper's
     own evaluation choice (``n_grid``/``grid_pad``), not something the model
-    commits to.  The flag is set only to skip the PCHIP resample -- re-fitting an
+    commits to.  The flag is set only to skip the CDF resample -- re-fitting an
     interpolant to a density we can evaluate exactly would add error for nothing.
     So the resampled view keeps this grid, zero-mass-padded to the support.
     Because the grid is a ``linspace``, every bin width is strictly positive and

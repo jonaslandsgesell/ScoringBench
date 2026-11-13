@@ -7,9 +7,10 @@ through the public API (``output_type="full"``).
 
 ICL semantics: ``fit()`` just stores the labeled context rows; the frozen model
 runs in a single forward pass at ``predict``/``predict_distribution`` time.
-``predict_distribution()`` reads the model's quantile bank and maps consecutive
-quantiles to equi-probable bins (a piecewise-uniform PMF), exactly the
-representation ScoringBench's metrics consume.
+``predict_distribution()`` reads the model's quantile bank and reported levels,
+then uses the shared atom-preserving quantile adapter. Native scoring retains
+the reported levels and endpoint tail masses; density scoring uses the separate
+linearly resampled view.
 
 Requires ``synthefy-nori`` with the ``output_type="full"`` quantile API
 (>= the release that adds probabilistic output; install from source if needed).
@@ -19,6 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from .base import DistributionPrediction, ProbabilisticWrapper
+from .quantile_based import quantiles_to_distribution
 
 
 def _to_numeric(X):
@@ -74,14 +76,14 @@ class SynthefyWrapper(ProbabilisticWrapper):
 
     def predict_distribution(self, X) -> DistributionPrediction:
         full = self._model.predict(_to_numeric(X), output_type="full")
-        Q = np.asarray(full["quantiles"], dtype=np.float64)  # (n, K) ascending per row
-        n, K = Q.shape
-        # K sorted quantiles -> K-1 equi-probable interior bins.
-        edges = Q                                  # (n, K) per-sample bin edges
-        mids = 0.5 * (Q[:, :-1] + Q[:, 1:])        # (n, K-1)
-        probas = np.full((n, K - 1), 1.0 / (K - 1))  # uniform mass between quantiles
-        mean = np.asarray(full["mean"], dtype=np.float64)
-        return DistributionPrediction(
-            probas=probas, bin_edges=edges, bin_midpoints=mids, mean=mean,
+        if "taus" not in full:
+            raise ValueError(
+                "Nori output_type='full' must include native quantile levels "
+                "in 'taus'; update synthefy-nori instead of assuming levels."
+            )
+        return quantiles_to_distribution(
+            np.asarray(full["quantiles"], dtype=np.float64),
+            np.asarray(full["taus"], dtype=np.float64),
+            mean=np.asarray(full["mean"], dtype=np.float64),
             train_range=self._y_train_range,
         )

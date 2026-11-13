@@ -1,18 +1,16 @@
 """Outside its node hull the resampled CDF must be FLAT (``C_first`` / ``C_last``).
 
-``_evaluate_monotone_cdf`` fits a PCHIP cubic through the CDF nodes.  Past the
-outermost node that cubic is extrapolated and its ``t**3`` term dominates, so on a
-tail-flattening CDF (any quantile read-out) it swings to ``+-inf`` with the wrong
-sign.  The final ``np.clip`` then pins the *left* edges to ``C_last`` and the *right*
-edges to ``C_first`` -- an inverted CDF.  ``np.diff`` is negative there, the masses
-are floored to 0, and a forecast whose hull sits inside one grid bin collapses to the
-uniform ``1/n_bins`` fallback.  The density rules then score a flat forecast.
+``_evaluate_monotone_cdf`` linearly interpolates the CDF nodes.  Past the
+outermost node it must stay flat.  An earlier cubic (PCHIP) extrapolated there
+swung to ``+-inf`` and inverted the CDF, collapsing a forecast whose hull sits
+inside one grid bin to the uniform ``1/n_bins`` fallback; these tests guard
+against that regression.
 
 Contract pinned here, against closed forms:
 
 * ``C(q) = C_first`` for ``q <= x_first`` and ``C(q) = C_last`` for ``q >= x_last``,
   at any distance (the clamp, not the cubic, decides the tails);
-* inside the hull the result is the plain PCHIP interpolant, accurate to the
+* inside the hull the result is the linear interpolant, accurate to the
   interpolation error of the known CDF;
 * a forecast sharper than one grid bin puts ALL its mass in the bin that holds it.
 """
@@ -88,8 +86,8 @@ def test_interior_matches_analytic_cdf(name):
     x, c = _nodes(dist)
     q = np.linspace(x[0], x[-1], 2001)
     got = _evaluate_monotone_cdf(x, c, q)
-    # Cubic-Hermite error on 99 nodes of a smooth CDF is O(h^3..h^4).
-    np.testing.assert_allclose(got, dist.cdf(q), atol=5e-4)
+    # Linear-interpolation error on 99 nodes of a smooth CDF is O(h^2 max|f'|/8).
+    np.testing.assert_allclose(got, dist.cdf(q), atol=1e-3)
 
 
 # ---------------------------------------------------------------------------

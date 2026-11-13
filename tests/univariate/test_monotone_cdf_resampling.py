@@ -1,20 +1,12 @@
-"""Tests for the monotone-cubic (PCHIP) CDF resampler in ``base``.
+"""Tests for the linear CDF resampler in ``resampling_grid``.
 
 ``interpolate_cdf_to_grid_with_equally_sized_bins`` reconstructs a density by evaluating the
-prediction's CDF on a uniform grid and differencing it.  As of the interpolation
-selection study (`tests/test_interpolation_scheme_selection.py`) that evaluation
-uses a monotone shape-preserving cubic (PCHIP, "scheme C2") instead of a straight
-line, via :func:`_evaluate_monotone_cdf`.
+prediction's CDF on a uniform grid and differencing it.  The CDF between nodes
+is interpolated linearly (Izbicki et al. 2026, https://arxiv.org/pdf/2603.26611).
 
-Switching the interpolant must *not* weaken any invariant the metrics depend on,
-and must *add* the shape fidelity that motivated the change.  This module pins
-both halves of that contract:
-
-* **Invariants kept** -- non-negative masses summing to 1, mass-exactness
-  (``C(edge_{k+1}) - C(edge_k)``), atoms credited whole to a single bin, and a
-  straight-line CDF still coming back linear.
-* **Fidelity gained** -- the reconstructed density of a smooth unimodal truth is
-  strictly closer (in L2) to the truth than the old piecewise-constant scheme's.
+Pinned contract: non-negative masses summing to 1, mass-exactness
+(``C(edge_{k+1}) - C(edge_k)``), atoms' cumulative mass kept exact, and
+resampled masses equal to the exact rebinning of the piecewise-linear CDF.
 """
 
 from __future__ import annotations
@@ -42,7 +34,7 @@ def test_passes_through_the_cdf_nodes():
 
 
 def test_is_monotone_between_nodes():
-    """PCHIP is shape-preserving: no overshoot, so ``diff(C) >= 0`` on any grid."""
+    """No overshoot: ``diff(C) >= 0`` on any grid."""
     x = np.linspace(-3.0, 3.0, 9)
     c = norm.cdf(x)
     fine = np.linspace(-3.0, 3.0, 500)
@@ -61,11 +53,7 @@ def test_clipped_to_the_node_range_under_extrapolation():
 
 
 def test_straight_line_cdf_stays_straight():
-    """A linear CDF is a fixed point: PCHIP through collinear nodes is the line.
-
-    Guards against the cubic inventing curvature where the data says there is
-    none (which would turn a uniform density into a wavy one).
-    """
+    """A linear CDF is a fixed point of the interpolant."""
     x = np.linspace(-2.0, 4.0, 7)
     c = (x - x[0]) / (x[-1] - x[0])
     fine = np.linspace(-2.0, 4.0, 200)
@@ -74,8 +62,8 @@ def test_straight_line_cdf_stays_straight():
     np.testing.assert_allclose(got, expected, atol=1e-12)
 
 
-def test_fewer_than_three_nodes_falls_back_to_linear():
-    """With < 3 distinct abscissae there is no cubic; np.interp is used."""
+def test_two_nodes_are_linear():
+    """Two abscissae give the straight line between them."""
     x = np.array([0.0, 2.0])
     c = np.array([0.0, 1.0])
     q = np.array([0.0, 0.5, 1.0, 2.0])
@@ -181,44 +169,34 @@ def test_resampled_view_smears_an_atom():
 
 
 def test_uniform_cdf_reconstructs_flat_density():
-    """A straight-line CDF gives equal masses -- no cubic-induced ripple."""
+    """A straight-line CDF gives equal masses."""
     x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
     y = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
     _, probas = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins=8)
     np.testing.assert_allclose(probas[0], 1.0 / 8, atol=1e-12)
 
 
-def test_pchip_density_beats_piecewise_constant_on_a_smooth_truth():
-    """The new density is a strictly better L2 fit to a Normal than scheme A.
+@pytest.mark.parametrize("n_bins", [7, 60, 800])
+def test_resampled_masses_are_the_exact_rebinning_of_the_linear_cdf(n_bins):
+    """Masses equal increments of the piecewise-linear CDF through the nodes.
 
-    Same CDF nodes, same regular edges: the only difference is the interpolant.
-    The monotone cubic's differenced density must be closer to the true Normal
-    density than the piecewise-constant (linear-CDF) density it replaces.
+    This is the law native CRPS/PIT score, so density and CDF views agree.
     """
-    n_bins = 60
     alphas = np.linspace(0.01, 0.99, 61)
-    q = norm.ppf(alphas)
-    left, right = q[1] - q[0], q[-1] - q[-2]
-    z_min, z_max = q[0] - left, q[-1] + right
-    x = np.concatenate([[z_min], q, [z_max]])
-    y = np.concatenate([[0.0], alphas, [1.0]])
-
-    edges, probas_pchip = interpolate_cdf_to_grid_with_equally_sized_bins(x[None, :], y, n_bins)
+    q = norm.ppf(alphas) * np.linspace(1.0, 2.0, 61)  # non-Gaussian spacing
+    edges, probas = interpolate_cdf_to_grid_with_equally_sized_bins(q[None, :], alphas, n_bins)
     e = edges[0]
-    mids = 0.5 * (e[:-1] + e[1:])
-    w = np.diff(e)
+    expected = np.diff(np.interp(e, q, alphas))
+    np.testing.assert_allclose(probas[0], expected / expected.sum(), atol=1e-13)
 
-    # Scheme A on the same edges: linear CDF at the edges, differenced.
-    c_lin = np.interp(e, x, y)
-    mass_lin = np.maximum(np.diff(c_lin), 0.0)
-    mass_lin /= mass_lin.sum()
 
-    dens_pchip = probas_pchip[0] / w
-    dens_lin = mass_lin / w
-    f_true = norm.pdf(mids)
-
-    ise_pchip = np.sum((dens_pchip - f_true) ** 2 * w)
-    ise_lin = np.sum((dens_lin - f_true) ** 2 * w)
-    assert ise_pchip < ise_lin, (
-        f"PCHIP ISE {ise_pchip:.3e} not better than linear {ise_lin:.3e}"
-    )
+def test_density_is_piecewise_constant_between_quantile_knots():
+    """Inside one knot interval, every fully-contained bin has density dalpha/dq."""
+    q = np.array([0.0, 1.0, 3.0, 4.0])
+    a = np.array([0.0, 0.5, 0.6, 1.0])
+    edges, probas = interpolate_cdf_to_grid_with_equally_sized_bins(q[None, :], a, 40)
+    e, w = edges[0], np.diff(edges[0])
+    dens = probas[0] / w
+    for lo, hi, slope in [(0.0, 1.0, 0.5), (1.0, 3.0, 0.05), (3.0, 4.0, 0.4)]:
+        inside = (e[:-1] >= lo - 1e-12) & (e[1:] <= hi + 1e-12)
+        np.testing.assert_allclose(dens[inside], slope, rtol=1e-10)

@@ -50,14 +50,14 @@ class DistributionPrediction:
     reconstructed from that histogram.
 
     * :attr:`native`    -- raw grid, atoms preserved; for grid-robust rules.
-    * :attr:`resampled` -- PCHIP-resampled onto the grow-only density grid;
+    * :attr:`resampled` -- linearly resampled onto the grow-only density grid;
       for density rules.
 
     ``train_range = (y_lo, y_hi)`` FLOORS the density grid; the support grows
     outward per instance to the model's own hull so no tail mass is truncated.
 
     ``is_grid_native`` does ONE mechanical thing: the :attr:`resampled` view is the
-    native PMF grid VERBATIM -- no PCHIP resample, no train-range widening.  Two
+    native PMF grid VERBATIM -- no resample, no train-range widening.  Two
     different kinds of head want that, for opposite reasons:
 
     1. DISCRETIZED heads -- output already IS a PMF over borders fixed at fit time producing a prediction in 
@@ -76,7 +76,7 @@ class DistributionPrediction:
     live in forecast family M1/M2 and do not guarantee to have forecasts in  L1/L2, so their implied density
     may carry Dirac atoms (tied quantiles, repeated draws) that would blow up the
     density based scoring rules (DPD, pseudospherical, CDE loss).  
-    We adapt the resampling approach by Izbicki 2026 to smooth potential dirac delta distribution atoms in the density forcasts that neutralises those atoms.
+    We adapt the resampling approach by Izbicki et al. 2026 (https://arxiv.org/pdf/2603.26611) to smooth potential dirac delta distribution atoms in the density forcasts that neutralises those atoms.
     """
     probas: np.ndarray
     bin_edges: np.ndarray
@@ -91,7 +91,7 @@ class DistributionPrediction:
     num_equally_sized_bins: int = 200
     is_grid_native: bool = False
     # The lossless CDF-node intermediate, when the prediction was built through a
-    # source constructor.  Present -> the resampled view PCHIPs these nodes
+    # source constructor.  Present -> the resampled view interpolates these nodes
     # directly; absent -> it is reconstructed from the native histogram.
     cdf_nodes: object = field(default=None, kw_only=True)
 
@@ -141,7 +141,7 @@ class DistributionPrediction:
         intermediate: the native PMF grid bins it onto ``n_bins`` uniform bins (a
         bounded grid -- the native energy score is O(n_bins^2)) plus a zero-width
         atom at the min / max draw holding the ``1/2n`` Hazen tail mass, so the
-        native CDF keeps the eCDF levels exactly.  The resampled view PCHIPs the
+        native CDF keeps the eCDF levels exactly.  The resampled view interpolates the
         SAME eCDF nodes.  No histogram round-trip.
         """
         samples = np.atleast_2d(np.asarray(samples, dtype=np.float64))
