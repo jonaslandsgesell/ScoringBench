@@ -6,7 +6,7 @@ From those nodes two grids are derived directly, with no round-trip through an
 intermediate histogram:
 
 * the NATIVE grid (:func:`cdf_nodes_to_native_PMF_grid`) -- the nodes used as
-  bin edges, atoms preserved; scored by the grid-robust rules, and
+  bin edges, tied-quantile atoms preserved; scored by the grid-robust rules, and
 * the RESAMPLED grid (:func:`resample_cdf_nodes_to_support_outer_hull_y_train_set_y_instance_prediction_grid`) -- the same
   nodes linearly resampled onto ``num_equally_sized_bins`` uniform bins over the
   per-instance grow-only support; scored by the density rules.
@@ -17,17 +17,19 @@ grid-native model (TabPFN bar distribution) skips nodes entirely and its native
 PMF grid is kept verbatim for both views.  Samples are read as Hazen quantiles
 and then follow the quantile route.
 
-The raw nodes are used AS-IS: no ``C = 0/1`` anchoring and no invented tail.  A
-quantile grid reaches only ``[alpha_0, alpha_{K-1}]`` and an eCDF only
-``[1/2n, 1 - 1/2n]``.  On the NATIVE grid the residual tail mass is kept as
-zero-width atoms at the outermost nodes (:func:`with_tail_atoms`), so every
-reported level stays exact -- renormalizing instead would shift all interior
-levels and bias coverage/interval scores by ~``alpha_0 + 1 - alpha_{K-1}``.
-The RESAMPLED (density) grid needs positive widths, so it spreads the same tail
-masses as uniform slabs between the outermost node and the support edge
-(:func:`_uniform_slab`); only a tail whose hull already reaches the support edge
-is folded into the interior by the normalize in
-:func:`_interpolate_cdf_to_grid_with_equally_sized_bins`.
+The raw nodes are used AS-IS: no ``C = 0/1`` anchoring.  A quantile grid
+reaches only ``[alpha_0, alpha_{K-1}]`` and an eCDF only ``[1/2n, 1 - 1/2n]``.
+BOTH views place the residual tail mass the same way: as uniform slabs between
+the outermost node and the grow-only support edge ``[min(t_lo, q_0),
+max(t_hi, q_{K-1})]``, so the two views carry the same law and differ only in
+binning.  On the NATIVE grid the slab is one extra bin per tail
+(:func:`with_tail_atoms` with ``support``); every reported level stays exact
+(renormalizing instead would shift all interior levels and bias coverage).
+Clamping the tails to zero-width atoms at the outermost nodes would truncate the
+forecast to its hull, which near-log rules (CRTS alpha -> 1) punish at the
+maximal rate for every outcome beyond it.  A tail whose node already reaches the
+support edge has no room and stays a zero-width atom (native) / is folded into
+the interior (resampled, :func:`_interpolate_cdf_to_grid_with_equally_sized_bins`).
 
 Public surface
 --------------
@@ -172,8 +174,8 @@ def quantiles_to_cdf_nodes(q, alphas):
     The quantile function ``alpha -> q(alpha)`` IS the CDF: ``q`` (``(rows, K)``)
     are the abscissae, ``alphas`` (``(K,)``, one shared row) the cumulative mass.
     The nodes are returned AS-IS -- ``C`` stops at ``[alpha_0, alpha_{K-1}]``; the
-    native grid keeps the tail beyond the outermost levels as atoms at those
-    nodes (:func:`cdf_nodes_to_native_PMF_grid`) rather than inventing a tail.
+    native grid spreads the tail beyond the outermost levels out to the support
+    edge (:func:`cdf_nodes_to_native_PMF_grid`).
     Tied quantiles stay coincident, so a model's atoms survive as repeated abscissae.
 
     Returns ``(cdf_support_point, cdf_levels)`` -- each ``(rows, K)``.
@@ -210,47 +212,52 @@ def _normalize(probas):
     return np.where(s > 0.0, p / np.where(s > 0.0, s, 1.0), 1.0 / p.shape[-1])
 
 
-def cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels):
+def cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels, support=None):
     """Use the CDF nodes DIRECTLY as bin edges -- no resample, atoms kept.
 
     The native PMF grid for quantile-based wrappers: the nodes ARE the edges and
     ``diff(c)`` the interior masses, so every level the model reported is kept
     exactly (``F(q_k) = alpha_k``).  The unreported tail masses ``alpha_0`` and
-    ``1 - alpha_{K-1}`` become zero-width atoms AT the outermost nodes: the model
-    says only that this mass lies beyond ``q_0`` / ``q_{K-1}``, so no support is
-    invented (flat quantile-function clamping, as ``np.interp`` extrapolates).
-    Renormalizing ``diff(c)`` instead would rescale every interior level to
-    ``(alpha - alpha_0) / (alpha_{K-1} - alpha_0)`` and bias coverage/interval
-    scores (95% -> ~93% for levels 0.01..0.99).  A tail atom is added only when
-    some row has tail mass there.  Tied nodes stay coincident, so a model's
-    atoms survive as zero-width Dirac bins that the grid-robust rules score
-    exactly.
+    ``1 - alpha_{K-1}`` go into one extra bin per tail reaching out to the
+    support ``(lo, hi)`` (see :func:`with_tail_atoms`) -- the same uniform slabs
+    as the density view.  Renormalizing ``diff(c)`` instead would rescale every
+    interior level and bias coverage/interval scores (95% -> ~93% for levels
+    0.01..0.99).  Tied nodes stay coincident, so a model's atoms survive as
+    zero-width Dirac bins that the grid-robust rules score exactly.
 
     Returns ``(bin_edges, probas)``: edges ``(rows, m)``, probas ``(rows, m - 1)``.
     """
     edges = np.atleast_2d(np.asarray(cdf_support_point, dtype=np.float64))
     c = np.clip(np.atleast_2d(np.asarray(cdf_levels, dtype=np.float64)), 0.0, 1.0)
-    return with_tail_atoms(edges, np.diff(c, axis=-1), c)
+    return with_tail_atoms(edges, np.diff(c, axis=-1), c, support=support)
 
 
-def with_tail_atoms(edges, interior_probas, cdf_levels):
-    """Append the unreported tail masses as zero-width atoms at the outer edges.
+def with_tail_atoms(edges, interior_probas, cdf_levels, support=None):
+    """Append the unreported tail masses as one extra bin per tail.
 
     ``interior_probas`` must carry the raw (un-renormalized) mass between the
-    outermost nodes, i.e. sum to ``c_{-1} - c_0``.  The lower tail ``c_0`` becomes
-    an atom at ``edges[:, 0]`` and the upper tail ``1 - c_{-1}`` one at
-    ``edges[:, -1]``, so the native CDF hits every reported level exactly and no
-    support is invented.  An atom is added only when some row has tail mass there.
+    outermost nodes, i.e. sum to ``c_{-1} - c_0``.  The lower tail ``c_0`` fills
+    ``[min(lo, edges[:, 0]), edges[:, 0]]`` and the upper tail ``1 - c_{-1}``
+    ``[edges[:, -1], max(hi, edges[:, -1])]`` with ``support=(lo, hi)`` the train
+    range: uniform slabs out to the grow-only support edge, read with a linear
+    CDF by the grid-robust rules, exactly as on the density view.  The native CDF
+    hits every reported level exactly.  A tail whose node already reaches the
+    support edge (or ``support=None``) degenerates to a zero-width atom at the
+    node.  A tail bin is added only when some row has tail mass there.
     """
     edges = np.atleast_2d(np.asarray(edges, dtype=np.float64))
     probas = np.atleast_2d(np.asarray(interior_probas, dtype=np.float64))
     c = np.clip(np.atleast_2d(np.asarray(cdf_levels, dtype=np.float64)), 0.0, 1.0)
     lower_tail, upper_tail = c[:, :1], 1.0 - c[:, -1:]
+    outer_lo, outer_hi = edges[:, :1], edges[:, -1:]
+    if support is not None:
+        outer_lo = np.minimum(float(support[0]), outer_lo)
+        outer_hi = np.maximum(float(support[1]), outer_hi)
     if np.any(lower_tail > 0.0):
-        edges = np.concatenate([edges[:, :1], edges], axis=-1)
+        edges = np.concatenate([outer_lo, edges], axis=-1)
         probas = np.concatenate([np.broadcast_to(lower_tail, (probas.shape[0], 1)), probas], axis=-1)
     if np.any(upper_tail > 0.0):
-        edges = np.concatenate([edges, edges[:, -1:]], axis=-1)
+        edges = np.concatenate([edges, outer_hi], axis=-1)
         probas = np.concatenate([probas, np.broadcast_to(upper_tail, (probas.shape[0], 1))], axis=-1)
     return edges, _normalize(probas)
 

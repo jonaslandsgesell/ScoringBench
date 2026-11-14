@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -80,7 +80,7 @@ class DistributionPrediction:
     bin_edges: np.ndarray
     bin_midpoints: np.ndarray
     mean: np.ndarray
-    train_range: tuple = field(kw_only=True)
+    train_range: tuple   # required; always passed by keyword
     is_sample_based: bool = False
     # Number of equally-sized bins in the density (resampled) grid: the shared
     # RESOLUTION (bin COUNT), common across every model so densities compare at
@@ -91,7 +91,7 @@ class DistributionPrediction:
     # The lossless CDF-node intermediate, when the prediction was built through a
     # source constructor.  Present -> the resampled view interpolates these nodes
     # directly; absent -> it is reconstructed from the native histogram.
-    cdf_nodes: object = field(default=None, kw_only=True)
+    cdf_nodes: object = None
 
     def __post_init__(self):
         self._native: DistributionPredictionView | None = None
@@ -120,7 +120,7 @@ class DistributionPrediction:
         view.  No intermediate histogram.
         """
         cdf_support_point, cdf_levels = quantiles_to_cdf_nodes(q, alphas)
-        edges, probas = cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels)
+        edges, probas = cdf_nodes_to_native_PMF_grid(cdf_support_point, cdf_levels, support=train_range)
         mids = 0.5 * (edges[..., :-1] + edges[..., 1:])
         out_mean = (probas * mids).sum(axis=-1) if mean is None else np.asarray(mean, float).reshape(-1)
         prediction = cls._from_native(edges, probas, out_mean, train_range,
@@ -137,7 +137,7 @@ class DistributionPrediction:
 
         NATIVE view: the Hazen eCDF -- sorted draws at levels ``(k - 0.5) / N`` --
         as quantile nodes, so CRPS/PIT score the draws themselves (ties stay atoms,
-        ``1/2N`` tail atoms at the extreme draws).  ``n_bins`` optionally caps the
+        ``1/2N`` tails as slabs to the support edge).  ``n_bins`` optionally caps the
         node count with equal-mass Hazen quantiles; ``None`` keeps every draw.
 
         DENSITY view: an eCDF has no density, and interpolating through every draw
@@ -150,7 +150,7 @@ class DistributionPrediction:
         n_draws = samples.shape[1]
         n_native = n_draws if n_bins is None else max(int(n_bins), 1)
         native_nodes = quantiles_to_cdf_nodes(*samples_to_quantile_nodes(samples, n_native))
-        edges, probas = cdf_nodes_to_native_PMF_grid(*native_nodes)
+        edges, probas = cdf_nodes_to_native_PMF_grid(*native_nodes, support=train_range)
         density_levels = np.linspace(0.5 / n_draws, 1.0 - 0.5 / n_draws,
                                      int(np.ceil(np.sqrt(n_draws))) + 1)
         density_nodes = quantiles_to_cdf_nodes(

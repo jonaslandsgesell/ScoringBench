@@ -63,6 +63,27 @@ def _energy_b1(edges, probas, y):
     return compute_energy_score_histogram_corrected(pt, et, yt, betas=[1.0])["energy_score_beta_1.0"]
 
 
+def _quantile_pinball_crps(quantiles, levels, y):
+    """Integrate 2 * pinball loss over a piecewise-linear quantile function."""
+    alphas = np.concatenate(([0.0], np.asarray(levels, dtype=float), [1.0]))
+    values = np.concatenate(([quantiles[0]], np.asarray(quantiles, dtype=float), [quantiles[-1]]))
+    nodes, weights = np.polynomial.legendre.leggauss(3)
+    score = 0.0
+    for lo, hi, q_lo, q_hi in zip(alphas[:-1], alphas[1:], values[:-1], values[1:]):
+        cuts = [lo, hi]
+        if q_lo < y < q_hi:
+            cuts.insert(1, lo + (hi - lo) * (y - q_lo) / (q_hi - q_lo))
+        elif q_hi < y < q_lo:
+            cuts.insert(1, lo + (hi - lo) * (y - q_lo) / (q_hi - q_lo))
+
+        for start, stop in zip(cuts[:-1], cuts[1:]):
+            alpha = (start + stop) / 2.0 + (stop - start) / 2.0 * nodes
+            q = q_lo + (q_hi - q_lo) * (alpha - lo) / (hi - lo)
+            pinball = (y <= q).astype(float) - alpha
+            score += (stop - start) / 2.0 * np.dot(weights, pinball * (q - y))
+    return float(2.0 * score)
+
+
 def _crts_a2(edges, probas, y):
     et = torch.tensor(edges, dtype=torch.float64)
     pt = torch.tensor(probas, dtype=torch.float64)[None, :]
@@ -126,6 +147,30 @@ def test_crps_equals_crts_through_public_api():
     r = compute_scoring_rules(d, np.array([5.0]))
     assert abs(r["crps"] - r["crts_alpha_2.0"]) <= 1e-8 * (1 + abs(r["crts_alpha_2.0"]))
     assert r["crps"] > 0.0
+
+
+def test_quantile_native_crps_equals_energy_beta_one():
+    """CRPS for reported quantiles matches β=1 energy on their native view."""
+    levels = np.array([0.1, 0.3, 0.65, 0.9])
+    quantiles = np.array([[-2.0, -0.5, 1.25, 4.0]])
+    target = np.array([0.75])
+    prediction = DistributionPrediction.from_multi_quantile(
+        quantiles, levels, train_range=(-3.0, 5.0),
+    )
+
+    scores = compute_scoring_rules(prediction, target, representation="native")
+    quantile_crps = _quantile_pinball_crps(quantiles[0], levels, target[0])
+    native_energy = _energy_b1(
+        prediction.native.bin_edges[0],
+        prediction.native.probas[0],
+        target[0],
+    )
+
+    assert scores["crps"] == pytest.approx(quantile_crps, rel=1e-12, abs=1e-12)
+    assert scores["crps"] == pytest.approx(native_energy, rel=1e-12, abs=1e-12)
+    assert scores["energy_score_beta_1.0"] == pytest.approx(
+        native_energy, rel=1e-12, abs=1e-12,
+    )
 
 
 def test_equivalence_against_mpmath():
