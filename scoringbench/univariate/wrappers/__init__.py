@@ -60,6 +60,7 @@ _OPTIONAL = [
     ("EXAONETabularWrapper", "exaonetabular_wrapper"),
     ("LimiXWrapper", "limix"),
     ("MitraFinetuneWrapper", "mitra_finetune_wrapper"),
+    ("AshlarDressedWrapper", "ashlar_dressed_wrapper"),
 ]
 for _name, _mod in _OPTIONAL:
     try:
@@ -116,5 +117,6 @@ __all__ = [
     "EXAONETabularWrapper",
     "LimiXWrapper",
     "MitraFinetuneWrapper",
+    "AshlarDressedWrapper",
     "resolve_mitra2_checkpoint",
 ]

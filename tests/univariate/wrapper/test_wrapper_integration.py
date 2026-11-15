@@ -351,6 +351,17 @@ def _make_mitra():
     )
 
 
+def _make_ashlar_dressed():
+    """Ashlar's dressed model (JAX), with two members and short fits for CI.
+
+    The benchmark entry runs ``ashlar.dressed()`` with its defaults (five
+    members, networks trained to early stopping).
+    """
+    pytest.importorskip("ashlar", minversion="0.1.2")
+    from scoringbench.univariate.wrappers.ashlar_dressed_wrapper import AshlarDressedWrapper
+    return AshlarDressedWrapper(members=2, max_epochs=20, reader={"max_steps": 200})
+
+
 # Registry — add new entries here to include a model in all tests below
 # Each param is a (name, factory) tuple so the fixture can log the name
 # without relying on pytest internals that differ across scopes.
@@ -401,6 +412,11 @@ MODEL_FACTORIES += [
 MODEL_FACTORIES += [
     pytest.param((f"SurjectorsWrapper[{_flow}]", _make_surjectors(_flow)), id=f"SurjectorsWrapper[{_flow}]")
     for _flow in ("maf",)
+]
+
+# Ashlar's dressed model (JAX): cross-fitted networks and label readers, pooled and corrected.
+MODEL_FACTORIES += [
+    pytest.param(("AshlarDressedWrapper", _make_ashlar_dressed), id="AshlarDressedWrapper"),
 ]
 
 
