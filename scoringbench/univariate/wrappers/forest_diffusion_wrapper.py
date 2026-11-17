@@ -73,7 +73,7 @@ class ForestDiffusionWrapper(SampleBasedWrapper):
         n_estimators: int = 100,
         max_depth: int = 7,
         n_jobs: int = -1,
-        n_samples: int = 100,
+        n_samples: int = 300,
         sample_chunk: int = 10,
         random_state: int = 0,
     ):
