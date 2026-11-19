@@ -25,6 +25,8 @@ surjectors>=0.3.3  # pulls in jax, dm-haiku, distrax, optax
 exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular.git
 tabdpt
 sdm @ git+https://github.com/NVIDIA/structured-data-models.git
+# Ashlar trains on the GPU where JAX has its CUDA build: pip install "jax[cuda12]" or "jax[cuda13]", to match the machine.
+ashlar-tabular==0.1.2  # pulls in jax, equinox, optax
 #limix @ git+https://github.com/limix-ldm-ai/LimiX.git@main
 #mitra-finetune @ git+https://github.com/autogluon/mitra-finetune.git@main
 #xiaomi-tabldm @ git+https://github.com/xiaomi-research/xiaomi-tabldm.git

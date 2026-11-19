@@ -565,5 +565,14 @@
       "huggingface": null,
       "github": "https://github.com/Scriddie/condensite"
     }
+  },
+  {
+    "model_name": "ashlar_dressed_v0_1_2",
+    "organization": null,
+    "links": {
+      "paper": null,
+      "huggingface": null,
+      "github": "https://github.com/maxmbay/ashlar"
+    }
   }
 ]

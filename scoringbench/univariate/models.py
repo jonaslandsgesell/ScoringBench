@@ -60,6 +60,7 @@ from .wrappers import (
     EXAONETabularWrapper,
     LimiXWrapper,
     MitraFinetuneWrapper,
+    AshlarDressedWrapper,
     resolve_mitra2_checkpoint,
 )
 from .wrappers.cde_wrapper import CDE_PRESETS
@@ -351,4 +352,6 @@ MODELS = {
     **dict_flexcode_models,
     "condensite_pitbst_v0_1_1": lambda: CondensitePITBoostingWrapper(),
     **dict_surjectors_models,
+    # Ashlar's dressed model with its defaults: trained from scratch, untuned (ashlar-tabular 0.1.2).
+    "ashlar_dressed_v0_1_2": lambda: AshlarDressedWrapper(),
 }
