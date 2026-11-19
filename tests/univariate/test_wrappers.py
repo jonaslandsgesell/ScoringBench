@@ -2,6 +2,7 @@ import numpy as np
 
 from scoringbench.univariate.wrappers.base import ProbabilisticWrapper, DistributionPrediction
 from scoringbench.univariate.wrappers.tabicl import TabICLWrapper
+from scoringbench.univariate.wrappers.lightpfn import LightPFNWrapper
 from scoringbench.univariate.wrappers.xgb_vector import XGBVectorWrapper, XGBQuantileVectorWrapper
 
 
@@ -118,3 +119,38 @@ def test_xgb_quantile_vector_wrapper_predict_distribution():
         assert dist.bin_edges.shape[0] == expected_edges
     else:
         assert dist.bin_edges.shape == (2, expected_edges)
+
+
+def test_lightpfn_wrapper_uses_native_quantiles_and_preserves_categoricals():
+    import pandas as pd
+
+    class FakeModel:
+        def fit(self, X, y, cat):
+            self.fit_X = X
+            self.fit_y = y
+            self.cat = cat
+
+        def predict(self, X):
+            return np.zeros(len(X))
+
+        def predict_quantiles(self, X):
+            self.quantile_shape = (len(X), 999)
+            return np.tile(np.linspace(-1.0, 1.0, 999), (len(X), 1))
+
+    model = FakeModel()
+    wrapper = LightPFNWrapper.__new__(LightPFNWrapper)
+    wrapper._model = model
+    X = pd.DataFrame({"category": ["a", "b", "c"], "number": [1.0, 2.0, 3.0]})
+    wrapper.fit(X, np.array([1.0, np.nan, 3.0]))
+
+    assert model.fit_X["category"].tolist() == ["a", "c"]
+    np.testing.assert_array_equal(model.fit_y, [1.0, 3.0])
+    assert model.cat == "auto"
+    assert wrapper._y_train_range == (1.0, 3.0)
+
+    dist = wrapper.predict_distribution(X.iloc[[0, 2]])
+    assert model.quantile_shape == (2, 999)
+    assert dist.probas.shape == (2, 1000)
+    np.testing.assert_allclose(
+        dist.mean, wrapper.predict(X.iloc[[0, 2]]), atol=1e-14
+    )

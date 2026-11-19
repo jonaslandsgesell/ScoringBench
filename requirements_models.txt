@@ -29,6 +29,7 @@ sdm @ git+https://github.com/NVIDIA/structured-data-models.git
 #jax[cuda12]==0.10.2
 #nvidia-cuda-nvcc-cu12==12.8.93
 ashlar-tabular==0.1.2  # pulls in jax, equinox, optax
+LightPFN>=1.5.1
 #limix @ git+https://github.com/limix-ldm-ai/LimiX.git@main
 #mitra-finetune @ git+https://github.com/autogluon/mitra-finetune.git@main
 #xiaomi-tabldm @ git+https://github.com/xiaomi-research/xiaomi-tabldm.git

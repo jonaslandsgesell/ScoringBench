@@ -134,6 +134,12 @@ def _make_tabicl():
     return TabICLWrapper(device=_cuda_or_cpu())
 
 
+def _make_lightpfn():
+    pytest.importorskip("lightpfn")
+    from scoringbench.univariate.wrappers.lightpfn import LightPFNWrapper
+    return LightPFNWrapper(device="cpu")
+
+
 def _make_kumo_tabular_small():
     """KumoTabular (NVIDIA/SDM) — size="small" in-context 999-quantile head.
 
@@ -375,6 +381,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabPFNWrapper[v3.5-fast]", _make_tabpfn_v3_5_fast), id="TabPFNWrapper[v3.5-fast]"),
     pytest.param(("TabDPTWrapper",            _make_tabdpt),       id="TabDPTWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
+    pytest.param(("LightPFNWrapper",          _make_lightpfn),     id="LightPFNWrapper"),
     pytest.param(("KumoTabularSmallWrapper",  _make_kumo_tabular_small), id="KumoTabularSmallWrapper"),
     pytest.param(("TabLDMWrapper",            _make_tabldm),       id="TabLDMWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),

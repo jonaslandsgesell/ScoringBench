@@ -61,6 +61,7 @@ _OPTIONAL = [
     ("LimiXWrapper", "limix"),
     ("MitraFinetuneWrapper", "mitra_finetune_wrapper"),
     ("AshlarDressedWrapper", "ashlar_dressed_wrapper"),
+    ("LightPFNWrapper", "lightpfn"),
 ]
 for _name, _mod in _OPTIONAL:
     try:
@@ -118,5 +119,6 @@ __all__ = [
     "LimiXWrapper",
     "MitraFinetuneWrapper",
     "AshlarDressedWrapper",
+    "LightPFNWrapper",
     "resolve_mitra2_checkpoint",
 ]
