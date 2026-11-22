@@ -1,120 +1,17 @@
 {
  "schema": 1,
  "n_datasets": 55,
- "how_built": "curated multi-target OpenML datasets",
+ "how_built": "curated multi-target datasets passing KCI (alpha=0.05) and residual distance correlation (effect>=0.20) screening",
  "require_stage2": false,
  "datasets": [
   {
-   "openml_id": 503,
-   "name": "wind",
-   "n_rows": 6574,
+   "openml_id": 45719,
+   "name": "3D_Estimation_using_RSSI_of_WLAN_dataset_complete",
+   "n_rows": 14400,
    "target_cols": [
-    "CLA",
-    "CLO",
-    "KIL",
-    "SHA",
-    "BIR",
-    "MUL",
-    "RPT",
-    "VAL",
-    "ROS",
-    "DUB",
-    "BEL",
-    "MAL"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [
-    "buoy",
-    "day"
-   ],
-   "feature_cols": null,
-   "n_rows": 782,
-   "name": "kdd_el_nino-small",
-   "openml_id": 563,
-   "target_cols": [
-    "air_temp",
-    "s_s_temp",
-    "humidity"
-   ]
-  },
-  {
-   "openml_id": 565,
-   "name": "water-treatment",
-   "n_rows": 527,
-   "target_cols": [
-    "SSV-E",
-    "SSV-P",
-    "SSV-D",
-    "SED-E",
-    "SED-P",
-    "SSV-S"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 5456,
-   "name": "wall-robot-navigation",
-   "openml_id": 1497,
-   "target_cols": [
-    "V4",
-    "V5",
-    "V1",
-    "V2",
-    "V3",
-    "V6",
-    "V7",
-    "V8",
-    "V9",
-    "V10",
-    "V11",
-    "V12"
-   ]
-  },
-  {
-   "drop_cols": [
-    "subject."
-   ],
-   "feature_cols": null,
-   "n_rows": 5875,
-   "name": "parkinsons-telemonitoring",
-   "openml_id": 4531,
-   "target_cols": [
-    "motor_UPDRS",
-    "total_UPDRS"
-   ]
-  },
-  {
-   "openml_id": 4563,
-   "name": "SpokenArabicDigit",
-   "n_rows": 178526,
-   "target_cols": [
-    "V3",
-    "V4",
-    "V5",
-    "V6",
-    "V1",
-    "V2"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": 23516,
-   "name": "debutanizer",
-   "n_rows": 2394,
-   "target_cols": [
-    "u2",
-    "u3",
-    "u1",
-    "u4",
-    "u5",
-    "u6"
+    "latitude",
+    "longitude",
+    "receiver_height"
    ],
    "feature_cols": null,
    "drop_cols": []
@@ -133,30 +30,338 @@
    "drop_cols": []
   },
   {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 4839,
-   "name": "wilt",
-   "openml_id": 40983,
+   "openml_id": 47150,
+   "name": "CanadaFiresD",
+   "n_rows": 1491,
    "target_cols": [
-    "Mean_G",
-    "Mean_R",
-    "Mean_NIR"
+    "median_3m_g",
+    "median_3m_r",
+    "median_3m_b",
+    "median_3m_n"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_3m_b",
+    "mean_3m_g",
+    "mean_3m_n",
+    "mean_3m_r",
+    "mean_5m_b",
+    "mean_5m_g",
+    "mean_5m_n",
+    "mean_5m_r"
    ]
   },
   {
-   "openml_id": 41091,
-   "name": "spellman_yeast",
-   "n_rows": 6178,
+   "openml_id": 46337,
+   "name": "Conso_RTE",
+   "n_rows": 105168,
    "target_cols": [
-    "cdc15_30",
-    "cdc15_50",
-    "cdc15_10",
-    "cdc15_70",
-    "cdc15_90"
+    "temp",
+    "tempMin",
+    "Load",
+    "tempMax",
+    "wind"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Unnamed: 0",
+    "temp_liss_faible",
+    "temp_liss_fort"
+   ]
+  },
+  {
+   "openml_id": 46211,
+   "name": "ETTm1",
+   "n_rows": 69680,
+   "target_cols": [
+    "value_0",
+    "value_2",
+    "value_1",
+    "value_3",
+    "value_5",
+    "value_4"
    ],
    "feature_cols": null,
    "drop_cols": []
+  },
+  {
+   "openml_id": 43843,
+   "name": "Eighty-years-of-Canadian-climate-data",
+   "n_rows": 28396,
+   "target_cols": [
+    "MEAN_TEMPERATURE_MONTREAL",
+    "MEAN_TEMPERATURE_OTTAWA",
+    "MEAN_TEMPERATURE_HALIFAX",
+    "MEAN_TEMPERATURE_MONCTON",
+    "MEAN_TEMPERATURE_QUEBEC",
+    "MEAN_TEMPERATURE_CALGARY",
+    "MEAN_TEMPERATURE_EDMONTON",
+    "MEAN_TEMPERATURE_SASKATOON",
+    "MEAN_TEMPERATURE_STJOHNS",
+    "MEAN_TEMPERATURE_TORONTO",
+    "MEAN_TEMPERATURE_VANCOUVER",
+    "MEAN_TEMPERATURE_WHITEHORSE",
+    "MEAN_TEMPERATURE_WINNIPEG"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "LOCAL_DATE"
+   ]
+  },
+  {
+   "openml_id": 43602,
+   "name": "FEER-Dataset",
+   "n_rows": 190967,
+   "target_cols": [
+    "P_e2",
+    "P_e4",
+    "P_e1",
+    "P_e3",
+    "P_m1",
+    "P_m2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46511,
+   "name": "Loan_Type",
+   "n_rows": 9217,
+   "target_cols": [
+    "Disbursed_Amount_(US$)",
+    "Original_Principal_Amount_(US$)",
+    "Repaid_to_IBRD_(US$)"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46944,
+   "name": "Mobile_Price",
+   "n_rows": 2000,
+   "target_cols": [
+    "px_height",
+    "px_width"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42821,
+   "name": "NASA_PHM2008",
+   "n_rows": 45918,
+   "target_cols": [
+    "sensor_13",
+    "sensor_8",
+    "sensor_4",
+    "sensor_9",
+    "sensor_11",
+    "sensor_14",
+    "sensor_15",
+    "sensor_2",
+    "sensor_3",
+    "sensor_7",
+    "sensor_12",
+    "sensor_20",
+    "sensor_21"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "sensor_1",
+    "sensor_10",
+    "sensor_16",
+    "sensor_17",
+    "sensor_18",
+    "sensor_19",
+    "sensor_5",
+    "sensor_6"
+   ]
+  },
+  {
+   "openml_id": 43652,
+   "name": "SDSS-16",
+   "n_rows": 732977,
+   "target_cols": [
+    "g_magnitude",
+    "r_magnitude",
+    "u_magnitude"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "class",
+    "fiber_id",
+    "i_magnitude",
+    "obs_run_number",
+    "plate_id",
+    "rerun_number",
+    "spectro_object_id",
+    "z_magnitude"
+   ]
+  },
+  {
+   "openml_id": 46630,
+   "name": "Skin_Cancer_PAD-UFES-20",
+   "n_rows": 1494,
+   "target_cols": [
+    "diameter_1",
+    "diameter_2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42333,
+   "name": "SoilHydroDB",
+   "n_rows": 1094,
+   "target_cols": [
+    "w6clod",
+    "w10cld",
+    "w3cld",
+    "w15l2",
+    "db_od"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "hzn_depth",
+    "ph_kcl",
+    "sand_tot_psa",
+    "w15bfm",
+    "wrd_ws13"
+   ]
+  },
+  {
+   "openml_id": 4563,
+   "name": "SpokenArabicDigit",
+   "n_rows": 174126,
+   "target_cols": [
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V1",
+    "V2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43669,
+   "name": "Stars-from-Gaia-DR2-and-RAVE-DR5",
+   "n_rows": 253040,
+   "target_cols": [
+    "r_fe",
+    "r_si",
+    "r_mg"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "r_metallicity",
+    "r_quality",
+    "source_id"
+   ]
+  },
+  {
+   "openml_id": 45081,
+   "name": "Tallo",
+   "n_rows": 307014,
+   "target_cols": [
+    "height_m",
+    "stem_diameter_cm"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "AT_AI",
+    "crown_radius_outlier",
+    "height_outlier",
+    "reference_id",
+    "tree_id"
+   ]
+  },
+  {
+   "openml_id": 47111,
+   "name": "Weather-and-Air-Pollution-Kiev",
+   "n_rows": 33863,
+   "target_cols": [
+    "LevelPM2",
+    "LevelPM10",
+    "LevelCO",
+    "LevelNO2",
+    "LevelNO",
+    "LevelO3",
+    "LevelSO2",
+    "LevelNH3"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "AirQuality",
+    "LocalDate",
+    "UtcTime"
+   ]
+  },
+  {
+   "openml_id": 42726,
+   "name": "abalone",
+   "n_rows": 4177,
+   "target_cols": [
+    "Diameter",
+    "Shucked_weight",
+    "Length",
+    "Height",
+    "Shell_weight"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Whole_weight"
+   ]
+  },
+  {
+   "openml_id": "air",
+   "name": "air",
+   "n_rows": 10000,
+   "target_cols": [
+    "max_PM2.5",
+    "max_NO2",
+    "max_O3",
+    "max_PM10",
+    "max_CO",
+    "max_SO2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46880,
+   "name": "air-quality-and-pollution-assessment",
+   "n_rows": 5000,
+   "target_cols": [
+    "PM10",
+    "PM2.5",
+    "NO2",
+    "SO2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46283,
+   "name": "appliances_energy_prediction",
+   "n_rows": 19735,
+   "target_cols": [
+    "RH_7",
+    "RH_8",
+    "RH_1",
+    "RH_3",
+    "RH_4",
+    "RH_2",
+    "RH_5",
+    "RH_6",
+    "RH_9"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "rv1",
+    "rv2"
+   ]
   },
   {
    "openml_id": 41475,
@@ -174,11 +379,9 @@
    "drop_cols": []
   },
   {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 296,
-   "name": "atp7d",
    "openml_id": 41476,
+   "name": "atp7d",
+   "n_rows": 296,
    "target_cols": [
     "LBL_aCOminpA_bt7d_000",
     "LBL_aUAminpA_bt7d_000",
@@ -186,7 +389,289 @@
     "LBL_aDLminpA_bt7d_000",
     "LBL_aFLminpA_bt7d_000",
     "LBL_ALLminp0_bt7d_000"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42897,
+   "name": "bias-correction",
+   "n_rows": 7665,
+   "target_cols": [
+    "Next_Tmin",
+    "Present_Tmin",
+    "Next_Tmax",
+    "Present_Tmax"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Date"
    ]
+  },
+  {
+   "openml_id": "bio",
+   "name": "bio",
+   "n_rows": 45730,
+   "target_cols": [
+    "F7",
+    "F9"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": "calcofi",
+   "name": "calcofi",
+   "n_rows": 814247,
+   "target_cols": [
+    "Salnty",
+    "T_degC"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45029,
+   "name": "cpu_act",
+   "n_rows": 8192,
+   "target_cols": [
+    "sread",
+    "swrite",
+    "lread",
+    "lwrite",
+    "scall",
+    "fork",
+    "exec",
+    "rchar",
+    "wchar"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "pgout",
+    "ppgout"
+   ]
+  },
+  {
+   "openml_id": 46313,
+   "name": "data",
+   "n_rows": 130171,
+   "target_cols": [
+    "Pressure3pm",
+    "Pressure9am",
+    "MinTemp",
+    "MaxTemp",
+    "Humidity9am",
+    "Humidity3pm",
+    "WindSpeed9am",
+    "WindSpeed3pm"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "RainTomorrow",
+    "Temp3pm",
+    "Temp9am"
+   ]
+  },
+  {
+   "openml_id": 23516,
+   "name": "debutanizer",
+   "n_rows": 2394,
+   "target_cols": [
+    "u2",
+    "u3",
+    "u1",
+    "u4",
+    "u5",
+    "u6"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42105,
+   "name": "default_credit_card_p",
+   "n_rows": 30000,
+   "target_cols": [
+    "BILL_AMT5",
+    "BILL_AMT6",
+    "BILL_AMT1",
+    "BILL_AMT2",
+    "BILL_AMT3",
+    "BILL_AMT4"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "ID",
+    "PAY_AMT1",
+    "PAY_AMT2",
+    "PAY_AMT3",
+    "PAY_AMT4",
+    "PAY_AMT5",
+    "PAY_AMT6",
+    "_PartInd_",
+    "_dmIndex_"
+   ]
+  },
+  {
+   "openml_id": 42495,
+   "name": "delays_zurich_transport",
+   "n_rows": 27327,
+   "target_cols": [
+    "dew_point",
+    "temp",
+    "delay"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43945,
+   "name": "electricity",
+   "n_rows": 38474,
+   "target_cols": [
+    "nswdemand",
+    "vicdemand",
+    "nswprice",
+    "vicprice"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41478,
+   "name": "enb",
+   "n_rows": 768,
+   "target_cols": [
+    "Y1",
+    "Y2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46161,
+   "name": "flchain",
+   "n_rows": 4000,
+   "target_cols": [
+    "kappa",
+    "lambda"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "flc.grp"
+   ]
+  },
+  {
+   "openml_id": 43009,
+   "name": "hcv-data",
+   "n_rows": 614,
+   "target_cols": [
+    "ALT",
+    "AST",
+    "GGT"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Category",
+    "Unnamed: 0"
+   ]
+  },
+  {
+   "openml_id": 42107,
+   "name": "hmeq_p",
+   "n_rows": 5357,
+   "target_cols": [
+    "MORTDUE",
+    "VALUE"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42079,
+   "name": "house_sales",
+   "n_rows": 21613,
+   "target_cols": [
+    "sqft_lot",
+    "sqft_lot15",
+    "sqft_living",
+    "sqft_above",
+    "sqft_living15"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 563,
+   "name": "kdd_el_nino-small",
+   "n_rows": 639,
+   "target_cols": [
+    "air_temp",
+    "s_s_temp",
+    "humidity"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "buoy",
+    "day"
+   ]
+  },
+  {
+   "openml_id": 42454,
+   "name": "mlr_knn_rng",
+   "n_rows": 111753,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45078,
+   "name": "nomao",
+   "n_rows": 34465,
+   "target_cols": [
+    "V3",
+    "V4",
+    "V2",
+    "V6",
+    "V5"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41483,
+   "name": "rf1",
+   "n_rows": 9125,
+   "target_cols": [
+    "CHSI2_48H__0",
+    "NASI2_48H__0",
+    "EADM7_48H__0",
+    "SCLM7_48H__0",
+    "CLKM7_48H__0",
+    "VALI2_48H__0",
+    "NAPM7_48H__0",
+    "DLDI4_48H__0"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 43873,
+   "name": "sarcos",
+   "n_rows": 44484,
+   "target_cols": [
+    "V3",
+    "V6",
+    "V4",
+    "V1",
+    "V5",
+    "V2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
   },
   {
    "openml_id": 41485,
@@ -239,6 +724,159 @@
    "drop_cols": []
   },
   {
+   "openml_id": 41490,
+   "name": "slump",
+   "n_rows": 103,
+   "target_cols": [
+    "SLUMP_cm",
+    "FLOW_cm",
+    "Compressive_Strength_Mpa"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41091,
+   "name": "spellman_yeast",
+   "n_rows": 5271,
+   "target_cols": [
+    "cdc15_30",
+    "cdc15_50",
+    "cdc15_10",
+    "cdc15_70",
+    "cdc15_90"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": "taxi",
+   "name": "taxi",
+   "n_rows": 61286,
+   "target_cols": [
+    "dropoff_loc_lat",
+    "dropoff_loc_lonor"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 1497,
+   "name": "wall-robot-navigation",
+   "n_rows": 5456,
+   "target_cols": [
+    "V4",
+    "V5",
+    "V1",
+    "V2",
+    "V3",
+    "V6",
+    "V7",
+    "V8",
+    "V9",
+    "V10",
+    "V11",
+    "V12"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 565,
+   "name": "water-treatment",
+   "n_rows": 515,
+   "target_cols": [
+    "SSV-E",
+    "SSV-P",
+    "SSV-D",
+    "SED-E",
+    "SED-P",
+    "SSV-S"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 46263,
+   "name": "weather_and_campsite_germany",
+   "n_rows": 4191,
+   "target_cols": [
+    "mean_evapo_p",
+    "mean_evapo_r",
+    "mean_air_temp_max",
+    "mean_air_temp_min",
+    "mean_drought_index"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "mean_air_temp_mean"
+   ]
+  },
+  {
+   "openml_id": 42368,
+   "name": "weather_ankara",
+   "n_rows": 321,
+   "target_cols": [
+    "Dewpoint",
+    "Min_temperature",
+    "Max_temperature"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Max_wind_speed",
+    "Mean_temperature"
+   ]
+  },
+  {
+   "openml_id": 42369,
+   "name": "weather_izmir",
+   "n_rows": 1461,
+   "target_cols": [
+    "Min_temperature",
+    "Dewpoint",
+    "Max_temperature",
+    "Visibility"
+   ],
+   "feature_cols": null,
+   "drop_cols": [
+    "Max_wind_speed",
+    "Mean_temperature"
+   ]
+  },
+  {
+   "openml_id": 40983,
+   "name": "wilt",
+   "n_rows": 4839,
+   "target_cols": [
+    "Mean_G",
+    "Mean_R",
+    "Mean_NIR"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 503,
+   "name": "wind",
+   "n_rows": 6574,
+   "target_cols": [
+    "CLA",
+    "CLO",
+    "KIL",
+    "SHA",
+    "BIR",
+    "MUL",
+    "RPT",
+    "VAL",
+    "ROS",
+    "DUB",
+    "BEL",
+    "MAL"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
    "openml_id": 41491,
    "name": "wq",
    "n_rows": 1060,
@@ -258,646 +896,8 @@
    ],
    "feature_cols": null,
    "drop_cols": [
-    "o2sat",
-    "k2cr2o7"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 404,
-   "name": "youtube",
-   "openml_id": 41492,
-   "target_cols": [
-    "Agr",
-    "Emot",
-    "Extr",
-    "Cons",
-    "Open"
-   ]
-  },
-  {
-   "openml_id": 42079,
-   "name": "house_sales",
-   "n_rows": 21613,
-   "target_cols": [
-    "sqft_lot",
-    "sqft_lot15",
-    "sqft_living",
-    "sqft_above",
-    "sqft_living15"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": 42105,
-   "name": "default_credit_card_p",
-   "n_rows": 30000,
-   "target_cols": [
-    "BILL_AMT5",
-    "BILL_AMT6",
-    "BILL_AMT1",
-    "BILL_AMT2",
-    "BILL_AMT3",
-    "BILL_AMT4"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "ID",
-    "_dmIndex_",
-    "_PartInd_",
-    "PAY_AMT1",
-    "PAY_AMT2",
-    "PAY_AMT3",
-    "PAY_AMT4",
-    "PAY_AMT5",
-    "PAY_AMT6"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 5960,
-   "name": "hmeq_p",
-   "openml_id": 42107,
-   "target_cols": [
-    "MORTDUE",
-    "VALUE"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 3615,
-   "name": "article_influence",
-   "openml_id": 42123,
-   "target_cols": [
-    "citation_count_sum",
-    "paper_count_sum"
-   ]
-  },
-  {
-   "openml_id": 42333,
-   "name": "SoilHydroDB",
-   "n_rows": 155649,
-   "target_cols": [
-    "w6clod",
-    "w10cld",
-    "w3cld",
-    "w15l2",
-    "db_od"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "sand_tot_psa",
-    "hzn_depth",
-    "wrd_ws13",
-    "w15bfm",
-    "ph_kcl"
-   ]
-  },
-  {
-   "drop_cols": [
-    "Mean_temperature",
-    "Max_wind_speed"
-   ],
-   "feature_cols": null,
-   "n_rows": 321,
-   "name": "weather_ankara",
-   "openml_id": 42368,
-   "target_cols": [
-    "Dewpoint",
-    "Min_temperature",
-    "Max_temperature"
-   ]
-  },
-  {
-   "openml_id": 42369,
-   "name": "weather_izmir",
-   "n_rows": 1461,
-   "target_cols": [
-    "Min_temperature",
-    "Dewpoint",
-    "Max_temperature",
-    "Visibility"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "Mean_temperature",
-    "Max_wind_speed"
-   ]
-  },
-  {
-   "openml_id": 42454,
-   "name": "mlr_knn_rng",
-   "n_rows": 111753,
-   "target_cols": [
-    "perf.mmce",
-    "perf.logloss"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 27327,
-   "name": "delays_zurich_transport",
-   "openml_id": 42495,
-   "target_cols": [
-    "dew_point",
-    "temp",
-    "delay"
-   ]
-  },
-  {
-   "drop_cols": [
-    "Whole_weight"
-   ],
-   "feature_cols": null,
-   "n_rows": 4177,
-   "name": "abalone",
-   "openml_id": 42726,
-   "target_cols": [
-    "Diameter",
-    "Shucked_weight",
-    "Length",
-    "Height",
-    "Shell_weight"
-   ]
-  },
-  {
-   "drop_cols": [
-    "sensor_1",
-    "sensor_5",
-    "sensor_6",
-    "sensor_10",
-    "sensor_16",
-    "sensor_17",
-    "sensor_18",
-    "sensor_19"
-   ],
-   "feature_cols": null,
-   "n_rows": 45918,
-   "name": "NASA_PHM2008",
-   "openml_id": 42821,
-   "target_cols": [
-    "sensor_13",
-    "sensor_8",
-    "sensor_4",
-    "sensor_9",
-    "sensor_11",
-    "sensor_14",
-    "sensor_15",
-    "sensor_2",
-    "sensor_3",
-    "sensor_7",
-    "sensor_12",
-    "sensor_20",
-    "sensor_21"
-   ]
-  },
-  {
-   "drop_cols": [
-    "Date"
-   ],
-   "feature_cols": null,
-   "n_rows": 7752,
-   "name": "bias-correction",
-   "openml_id": 42897,
-   "target_cols": [
-    "Next_Tmin",
-    "Present_Tmin",
-    "Next_Tmax",
-    "Present_Tmax"
-   ]
-  },
-  {
-   "drop_cols": [
-    "Category",
-    "Unnamed: 0"
-   ],
-   "feature_cols": null,
-   "n_rows": 615,
-   "name": "hcv-data",
-   "openml_id": 43009,
-   "target_cols": [
-    "ALT",
-    "AST",
-    "GGT"
-   ]
-  },
-  {
-   "openml_id": 43602,
-   "name": "FEER-Dataset",
-   "n_rows": 190967,
-   "target_cols": [
-    "P_e2",
-    "P_e4",
-    "P_e1",
-    "P_e3",
-    "P_m1",
-    "P_m2"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 13729,
-   "name": "Plz-predict-these-disasters-to-save-lives-around.",
-   "openml_id": 43642,
-   "target_cols": [
-    "magNst",
-    "nst"
-   ]
-  },
-  {
-   "drop_cols": [
-    "i_magnitude",
-    "z_magnitude",
-    "class",
-    "plate_id",
-    "fiber_id",
-    "spectro_object_id",
-    "obs_run_number",
-    "rerun_number"
-   ],
-   "feature_cols": null,
-   "n_rows": 732977,
-   "name": "SDSS-16",
-   "openml_id": 43652,
-   "target_cols": [
-    "g_magnitude",
-    "r_magnitude",
-    "u_magnitude"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 1408,
-   "name": "NBA-PLAYERS--2016-2019",
-   "openml_id": 43653,
-   "target_cols": [
-    "FGA",
-    "X2PA",
-    "MP"
-   ]
-  },
-  {
-   "drop_cols": [
-    "r_metallicity",
-    "source_id",
-    "r_quality"
-   ],
-   "feature_cols": null,
-   "n_rows": 253040,
-   "name": "Stars-from-Gaia-DR2-and-RAVE-DR5",
-   "openml_id": 43669,
-   "target_cols": [
-    "r_fe",
-    "r_si",
-    "r_mg"
-   ]
-  },
-  {
-   "openml_id": 43843,
-   "name": "Eighty-years-of-Canadian-climate-data",
-   "n_rows": 29221,
-   "target_cols": [
-    "MEAN_TEMPERATURE_MONTREAL",
-    "MEAN_TEMPERATURE_OTTAWA",
-    "MEAN_TEMPERATURE_HALIFAX",
-    "MEAN_TEMPERATURE_MONCTON",
-    "MEAN_TEMPERATURE_QUEBEC",
-    "MEAN_TEMPERATURE_CALGARY",
-    "MEAN_TEMPERATURE_EDMONTON",
-    "MEAN_TEMPERATURE_SASKATOON",
-    "MEAN_TEMPERATURE_STJOHNS",
-    "MEAN_TEMPERATURE_TORONTO",
-    "MEAN_TEMPERATURE_VANCOUVER",
-    "MEAN_TEMPERATURE_WHITEHORSE",
-    "MEAN_TEMPERATURE_WINNIPEG"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "LOCAL_DATE"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 44484,
-   "name": "sarcos",
-   "openml_id": 43873,
-   "target_cols": [
-    "V3",
-    "V6",
-    "V4",
-    "V1",
-    "V5",
-    "V2"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 38474,
-   "name": "electricity",
-   "openml_id": 43945,
-   "target_cols": [
-    "nswdemand",
-    "vicdemand",
-    "nswprice",
-    "vicprice"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 13272,
-   "name": "default-of-credit-card-clients",
-   "openml_id": 45016,
-   "target_cols": [
-    "x12",
-    "x13"
-   ]
-  },
-  {
-   "drop_cols": [
-    "pgout",
-    "ppgout"
-   ],
-   "feature_cols": null,
-   "n_rows": 8192,
-   "name": "cpu_act",
-   "openml_id": 45029,
-   "target_cols": [
-    "sread",
-    "swrite",
-    "lread",
-    "lwrite",
-    "scall",
-    "fork",
-    "exec",
-    "rchar",
-    "wchar"
-   ]
-  },
-  {
-   "openml_id": 45078,
-   "name": "nomao",
-   "n_rows": 34465,
-   "target_cols": [
-    "V3",
-    "V4",
-    "V2",
-    "V6",
-    "V5"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [
-    "height_outlier",
-    "crown_radius_outlier",
-    "tree_id",
-    "reference_id",
-    "AT_AI"
-   ],
-   "feature_cols": null,
-   "n_rows": 307014,
-   "name": "Tallo",
-   "openml_id": 45081,
-   "target_cols": [
-    "height_m",
-    "stem_diameter_cm",
-    "crown_radius_m"
-   ]
-  },
-  {
-   "openml_id": 46123,
-   "name": "Pedestrian-Counting-System-Melbourne",
-   "n_rows": 132209,
-   "target_cols": [
-    "Flinders Ln - Degraves St (North)",
-    "Flinders Ln - Degraves St (Crossing)",
-    "Flinders Ln - Degraves St (South)"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "drop_cols": [
-    "flc.grp"
-   ],
-   "feature_cols": null,
-   "n_rows": 4000,
-   "name": "flchain",
-   "openml_id": 46161,
-   "target_cols": [
-    "kappa",
-    "lambda"
-   ]
-  },
-  {
-   "openml_id": 46211,
-   "name": "ETTm1",
-   "n_rows": 69680,
-   "target_cols": [
-    "value_0",
-    "value_2",
-    "value_1",
-    "value_3",
-    "value_5",
-    "value_4"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": 46241,
-   "name": "Pedestrian-Counting-System-Melbourne-preprocessed",
-   "n_rows": 43824,
-   "target_cols": [
-    "value_0",
-    "value_3",
-    "value_1",
-    "value_2",
-    "value_4",
-    "value_5"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": 46263,
-   "name": "weather_and_campsite_germany",
-   "n_rows": 4255,
-   "target_cols": [
-    "mean_evapo_p",
-    "mean_evapo_r",
-    "mean_air_temp_max",
-    "mean_air_temp_min",
-    "mean_drought_index"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "mean_air_temp_mean"
-   ]
-  },
-  {
-   "openml_id": 46283,
-   "name": "appliances_energy_prediction",
-   "n_rows": 19735,
-   "target_cols": [
-    "RH_7",
-    "RH_8",
-    "RH_1",
-    "RH_3",
-    "RH_4",
-    "RH_2",
-    "RH_5",
-    "RH_6",
-    "RH_9"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "rv1",
-    "rv2"
-   ]
-  },
-  {
-   "drop_cols": [
-    "Temp9am",
-    "Temp3pm",
-    "RainTomorrow"
-   ],
-   "feature_cols": null,
-   "n_rows": 145460,
-   "name": "data",
-   "openml_id": 46313,
-   "target_cols": [
-    "Pressure3pm",
-    "Pressure9am",
-    "MinTemp",
-    "MaxTemp",
-    "Humidity9am",
-    "Humidity3pm",
-    "WindSpeed9am",
-    "WindSpeed3pm"
-   ]
-  },
-  {
-   "drop_cols": [
-    "temp_liss_faible",
-    "temp_liss_fort",
-    "Unnamed: 0"
-   ],
-   "feature_cols": null,
-   "n_rows": 105168,
-   "name": "Conso_RTE",
-   "openml_id": 46337,
-   "target_cols": [
-    "temp",
-    "tempMin",
-    "Load",
-    "tempMax",
-    "wind"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 9217,
-   "name": "Loan_Type",
-   "openml_id": 46511,
-   "target_cols": [
-    "Disbursed_Amount_(US$)",
-    "Original_Principal_Amount_(US$)",
-    "Repaid_to_IBRD_(US$)"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 2298,
-   "name": "Skin_Cancer_PAD-UFES-20",
-   "openml_id": 46630,
-   "target_cols": [
-    "diameter_1",
-    "diameter_2"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 5000,
-   "name": "air-quality-and-pollution-assessment",
-   "openml_id": 46880,
-   "target_cols": [
-    "PM10",
-    "PM2.5",
-    "NO2",
-    "SO2"
-   ]
-  },
-  {
-   "drop_cols": [],
-   "feature_cols": null,
-   "n_rows": 2000,
-   "name": "Mobile_Price",
-   "openml_id": 46944,
-   "target_cols": [
-    "px_height",
-    "px_width"
-   ]
-  },
-  {
-   "openml_id": 47111,
-   "name": "Weather-and-Air-Pollution-Kiev",
-   "n_rows": 33863,
-   "target_cols": [
-    "LevelPM2",
-    "LevelPM10",
-    "LevelCO",
-    "LevelNO2",
-    "LevelNO",
-    "LevelO3",
-    "LevelSO2",
-    "LevelNH3"
-   ],
-   "feature_cols": null,
-   "drop_cols": [
-    "UtcTime",
-    "LocalDate",
-    "AirQuality"
-   ]
-  },
-  {
-   "drop_cols": [
-    "mean_3m_b",
-    "mean_3m_g",
-    "mean_3m_n",
-    "mean_3m_r",
-    "mean_5m_b",
-    "mean_5m_g",
-    "mean_5m_n",
-    "mean_5m_r"
-   ],
-   "feature_cols": null,
-   "n_rows": 1491,
-   "name": "CanadaFiresD",
-   "openml_id": 47150,
-   "target_cols": [
-    "median_3m_g",
-    "median_3m_r",
-    "median_3m_b",
-    "median_3m_n"
+    "k2cr2o7",
+    "o2sat"
    ]
   }
  ]

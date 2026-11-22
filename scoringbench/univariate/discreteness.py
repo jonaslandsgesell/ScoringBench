@@ -60,6 +60,7 @@ import numpy as np
 MIN_UNIQUE = 20            # n_unique <= this -> discrete (few-support / ordinal)
 ECF_TOL = 1e-2             # lattice confirmed if ecf_peak >= 1 - ECF_TOL
 LATTICE_UNIQUE_RATIO = 0.10  # lattice branch also needs frac_unique <= this
+LATTICE_MAX_UNIQUE = 100   # lattice branch requires k <= this (fine grids with k > 100 are continuous)
 ATOM_MASS_MAX = 0.10       # a single value holding >= this share of mass -> discrete
 
 # ---------------------------------------------------------------------------
@@ -86,6 +87,11 @@ DISCRETE_OVERRIDES: dict[str, bool] = {
     "OnlineNewsPopularity": True,
     # Integer 0-255: an 8-bit quantized sensor reading (unit lattice, ecf_peak=1);
     "Laser": True,
+    # Dermatological lesion diameters in millimeters; physical length is continuous
+    "Skin_Cancer_PAD-UFES-20": False,
+    "Skin_Cancer_PAD-UFES-20_d2": False,
+    "Skin_Cancer_PAD-UFES-20_d3": False,
+    "Skin_Cancer_PAD-UFES-20_d5": False,
 }
 
 
@@ -148,6 +154,7 @@ def target_discreteness(
     min_unique: int = MIN_UNIQUE,
     ecf_tol: float = ECF_TOL,
     lattice_unique_ratio: float = LATTICE_UNIQUE_RATIO,
+    lattice_max_unique: int = LATTICE_MAX_UNIQUE,
     atom_mass_max: float = ATOM_MASS_MAX,
 ) -> dict:
     """Decide whether target ``y`` is discrete (density rules should be skipped).
@@ -207,7 +214,7 @@ def target_discreteness(
 
         if k <= min_unique:
             rule = "few_unique"
-        elif ecf_peak >= 1.0 - ecf_tol and frac_unique <= lattice_unique_ratio:
+        elif ecf_peak >= 1.0 - ecf_tol and frac_unique <= lattice_unique_ratio and k <= lattice_max_unique:
             rule = "lattice"
         elif max_atom >= atom_mass_max:
             rule = "atom_mass"

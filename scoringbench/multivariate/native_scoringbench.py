@@ -14,7 +14,7 @@ next to this module). Each entry was curated to have a numeric multi-target bloc
 measured joint-vs-independent gap (a chained model beats a product-of-marginals
 model), but the benchmark does not re-read that provenance: only the fields it
 actually uses are kept in the manifest (``openml_id``, ``name``, ``target_cols``,
-``feature_cols``, ``drop_cols``, ``n_rows``). Less info shipped, less to go stale.
+``feature_cols``, ``drop_cols``, ``n_rows``). 
 
 Target ordering
 ---------------
@@ -35,8 +35,12 @@ from . import config as cfg
 
 SOURCE_NAME = "scoringbench"
 
-#: Curated manifest (see module docstring for the bar an entry must clear).
+#: Curated manifest: 55 dependency-screened multi-target datasets.
 MANIFEST_PATH = Path(__file__).with_name("multivariate_datasets.json")
+
+#: Variogram-score screened manifest (preserved for comparison).
+SOURCE_NAME_VS = "variogram_screened"
+VS_MANIFEST_PATH = Path(__file__).with_name("vs_screened_multivariate_datasets.json")
 
 #: Rows with a missing value in any *used* target are dropped (rf1/rf2/osales
 #: carry target NaNs); remaining feature NaNs are median-imputed, matching the
@@ -60,8 +64,9 @@ def load_manifest(path: str | Path | None = None) -> list[dict[str, Any]]:
     return list(entries)
 
 
-def enumerate_native_scoringbench(target_dim: int, sample_size: int
-                                  ) -> list[dict[str, Any]]:
+def enumerate_native_scoringbench(target_dim: int, sample_size: int,
+                                  manifest_path: str | Path | None = None,
+                                  source_name: str = SOURCE_NAME) -> list[dict[str, Any]]:
     """Stable-ordered configs for every manifest entry with enough targets.
 
     ``target_dim`` selects the leading ``target_dim`` columns of each entry's
@@ -70,22 +75,38 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int
     given ``target_dim`` only contains datasets that genuinely have that many
     jointly-measured continuous targets.
 
+    ``manifest_path`` selects which data source to read (defaults to the curated
+    :data:`MANIFEST_PATH`); the CI-ablation source passes
+    :data:`CI_MANIFEST_PATH`. Any ``screen`` block on an entry is passed through
+    unchanged so the runner can record the conditional-dependence decision
+    alongside each result.
+
     Ordering is by OpenML id so ``--dataset_index`` (SLURM arrays) maps
     deterministically regardless of manifest write order.
     """
     d = int(target_dim)
     n = int(sample_size)
     configs: list[dict[str, Any]] = []
-    for entry in sorted(load_manifest(), key=lambda e: int(e["openml_id"])):
+    def _sort_key(e):
+        val = e.get("openml_id")
+        try:
+            return (0, int(val))
+        except (ValueError, TypeError):
+            return (1, str(val or e.get("name", "")))
+
+    for entry in sorted(load_manifest(manifest_path), key=_sort_key):
         targets = list(entry.get("target_cols") or [])
         if len(targets) < d:
             continue
         used = targets[:d]
+        is_openml = str(entry.get("openml_id", "")).isdigit()
+        ds_id = int(entry["openml_id"]) if is_openml else entry.get("openml_id")
+        src = entry.get("source") or (source_name if is_openml else "dheur")
         configs.append({
             "name": f"{entry['name']}_d{d}",
-            "id": int(entry["openml_id"]),
-            "source": SOURCE_NAME,
-            "openml_id": int(entry["openml_id"]),
+            "id": ds_id,
+            "source": src,
+            "openml_id": ds_id,
             "openml_name": entry["name"],
             "target_cols": used,
             "all_target_cols": targets,
@@ -96,10 +117,20 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int
             # reproduce, because the aggregate hands the chained arm a target it
             # has not sampled yet.
             "drop_cols": list(entry.get("drop_cols") or []),
+            # Conditional-dependence screen provenance (CI source only; absent on
+            # the curated source). Carried through for result annotation.
+            "screen": entry.get("screen"),
             "target_dim": d,
             "n_samples": n,
         })
     return configs
+
+
+def enumerate_vs_scoringbench(target_dim: int, sample_size: int) -> list[dict[str, Any]]:
+    """Enumerate the variogram-score screened manifest."""
+    return enumerate_native_scoringbench(target_dim, sample_size,
+                                         manifest_path=VS_MANIFEST_PATH,
+                                         source_name=SOURCE_NAME_VS)
 
 
 def _fetch(openml_id: int) -> pd.DataFrame:
@@ -126,6 +157,11 @@ def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None =
     when the file no longer contains the manifest's target columns or too few
     rows survive target-NaN removal.
     """
+    if ds_config.get("source") == "dheur" or not str(ds_config.get("openml_id", "")).isdigit():
+        from . import dheur_targets
+        dheur_cfg = dict(ds_config, dataset=ds_config.get("openml_name", ds_config.get("name", "").rsplit("_d", 1)[0]))
+        return dheur_targets.load_dheur(dheur_cfg, target_dim=target_dim)
+
     d = int(target_dim) if target_dim is not None else int(ds_config["target_dim"])
     targets = list(ds_config["all_target_cols"])[:d]
     df = _fetch(ds_config["openml_id"])
@@ -138,6 +174,10 @@ def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None =
             "OpenML has changed and the manifest needs regenerating")
 
     Y = df[targets].apply(pd.to_numeric, errors="coerce").astype(float)
+    Y.attrs["raw_target_dtypes"] = {column: str(df[column].dtype) for column in targets}
+    Y.attrs["categorical_targets"] = [column for column in targets
+        if not pd.api.types.is_numeric_dtype(df[column].dtype)
+        or pd.api.types.is_bool_dtype(df[column].dtype)]
     keep = Y.notna().all(axis=1)
     if int(keep.sum()) < 2 * cfg.N_FOLDS:
         raise ValueError(
@@ -151,7 +191,7 @@ def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None =
         # Never let a declared target leak in as a feature, even if the manifest
         # pinned one: the leading `d` targets are the label block for this run.
         cols = [c for c in feat_cols
-                if c in df.columns and c not in targets and c not in drop_cols]
+            if c in df.columns and c not in ds_config["all_target_cols"] and c not in drop_cols]
     else:
         # Drop the *whole* declared target block, not just the `d` in use, so a
         # target_dim=2 run cannot see target_3 as a feature (that would make the
@@ -163,7 +203,8 @@ def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None =
         lambda c: c if pd.api.types.is_numeric_dtype(c) else pd.to_numeric(c, errors="coerce"))
     X = X.loc[:, X.notna().any()]                      # drop all-NaN (non-coercible) columns
     X, Y = X.loc[keep], Y.loc[keep]
-    X = X.fillna(X.median(numeric_only=True)).fillna(_FEATURE_NAN_FILL)
+    if not ds_config.get("screen_protocol"):
+        X = X.fillna(X.median(numeric_only=True)).fillna(_FEATURE_NAN_FILL)
     if X.shape[1] == 0:
         raise ValueError(
             f"OpenML {ds_config['openml_id']} ({ds_config['openml_name']}): no usable "

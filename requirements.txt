@@ -7,4 +7,5 @@ pytest
 pyarrow
 autorank
 openml
+causal-learn>=0.1.4.3,<0.2
 pyvinecopulib>=1.0.0  # synthetic multivariate source: explicit vine-copula construction

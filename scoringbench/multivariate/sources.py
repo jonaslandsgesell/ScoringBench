@@ -1,26 +1,21 @@
 """Dataset-source registry for the multivariate ScoringBench.
 
-A *source* is a way of producing multivariate ``(X, Y)`` regression problems.
-Two are provided:
+Three sources are provided:
 
-* ``"synthetic"`` — nonlinear means plus feature-independent residuals from
-    randomized simplified R-vines with standard-normal margins (see
-  :mod:`scoringbench.multivariate.synthetic_targets`).
-* ``"scoringbench"`` — **real jointly-measured targets**: curated
-  OpenML datasets that were uploaded as multi-target regression and that a
-  measured chained-vs-independent screen shows actually need the joint model
-  (see :mod:`scoringbench.multivariate.native_scoringbench`). Nothing here is
-  constructed — the dependence is whatever the world put in the data. The
-  dataset list ships in ``multivariate_datasets.json`` next to that module.
+* ``"scoringbench"`` (default) — curated multi-target datasets from OpenML and
+  Dheur et al. (2025) passing model-free KCI and residual distance correlation
+  screening. Defined in ``multivariate_datasets.json``.
+* ``"variogram_screened"`` — 55 OpenML datasets screened with the
+  variogram-score gain; preserved in ``vs_screened_multivariate_datasets.json``
+  for comparison.
+* ``"synthetic"`` — nonlinear conditional means plus feature-independent,
+  jointly sampled R-vine residuals (see :mod:`scoringbench.multivariate.synthetic_targets`).
 
 Design (open-closed)
 --------------------
 The runner and the front script consume a :class:`Source` and never branch on
 the source name: a source exposes exactly what they need — a way to *enumerate*
-its dataset configs and a *loader* turning one config into ``(X, Y)``. Adding a
-new source means adding one :class:`Source` entry to :data:`SOURCES`; no
-runner / front-script edits are required. This registry is the *only* new
-abstraction introduced for multi-source support — deliberately thin.
+its dataset configs and a *loader* turning one config into ``(X, Y)``.
 """
 
 from __future__ import annotations
@@ -29,8 +24,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 import pandas as pd
-
-from . import config as cfg
 
 
 @dataclass(frozen=True)
@@ -77,6 +70,11 @@ def _build_sources() -> dict[str, Source]:
     sources[_nsb.SOURCE_NAME] = Source(
         name=_nsb.SOURCE_NAME,
         enumerate_datasets=_nsb.enumerate_native_scoringbench,
+        load=_nsb.load_native_scoringbench,
+    )
+    sources[_nsb.SOURCE_NAME_VS] = Source(
+        name=_nsb.SOURCE_NAME_VS,
+        enumerate_datasets=_nsb.enumerate_vs_scoringbench,
         load=_nsb.load_native_scoringbench,
     )
     return sources
