@@ -48,9 +48,8 @@ def parse_args():
     )
     p.add_argument(
         "--source", default="scoringbench", choices=sorted(SOURCES),
-        help="Dataset source: 'scoringbench' (curated real jointly-measured "
-               "multi-target OpenML datasets) or 'synthetic' (joint random-vine "
-               "features and targets). Default: scoringbench.",
+        help="Dataset source: 'scoringbench' (55 dependency-screened multi-target datasets), "
+             "'variogram_screened' (historical VS-screened), or 'synthetic'. Default: scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,
@@ -80,7 +79,6 @@ if __name__ == "__main__":
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
-        # Encode source, d and sample size so sweeps never collide.
         output_dir = project_root / (
             f"output_multivariate_{args.source}_d{args.target_dim}_n{args.sample_size}"
         )

@@ -55,19 +55,23 @@ the column.
 
 ## Dataset sources (`--source`)
 
-The multivariate targets can come from two interchangeable **sources**, selected
-with `--source`. Both return the same `(X, Y)` contract (`Y` has columns
+The multivariate targets come from interchangeable **sources**, selected
+with `--source`. They return the same `(X, Y)` contract (`Y` has columns
 `target_0 .. target_{d-1}`, `target_0` first), so every downstream step
 (scoring, aggregation, leaderboard) is identical regardless of source.
 
-| `--source`     | How the `d` targets are built |
-| -------------- | ----------------------------- |
-| `scoringbench` | **(default)** Promote real data: take a standard 1-D regression dataset and promote the `d-1` features most correlated with the original target into extra targets (the original target becomes `target_0`). |
-| `synthetic`    | Nonlinear conditional means plus feature-independent, jointly sampled R-vine residuals (see below). |
+| `--source` | How the `d` targets are built |
+| --- | --- |
+| `scoringbench` | **Default:** 55 curated multi-target datasets from OpenML and Dheur et al. (2025) passing model-free KCI and residual distance correlation screening. |
+| `variogram_screened` | 55 OpenML datasets screened with variogram-score gain; preserved in `vs_screened_multivariate_datasets.json` for comparison. |
+| `synthetic` | Nonlinear conditional means plus feature-independent, jointly sampled R-vine residuals (see below). |
 
 ```bash
-# Real feature-promotion datasets (default)
-python run_bench_regression_multivariate.py --source scoringbench
+# Core benchmark on the 55 dependency-screened datasets (default)
+python run_bench_regression_multivariate.py --source scoringbench --target_dim 2 --sample_size 3000
+
+# Comparison on the variogram-score screened suite
+python run_bench_regression_multivariate.py --source variogram_screened --target_dim 2 --sample_size 3000
 
 # Synthetic random-vine datasets
 python run_bench_regression_multivariate.py --source synthetic
@@ -76,14 +80,12 @@ python run_bench_regression_multivariate.py --source synthetic
 The output directory name is **prefixed with the source** so runs from different
 sources never collide:
 
-```
+```text
 output_multivariate_{source}_d{d}_n{sample_size}/
-# e.g. output_multivariate_scoringbench_d3_n3000/
-#      output_multivariate_synthetic_d3_n1000/
 ```
 
-`--dataset_index` selects a single dataset out of the list that source
-enumerates (useful for SLURM array jobs).
+`--dataset_index` selects a stable candidate index (useful for SLURM arrays).
+The fixed curation holdout is excluded from every training and test fold.
 
 ## Synthetic source: randomized R-vines
 
@@ -202,7 +204,7 @@ and raw results belong to the previous datasets and must not be mixed in.
 ## Running the multivariate benchmark
 
 ```bash
-# 5-fold CV, all datasets, defaults (d=3, sample_size=3000)
+# 5-fold CV, native candidates, defaults (d=2, sample_size=3000)
 python run_bench_regression_multivariate.py
 
 # Fast smoke test (2-fold CV)
@@ -214,7 +216,7 @@ python run_bench_regression_multivariate.py --target_dim 3 --sample_size 3000
 # Run a single dataset (e.g. for SLURM array jobs)
 python run_bench_regression_multivariate.py --dataset_index 0
 
-# Pick the dataset source (real feature-promotion vs synthetic random vines)
+# Pick the dataset source (native core vs synthetic random vines)
 python run_bench_regression_multivariate.py --source synthetic
 
 # Explicit output directory (overrides the default naming)
@@ -225,12 +227,12 @@ By default the results are written to a folder whose name **encodes the source,
 the target dimension `d`, and the sample size**, so different source / `d` /
 sample-size sweeps never overwrite each other:
 
-```
-output_multivariate_{source}_d{d}_n{sample_size}/   # e.g. output_multivariate_scoringbench_d3_n3000/
+```text
+output_multivariate_{source}_kci_dcorr_scale_v1_d{d}_n{sample_size}/
 ```
 
 Raw per-dataset per-model Parquet files use the same layout as the univariate
-benchmark: `output_multivariate_{source}_d{d}_n{sample_size}/raw/{model_name}/{dataset_name}.parquet`.
+benchmark: `{output_dir}/raw/{model_name}/{dataset_name}.parquet`.
 
 ## Analyzing the multivariate results
 

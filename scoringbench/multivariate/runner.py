@@ -10,6 +10,7 @@ run_benchmark(datasets_config, model_factories, output_dir, ...) -> DataFrame
 """
 
 import gc
+import json
 import traceback
 from pathlib import Path
 from typing import Callable
@@ -22,6 +23,7 @@ from sklearn.model_selection import KFold
 from . import config as cfg
 from .cv import run_fold
 from .results import build_results_rows, save_fold_parquet
+from .screened_datasets import PROTOCOL, save_screen
 
 
 def _empty_cuda_cache() -> None:
@@ -30,6 +32,29 @@ def _empty_cuda_cache() -> None:
             torch.cuda.empty_cache()
     except Exception:
         pass
+
+
+def cv_fold_indices(n_rows: int, *, n_folds: int, repeat_seed: int, sample_size: int
+                    ) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Train/test row indices for every fold of one CV repeat.
+
+    Single source of truth for the benchmark's split protocol (shuffled KFold,
+    then train/test subsampling to the ``sample_size`` budget), shared with the
+    scale ablation so both see byte-identical folds.
+    """
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=repeat_seed)
+    train_cap = int(sample_size * (n_folds - 1) / n_folds) if sample_size else 0
+    test_cap = (sample_size // n_folds) if sample_size else 0
+    out = []
+    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_rows))):
+        if train_cap and len(train_idx) > train_cap:
+            rng_fold = np.random.default_rng(repeat_seed * 10007 + fold_idx)
+            train_idx = rng_fold.choice(train_idx, size=train_cap, replace=False)
+        if test_cap and len(test_idx) > test_cap:
+            rng_test = np.random.default_rng(repeat_seed * 10007 + fold_idx + 1)
+            test_idx = rng_test.choice(test_idx, size=test_cap, replace=False)
+        out.append((train_idx, test_idx))
+    return out
 
 
 def run_benchmark(
@@ -58,6 +83,20 @@ def run_benchmark(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if any(entry.get("screen_protocol") for entry in datasets_config):
+        run_config = dict(protocol=PROTOCOL, score_space="raw", n_folds=n_folds,
+                          n_repeats_cv=n_repeats_cv, seed=seed, sample_size=sample_size,
+                          target_dim=target_dim, n_draws=cfg.N_DRAWS,
+                          selections=sorted({entry.get("selection", "selected") for entry in datasets_config}))
+        config_path = output_dir / "protocol.json"
+        if config_path.exists():
+            if json.loads(config_path.read_text()) != run_config:
+                raise ValueError("Output directory belongs to a different benchmark protocol")
+        elif any((output_dir / "raw").rglob("*.parquet")):
+            raise ValueError("Unversioned results cannot be resumed with screened datasets")
+        else:
+            config_path.write_text(json.dumps(run_config, indent=2) + "\n")
+
     all_rows: list[dict] = []
 
     total_folds = n_repeats_cv * n_folds
@@ -80,6 +119,8 @@ def run_benchmark(
             except ValueError as e:
                 print(f"⊘ {name} SKIPPED (loader rejected d={target_dim}): {e}")
                 continue
+            finally:
+                save_screen(ds_config, output_dir)
             print(f"Loaded: {len(X)} rows × {X.shape[1]} features → "
                   f"{Y.shape[1]}-dim target")
 
@@ -91,14 +132,9 @@ def run_benchmark(
             for repeat in range(n_repeats_cv):
                 repeat_seed = seed + repeat
 
-                kf = KFold(n_splits=n_folds, shuffle=True, random_state=repeat_seed)
-                splits = list(kf.split(X))
-
-                train_cap = (
-                    int(effective_sample_size * (n_folds - 1) / n_folds)
-                    if effective_sample_size else 0
-                )
-                test_cap = (effective_sample_size // n_folds) if effective_sample_size else 0
+                splits = cv_fold_indices(len(X), n_folds=n_folds,
+                                         repeat_seed=repeat_seed,
+                                         sample_size=effective_sample_size)
 
                 for fold_idx in range(n_folds):
                     global_fold = repeat * n_folds + fold_idx
@@ -144,14 +180,6 @@ def run_benchmark(
                               f"running {', '.join(sorted(models_to_run.keys()))}")
 
                     train_idx, test_idx = splits[fold_idx]
-
-                    if train_cap and len(train_idx) > train_cap:
-                        rng_fold = np.random.default_rng(repeat_seed * 10007 + fold_idx)
-                        train_idx = rng_fold.choice(train_idx, size=train_cap, replace=False)
-
-                    if test_cap and len(test_idx) > test_cap:
-                        rng_test = np.random.default_rng(repeat_seed * 10007 + fold_idx + 1)
-                        test_idx = rng_test.choice(test_idx, size=test_cap, replace=False)
 
                     print(f"\n  {fold_label}  "
                           f"[{len(train_idx)} train / {len(test_idx)} test]", flush=True)

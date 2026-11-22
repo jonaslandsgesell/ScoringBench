@@ -20,6 +20,7 @@ dependencies = [
     "scikit-learn",
     "torch",
     "openml",
+    "causal-learn>=0.1.4.3,<0.2",
 ]
 
 [project.optional-dependencies]
@@ -32,3 +33,6 @@ version = { attr = "scoringbench.version.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["scoringbench*"]
+
+[tool.setuptools.package-data]
+"scoringbench.multivariate" = ["*.json", "data/dheur/*.csv", "data/dheur/*.arff"]
