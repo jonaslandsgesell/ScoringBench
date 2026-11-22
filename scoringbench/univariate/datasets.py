@@ -735,6 +735,9 @@ def _dataset_cache_key(dataset_config: dict) -> str:
         'url': dataset_config.get('url'),
         'target_col': dataset_config.get('target_col'),
         'name': dataset_config.get('name'),
+        # Bump when preprocessing changes so stale caches are not reused.
+        # v2: categoricals cached as `category` dtype (with NaN), not codes.
+        'preproc_version': 2,
     }
     blob = json.dumps(key_fields, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode('utf-8')).hexdigest()[:16]
@@ -764,7 +767,9 @@ def _write_processed_cache(key: str, X: pd.DataFrame, y: pd.Series) -> None:
         # Parquet requires string column names.
         df.columns = [str(c) for c in df.columns]
         path = PROCESSED_CACHE_DIR / f"{key}.parquet"
-        tmp = path.with_suffix('.parquet.tmp')
+        # Per-process tmp name: concurrent SLURM array tasks may build the same
+        # dataset's cache at once; a shared tmp file would race.
+        tmp = path.with_suffix(f'.parquet.{os.getpid()}.tmp')
         df.to_parquet(tmp, index=False)
         os.replace(tmp, path)
     except Exception as e:
@@ -898,9 +903,16 @@ def _load_dataset_uncached(dataset_config: dict) -> tuple[pd.DataFrame, pd.Serie
     y = y[target_valid_mask].reset_index(drop=True)
 
 
-    # Convert categorical columns to numeric using label encoding
+    # Keep non-numeric columns as pandas ``category`` (levels from the full
+    # dataset, so every fold shares one dtype/code mapping). Missing values stay
+    # NaN here: they are mode-imputed per fold in cv.run_fold, which also turns
+    # them into integer codes for wrappers without native categorical support.
+    # Levels are stored as strings: parquet (the processed cache) round-trips
+    # string categories exactly, but turns bool/int categories back into plain
+    # bool/int columns, so a cache hit would otherwise differ from a cache miss.
     for col in X.select_dtypes(exclude=[np.number]).columns:
-        X[col] = pd.Categorical(X[col]).codes
+        s = X[col].astype(object)
+        X[col] = pd.Categorical(s.astype(str).where(s.notna()))
 
     return X, y
 

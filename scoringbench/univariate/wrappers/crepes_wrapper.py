@@ -5,10 +5,54 @@ from __future__ import annotations
 from numbers import Integral
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
 from .base import DistributionPrediction, ProbabilisticWrapper
+
+
+def _to_codes(X):
+    """Category columns -> integer codes (what crepes and its kNN parts see)."""
+    if not hasattr(X, "select_dtypes"):
+        return X
+    cat_cols = X.select_dtypes(include="category").columns
+    if len(cat_cols) == 0:
+        return X
+    X = X.copy()
+    for col in cat_cols:
+        X[col] = X[col].cat.codes
+    return X
+
+
+class _CategoricalLearner:
+    """Base-learner adapter: crepes passes integer codes, the learner gets the
+    ``category`` columns back (CatBoost via ``cat_features``; XGBoost needs
+    ``enable_categorical=True`` on the regressor itself)."""
+
+    def __init__(self, learner, columns, cat_dtypes):
+        self.learner = learner
+        self.columns = list(columns)
+        self.cat_dtypes = cat_dtypes  # {column: CategoricalDtype}
+        self._is_catboost = hasattr(learner, "get_cat_feature_indices")
+
+    def _decode(self, X):
+        X = pd.DataFrame(np.asarray(X), columns=self.columns)
+        for col, dtype in self.cat_dtypes.items():
+            X[col] = pd.Categorical.from_codes(X[col].astype(int), dtype=dtype)
+            if self._is_catboost:  # CatBoost rejects float-valued levels
+                X[col] = X[col].astype(str)
+        other = [c for c in self.columns if c not in self.cat_dtypes]
+        X[other] = X[other].astype(float)
+        return X
+
+    def fit(self, X, y):
+        kw = {"cat_features": list(self.cat_dtypes)} if self._is_catboost else {}
+        self.learner.fit(self._decode(X), y, **kw)
+        return self
+
+    def predict(self, X):
+        return self.learner.predict(self._decode(X))
 
 
 class CrepesWrapper(ProbabilisticWrapper):
@@ -34,6 +78,10 @@ class CrepesWrapper(ProbabilisticWrapper):
             Each category uses its own calibration residuals.
             Defaults to False.
         mondrian_no_bins: Number of bins for the MondrianCategorizer. Defaults to 20.
+        native_categorical: If True, the base learner receives pandas ``category``
+            columns (use with CatBoost, or XGBoost with ``enable_categorical=True``);
+            crepes' difficulty estimator / Mondrian still see integer codes.
+            Defaults to False (everything sees integer codes).
     """
 
     def __init__(
@@ -44,6 +92,7 @@ class CrepesWrapper(ProbabilisticWrapper):
         use_difficulty_estimator: bool = True,
         use_mondrian_categorizer: bool = False,
         mondrian_no_bins: int = 20,
+        native_categorical: bool = False,
     ):
         if not 0 < calibration_split < 1:
             raise ValueError("calibration_split must be strictly between 0 and 1.")
@@ -57,6 +106,7 @@ class CrepesWrapper(ProbabilisticWrapper):
         self.use_difficulty_estimator = use_difficulty_estimator
         self.use_mondrian_categorizer = use_mondrian_categorizer
         self.mondrian_no_bins = mondrian_no_bins
+        self.supports_categorical = native_categorical  # read by cv.run_fold
 
         self._wrapped_model = None
         self._difficulty_estimator = None
@@ -161,13 +211,20 @@ class CrepesWrapper(ProbabilisticWrapper):
         y = np.asarray(y, dtype=float)
         self._set_train_range(y)
 
+        learner = self.base_model
+        if self.supports_categorical and hasattr(X, "select_dtypes"):
+            cat_dtypes = {c: X[c].dtype for c in X.select_dtypes(include="category").columns}
+            if cat_dtypes:
+                learner = _CategoricalLearner(self.base_model, X.columns, cat_dtypes)
+        X = _to_codes(X)
+
         X_train, X_cal, y_train, y_cal = train_test_split(
             X, y,
             test_size=self.calibration_split,
             random_state=self.random_state,
         )
 
-        wrapped_model = WrapRegressor(self.base_model)
+        wrapped_model = WrapRegressor(learner)
         wrapped_model.fit(X_train, y_train)
 
         de = None
@@ -239,6 +296,7 @@ class CrepesWrapper(ProbabilisticWrapper):
         if self._wrapped_model is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
+        X = _to_codes(X)
         cpds = self._coerce_cpds(self._wrapped_model.predict_cpds(X), len(X))
 
         atoms = []

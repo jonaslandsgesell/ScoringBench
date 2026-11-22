@@ -21,6 +21,8 @@ class LightPFNWrapper(ProbabilisticWrapper):
     under 5 million parameters* by Giorgio Ottoboni.
     """
 
+    supports_categorical = True  # cat="auto" picks up pandas category columns
+
     def __init__(self, device: str = "auto"):
         try:
             from lightpfn import LightPFNRegressor

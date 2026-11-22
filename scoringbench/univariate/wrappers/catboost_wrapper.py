@@ -8,6 +8,18 @@ from .base import DistributionPrediction, ProbabilisticWrapper
 from .quantile_based import quantiles_to_distribution
 
 
+def _cat_features_as_str(X):
+    """Return ``(X, cat_cols)``; category columns cast to str (CatBoost rejects
+    float-valued categorical levels). Non-DataFrames pass through unchanged."""
+    if not hasattr(X, "select_dtypes"):
+        return X, []
+    cat_cols = list(X.select_dtypes(include="category").columns)
+    if cat_cols:
+        X = X.copy()
+        X[cat_cols] = X[cat_cols].astype(str)
+    return X, cat_cols
+
+
 class CatBoostQuantileWrapper(ProbabilisticWrapper):
     """CatBoost MultiQuantile regressor for ScoringBench.
 
@@ -25,6 +37,9 @@ class CatBoostQuantileWrapper(ProbabilisticWrapper):
             ``logging_level`` are managed by the wrapper and will be
             ignored here.
     """
+
+    # pandas ``category`` columns are passed to CatBoost as ``cat_features``.
+    supports_categorical = True
 
     def __init__(
         self,
@@ -66,17 +81,20 @@ class CatBoostQuantileWrapper(ProbabilisticWrapper):
         y = np.asarray(y, dtype=float)
         self._y_range = (float(y.min()), float(y.max()))
         self._set_train_range(y)
-        self._model.fit(X, y)
+        X, cat_features = _cat_features_as_str(X)
+        self._model.fit(X, y, cat_features=cat_features or None)
         return self
 
     def predict_distribution(self, X) -> DistributionPrediction:
         # q shape: (n_samples, n_quantiles)
+        X, _ = _cat_features_as_str(X)
         q = np.asarray(self._model.predict(X), dtype=float)
         return quantiles_to_distribution(
             q, self._alphas, y_range=self._y_range, train_range=self._y_train_range
         )
 
     def predict(self, X) -> np.ndarray:
+        X, _ = _cat_features_as_str(X)
         q = np.asarray(self._model.predict(X), dtype=float)
         if q.ndim == 1:
             return q

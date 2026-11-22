@@ -12,7 +12,10 @@ Contract pinned here, against closed forms:
   at any distance (the clamp, not the cubic, decides the tails);
 * inside the hull the result is the linear interpolant, accurate to the
   interpolation error of the known CDF;
-* a forecast sharper than one grid bin puts ALL its mass in the bin that holds it.
+* on the resampled grid a forecast sharper than one grid bin keeps all its
+  interior mass ``C_last - C_first`` in the bin that holds it; the unreported
+  tails ``C_first`` / ``1 - C_last`` are uniform slabs out to the support edge
+  (no renormalization, no truncation to the hull).
 """
 
 from __future__ import annotations
@@ -94,6 +97,19 @@ def test_interior_matches_analytic_cdf(name):
 # Consequence: a forecast sharper than a grid bin keeps its mass in one bin
 # ---------------------------------------------------------------------------
 
+def _expected_resampled_cdf(edges, x, c, lo, hi):
+    """Closed-form resampled CDF at ``edges``: linear lower slab on ``[lo, x_0]``
+    carrying ``c_0``, the linear interpolant inside the hull, linear upper slab
+    on ``[x_last, hi]`` carrying ``1 - c_last``."""
+    G = np.interp(edges, x, c)
+    left, right = edges <= x[0], edges >= x[-1]
+    if x[0] > lo:
+        G[left] = c[0] * (edges[left] - lo) / (x[0] - lo)
+    if hi > x[-1]:
+        G[right] = c[-1] + (1.0 - c[-1]) * (edges[right] - x[-1]) / (hi - x[-1])
+    return G
+
+
 @pytest.mark.parametrize("sd", [1e-4, 1e-3, 4e-3])
 @pytest.mark.parametrize("name", ["normal", "expon"])
 def test_forecast_inside_one_bin_is_not_replaced_by_uniform(name, sd):
@@ -103,30 +119,31 @@ def test_forecast_inside_one_bin_is_not_replaced_by_uniform(name, sd):
     edges, probas = resample(x, c, y_lo, y_hi, n_bins)
     edges, probas = np.atleast_2d(edges)[0], np.atleast_2d(probas)[0]
 
-    k = int(np.searchsorted(edges, x[0], side="right") - 1)
-    straddles = x[-1] > edges[k + 1]
-    # Analytic target: all of the (renormalised) mass lies in the bin(s) covering the hull.
-    expected = np.zeros(n_bins)
-    if not straddles:
-        expected[k] = 1.0
-    else:
-        c_edge = np.interp(edges[k + 1], x, c)
-        expected[k] = (c_edge - c[0]) / (c[-1] - c[0])
-        expected[k + 1] = 1.0 - expected[k]
+    expected = np.diff(_expected_resampled_cdf(edges, x, c, y_lo, y_hi))
     # Interpolation error of C at the one interior edge is the only slack.
     np.testing.assert_allclose(probas, expected, atol=5e-3)
+    np.testing.assert_allclose(probas.sum(), 1.0, atol=1e-12)
+    # The interior mass (0.98) sits in the bin(s) covering the hull, not spread out.
+    k = int(np.searchsorted(edges, x[0], side="right") - 1)
+    assert probas[k:k + 2].sum() > c[-1] - c[0] - 1e-9
     assert probas.max() > 0.5, "mass spread over the whole grid (uniform fallback)"
 
 
-def test_bins_fully_outside_the_hull_get_zero_mass():
+def test_bins_outside_the_hull_carry_only_the_uniform_tail_slabs():
     dist = norm(loc=8.0, scale=0.05)              # hull ~ 0.23 = 6 bins
+    y_lo, y_hi = 6.2, 13.9
     x, c = dist.ppf(ALPHAS), ALPHAS
-    edges, probas = resample(x, c, 6.2, 13.9, 200)
+    edges, probas = resample(x, c, y_lo, y_hi, 200)
     edges, probas = np.atleast_2d(edges)[0], np.atleast_2d(probas)[0]
-    outside = (edges[1:] <= x[0]) | (edges[:-1] >= x[-1])
-    assert np.all(probas[outside] == 0.0)
     np.testing.assert_allclose(probas.sum(), 1.0, atol=1e-12)
-    # Interior bins carry the analytic Gaussian mass renormalised by (C_last - C_first).
+    width = edges[1:] - edges[:-1]
+    below, above = edges[1:] <= x[0], edges[:-1] >= x[-1]
+    # Fully-outside bins: uniform density c_0/(x_0-lo) resp. (1-c_last)/(hi-x_last).
+    np.testing.assert_allclose(probas[below], c[0] * width[below] / (x[0] - y_lo), rtol=1e-9)
+    np.testing.assert_allclose(probas[above], (1 - c[-1]) * width[above] / (y_hi - x[-1]), rtol=1e-9)
+    np.testing.assert_allclose(probas[below].sum() + probas[above].sum(),
+                               c[0] + 1 - c[-1], atol=2 * width.max())
+    # Interior bins carry the analytic Gaussian mass, NOT renormalised (levels stay exact).
     inside = (edges[:-1] >= x[0]) & (edges[1:] <= x[-1])
-    analytic = np.diff(dist.cdf(edges))[inside] / (c[-1] - c[0])
+    analytic = np.diff(dist.cdf(edges))[inside]
     np.testing.assert_allclose(probas[inside], analytic, atol=5e-3)

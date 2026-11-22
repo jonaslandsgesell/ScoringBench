@@ -24,6 +24,8 @@ class PytabkitRealMLPWrapper(ProbabilisticWrapper):
     returns a DistributionPrediction compatible with the rest of the codebase.
     """
 
+    supports_categorical = True  # pytabkit reads pandas category columns as categorical
+
     def __init__(self, train_metric_name: str = "multi_pinball(0.25,0.5,0.75)",
                  val_metric_name: str = "multi_pinball(0.25,0.5,0.75)",
                  n_quantiles: int = 50,
@@ -225,6 +227,8 @@ class PytabkitTabMDWrapper(ProbabilisticWrapper):
     model. It constructs per-sample bin edges from quantile particles and
     returns a DistributionPrediction compatible with the rest of the codebase.
     """
+
+    supports_categorical = True  # pytabkit reads pandas category columns as categorical
 
     def __init__(self, train_metric_name: str = "multi_pinball(0.25,0.5,0.75)",
                  val_metric_name: str = "multi_pinball(0.25,0.5,0.75)",

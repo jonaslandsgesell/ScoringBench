@@ -309,11 +309,12 @@ MODELS = {
 
 
     "crepes_xgb_difficulty": lambda: CrepesWrapper(
-        base_model=_xgb_regressor(n_estimators=100, random_state=0),
+        base_model=_xgb_regressor(n_estimators=100, random_state=0, enable_categorical=True),
         calibration_split=0.2,
         random_state=0,
         use_difficulty_estimator=True,
         use_mondrian_categorizer=False,
+        native_categorical=True,
     ),
     "crepes_catboost_difficulty": lambda: CrepesWrapper(
         base_model=_catboost_regressor(iterations=100, verbose=False, random_state=0),
@@ -321,13 +322,15 @@ MODELS = {
         random_state=0,
         use_difficulty_estimator=True,
         use_mondrian_categorizer=False,
+        native_categorical=True,
     ),
     "crepes_xgb_difficulty_mondrian": lambda: CrepesWrapper(
-        base_model=_xgb_regressor(n_estimators=100, random_state=0),
+        base_model=_xgb_regressor(n_estimators=100, random_state=0, enable_categorical=True),
         calibration_split=0.2,
         random_state=0,
         use_difficulty_estimator=True,
         use_mondrian_categorizer=True,
+        native_categorical=True,
     ),
     "crepes_catboost_difficulty_mondrian": lambda: CrepesWrapper(
         base_model=_catboost_regressor(iterations=100, verbose=False, random_state=0),
@@ -335,6 +338,7 @@ MODELS = {
         random_state=0,
         use_difficulty_estimator=True,
         use_mondrian_categorizer=True,
+        native_categorical=True,
     ),
     "ngboost_gaussian": lambda: NGBoostWrapper(dist="normal", n_estimators=500, learning_rate=0.01, n_quantiles=99),
 

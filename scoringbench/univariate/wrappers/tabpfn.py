@@ -14,6 +14,10 @@ class TabPFNWrapper(ProbabilisticWrapper):
     bar-distribution output (logits + borders) via output_type='full'.
     """
 
+    # TabPFN ignores the pandas dtype in its modality detection, so the
+    # positions of ``category`` columns are passed as categorical_features_indices.
+    supports_categorical = True
+
     def __init__(self, device=None, model_version=None, **kwargs):
         """Wrap a ``TabPFNRegressor``.
 
@@ -59,6 +63,9 @@ class TabPFNWrapper(ProbabilisticWrapper):
 
     def fit(self, X, y) -> "TabPFNWrapper":
         self._set_train_range(y)
+        if hasattr(X, "dtypes") and self._model.categorical_features_indices is None:
+            cat_idx = [i for i, d in enumerate(X.dtypes) if d == "category"]
+            self._model.categorical_features_indices = cat_idx or None
         self._model.fit(X, y)
         return self
 

@@ -59,6 +59,8 @@ class AshlarDressedWrapper(ProbabilisticWrapper):
     Keyword arguments go to ``ashlar.dressed``.
     """
 
+    supports_categorical = True  # non-numeric DataFrame columns get categorical embeddings
+
     def __init__(self, **settings):
         self.settings = settings
         self.model_ = None

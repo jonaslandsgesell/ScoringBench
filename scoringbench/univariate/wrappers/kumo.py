@@ -84,6 +84,8 @@ class KumoTabularWrapper(ProbabilisticWrapper):
         Autocast dtype used on CUDA (upstream uses ``torch.float16``).
     """
 
+    supports_categorical = True  # sdm.infer_stypes maps category (dictionary) columns to categorical; int codes with >3 levels would be numerical
+
     def __init__(
         self,
         *,

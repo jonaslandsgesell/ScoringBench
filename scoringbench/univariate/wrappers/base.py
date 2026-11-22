@@ -291,6 +291,14 @@ class ProbabilisticWrapper:
 
     _y_train_range: tuple[float, float] | None = None
 
+    # Categorical feature handling (set per subclass):
+    #   False (default): X is an all-numeric DataFrame; categorical columns are
+    #       integer codes (0..K-1) after per-fold mode imputation.
+    #   True: X keeps categorical columns as pandas ``category`` dtype (also
+    #       mode-imputed, no NaN), e.g. for CatBoost / LightGBM / TabPFN to use
+    #       natively. Find them via ``X.select_dtypes('category').columns``.
+    supports_categorical: bool = False
+
     def _set_train_range(self, y) -> tuple[float, float]:
         """Capture the finite training-target range."""
         arr = np.asarray(y.values if hasattr(y, "values") else y, dtype=float).reshape(-1)

@@ -17,6 +17,8 @@ class CausiloWrapper(ProbabilisticWrapper):
     and device selects CPU or CUDA (auto prefers CUDA).
     """
 
+    supports_categorical = True  # FeatureEncoder treats non-numeric DataFrame dtypes as categorical
+
     def __init__(self, n_estimators=8, random_state=42, device="auto"):
         self.n_estimators = n_estimators
         self.random_state = random_state

@@ -24,6 +24,10 @@ class XGBLSSWrapper(ProbabilisticWrapper):
         xgblss_params: Extra keyword arguments forwarded to XGBoostLSS training params.
     """
 
+    # pandas ``category`` columns become native XGBoost categorical splits
+    # (``enable_categorical``); a no-op for all-numeric input.
+    supports_categorical = True
+
     def __init__(
         self,
         n_quantiles: int = 100,
@@ -82,7 +86,7 @@ class XGBLSSWrapper(ProbabilisticWrapper):
         self._model = XGBoostLSS(dist)
 
         # Prepare data
-        dtrain = xgb.DMatrix(X, label=y)
+        dtrain = xgb.DMatrix(X, label=y, enable_categorical=True)
 
         # Set up params
         params = {
@@ -112,7 +116,7 @@ class XGBLSSWrapper(ProbabilisticWrapper):
             Array of shape (n_samples, n_quantiles) with quantile predictions.
         """
         # Prepare data
-        dtest = xgb.DMatrix(X)
+        dtest = xgb.DMatrix(X, enable_categorical=True)
         
         # Get quantile predictions using all alphas
         # predict() returns a pandas DataFrame with quantile columns
