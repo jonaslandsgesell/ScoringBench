@@ -6,6 +6,7 @@ import os
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from .base import DistributionPrediction, ProbabilisticWrapper
 from .quantile_based import quantiles_to_distribution
@@ -45,7 +46,10 @@ class AshlarDressedWrapper(ProbabilisticWrapper):
     Five cross-fitted pairs of a network (a TabM-style ensemble with a flow head) and a label reader, which
     reads a row's distribution from the training labels. The pairs are pooled, the readers' points are smoothed
     into a density, and one more network corrects the pool; the correction follows condensité's PIT boosting.
-    Nothing is pretrained and nothing is tuned: the entry runs ``ashlar.dressed()`` with its defaults.
+    Nothing is pretrained and nothing is tuned: the entry runs ``ashlar.dressed()`` with its defaults. The one
+    change to its input is that numeric columns are shifted to a training minimum of 0, which works around a
+    float32 NaN in Ashlar's quantile feature scaler (see ``_fit_shift``) and leaves the quantile-scaled features
+    unchanged.
 
     The prediction has an exact CDF, and its quantiles at 203 levels go to ScoringBench. A target with at most
     20 distinct training values gets a probability for each value.
@@ -65,6 +69,36 @@ class AshlarDressedWrapper(ProbabilisticWrapper):
         self.settings = settings
         self.model_ = None
         self._last = None
+        self._shift = None
+
+    # Workaround for a float32 edge case in Ashlar's quantile feature scaler (ashlar.preprocess._quantile_normal,
+    # 0.1.2-0.1.3). A training value equal to a column's lowest knot is meant to be caught by
+    # ``values - tol < lower_x`` with ``tol = max(1e-7, spacing(lower_x))``; for a negative minimum ``spacing`` is
+    # negative, so tol falls back to 1e-7, which float32 cannot subtract from |x| >~ 1. The value then goes through
+    # ``interp``, whose rounding can leave it a hair below 0, and ``norm.ppf`` of that is NaN, so the first training
+    # loss is not finite (Yolanda, year, and intermittent folds elsewhere). Shifting every numeric column so its
+    # training minimum is exactly 0 makes the 1e-7 halo work again. A quantile transform ignores a constant shift,
+    # so the model sees the same inputs up to float rounding.
+    def _numeric_columns(self, X):
+        if hasattr(X, "select_dtypes"):
+            return [c for c in X.select_dtypes(include=[np.number]).columns if not pd.api.types.is_bool_dtype(X[c])]
+        return None
+
+    def _fit_shift(self, X):
+        cols = self._numeric_columns(X)
+        if cols is None:
+            mins = np.nanmin(np.asarray(X, dtype=np.float64), axis=0)
+        else:
+            mins = X[cols].astype(np.float64).min(axis=0, skipna=True).to_numpy()
+        self._shift = (cols, np.where(np.isfinite(mins), mins, 0.0))
+
+    def _apply_shift(self, X):
+        cols, mins = self._shift
+        if cols is None:
+            return np.asarray(X, dtype=np.float64) - mins
+        X = X.copy()
+        X[cols] = X[cols].astype(np.float64) - mins
+        return X
 
     def fit(self, X, y) -> "AshlarDressedWrapper":
         _check_device()
@@ -77,14 +111,15 @@ class AshlarDressedWrapper(ProbabilisticWrapper):
             y = y[finite]
         self._set_train_range(y)
         self._last = None
-        self.model_ = ashlar.dressed(**self.settings).fit(X, y)
+        self._fit_shift(X)
+        self.model_ = ashlar.dressed(**self.settings).fit(self._apply_shift(X), y)
         return self
 
     def _read(self, X):
         """Each row's quantiles at LEVELS and its mean, kept for a second call on the same rows."""
         if self._last is not None and self._last[0] is X:
             return self._last[1], self._last[2]
-        dist = self.model_.predict_dist(X)
+        dist = self.model_.predict_dist(self._apply_shift(X))
         q = dist.quantile(LEVELS).T
         # A target with few values has an exact mean; a density's is read from its quantiles, as the model reads it.
         mean = q @ LEVEL_MASS if dist.values is None else dist.probabilities() @ dist.values
