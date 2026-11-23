@@ -17,7 +17,7 @@ from scoringbench.multivariate.sources import get_source
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("scoringbench", "variogram_screened"),
+    parser.add_argument("--source", choices=("scoringbench",),
                         default="scoringbench")
     parser.add_argument("--target_dims", nargs="+", type=int, choices=TARGET_DIMS, default=list(TARGET_DIMS))
     parser.add_argument("--dataset_index", type=int)

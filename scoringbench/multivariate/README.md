@@ -63,15 +63,11 @@ with `--source`. They return the same `(X, Y)` contract (`Y` has columns
 | `--source` | How the `d` targets are built |
 | --- | --- |
 | `scoringbench` | **Default:** 55 curated multi-target datasets from OpenML and Dheur et al. (2025) passing model-free KCI and residual distance correlation screening. |
-| `variogram_screened` | 55 OpenML datasets screened with variogram-score gain; preserved in `vs_screened_multivariate_datasets.json` for comparison. |
 | `synthetic` | Nonlinear conditional means plus feature-independent, jointly sampled R-vine residuals (see below). |
 
 ```bash
 # Core benchmark on the 55 dependency-screened datasets (default)
 python run_bench_regression_multivariate.py --source scoringbench --target_dim 2 --sample_size 3000
-
-# Comparison on the variogram-score screened suite
-python run_bench_regression_multivariate.py --source variogram_screened --target_dim 2 --sample_size 3000
 
 # Synthetic random-vine datasets
 python run_bench_regression_multivariate.py --source synthetic

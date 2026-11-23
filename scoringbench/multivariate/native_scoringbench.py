@@ -38,10 +38,6 @@ SOURCE_NAME = "scoringbench"
 #: Curated manifest: 55 dependency-screened multi-target datasets.
 MANIFEST_PATH = Path(__file__).with_name("multivariate_datasets.json")
 
-#: Variogram-score screened manifest (preserved for comparison).
-SOURCE_NAME_VS = "variogram_screened"
-VS_MANIFEST_PATH = Path(__file__).with_name("vs_screened_multivariate_datasets.json")
-
 #: Rows with a missing value in any *used* target are dropped (rf1/rf2/osales
 #: carry target NaNs); remaining feature NaNs are median-imputed, matching the
 #: harvest pipeline so the benchmark measures what the screen measured.
@@ -124,13 +120,6 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int,
             "n_samples": n,
         })
     return configs
-
-
-def enumerate_vs_scoringbench(target_dim: int, sample_size: int) -> list[dict[str, Any]]:
-    """Enumerate the variogram-score screened manifest."""
-    return enumerate_native_scoringbench(target_dim, sample_size,
-                                         manifest_path=VS_MANIFEST_PATH,
-                                         source_name=SOURCE_NAME_VS)
 
 
 def _fetch(openml_id: int) -> pd.DataFrame:

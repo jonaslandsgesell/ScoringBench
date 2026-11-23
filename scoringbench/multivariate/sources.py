@@ -1,13 +1,10 @@
 """Dataset-source registry for the multivariate ScoringBench.
 
-Three sources are provided:
+Two sources are provided:
 
 * ``"scoringbench"`` (default) — curated multi-target datasets from OpenML and
   Dheur et al. (2025) passing model-free KCI and residual distance correlation
   screening. Defined in ``multivariate_datasets.json``.
-* ``"variogram_screened"`` — 55 OpenML datasets screened with the
-  variogram-score gain; preserved in ``vs_screened_multivariate_datasets.json``
-  for comparison.
 * ``"synthetic"`` — nonlinear conditional means plus feature-independent,
   jointly sampled R-vine residuals (see :mod:`scoringbench.multivariate.synthetic_targets`).
 
@@ -70,11 +67,6 @@ def _build_sources() -> dict[str, Source]:
     sources[_nsb.SOURCE_NAME] = Source(
         name=_nsb.SOURCE_NAME,
         enumerate_datasets=_nsb.enumerate_native_scoringbench,
-        load=_nsb.load_native_scoringbench,
-    )
-    sources[_nsb.SOURCE_NAME_VS] = Source(
-        name=_nsb.SOURCE_NAME_VS,
-        enumerate_datasets=_nsb.enumerate_vs_scoringbench,
         load=_nsb.load_native_scoringbench,
     )
     return sources

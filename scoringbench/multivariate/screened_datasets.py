@@ -85,7 +85,6 @@ def load_screened(ds_config: dict, target_dim=None):
     """Replay a frozen decision, or explicitly run candidate curation."""
     loaders = {
         "scoringbench": native_scoringbench.load_native_scoringbench,
-        "variogram_screened": native_scoringbench.load_native_scoringbench,
         "dheur": dheur_targets.load_dheur,
     }
     ds_config.pop("screen", None)

@@ -49,7 +49,7 @@ def parse_args():
     p.add_argument(
         "--source", default="scoringbench", choices=sorted(SOURCES),
         help="Dataset source: 'scoringbench' (55 dependency-screened multi-target datasets), "
-             "'variogram_screened' (historical VS-screened), or 'synthetic'. Default: scoringbench.",
+             "or 'synthetic'. Default: scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,
