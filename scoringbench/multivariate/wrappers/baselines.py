@@ -58,6 +58,20 @@ from .base import MultivariateWrapper, as_2d_features, as_2d_targets
 SamplerFactory = Callable[[], object]
 
 
+def _sobol_uniforms(n_rows: int, m: int, d: int, rng: np.random.Generator) -> np.ndarray:
+    """``(n_rows, m, d)`` randomized QMC uniforms: one Owen-scrambled Sobol net per row.
+
+    Used instead of i.i.d. uniforms when a wrapper is built with ``sobol=True``.
+    The predictive law is unchanged (every point is marginally U(0,1)^d); only the
+    integration error of the sample-based scores shrinks.  ``m`` should be a power
+    of two (scipy warns otherwise).
+    """
+    from scipy.stats import qmc
+
+    U = np.stack([qmc.Sobol(d, scramble=True, seed=rng).random(m) for _ in range(n_rows)])
+    return np.clip(U, 1e-10, 1.0 - 1e-10)
+
+
 # ---------------------------------------------------------------------------
 # Shared base: per-dimension composition of univariate samplers
 # ---------------------------------------------------------------------------
@@ -79,10 +93,12 @@ class _ComposedMultiOutputWrapper(MultivariateWrapper):
     ROW_BATCH: int = 20_000
 
     def __init__(self, sampler_factory: SamplerFactory, n_draws: int = int(N_DRAWS),
-                 seed: int = int(SEED)):
+                 seed: int = int(SEED), sobol: bool = False):
         self._make_sampler = sampler_factory
         self._n_draws = int(n_draws)
         self._seed = int(seed)
+        # True -> draw from scrambled Sobol uniforms instead of i.i.d. ones.
+        self._sobol = bool(sobol)
         self._samplers: list = []
         self._d: int | None = None
 
@@ -147,7 +163,9 @@ class _ComposedMultiOutputWrapper(MultivariateWrapper):
             last_rhat = diag.rhat_max
             if diag.rhat_max < DEFAULT_EPSILON:
                 break
-            extra = np.asarray(self._draw(X, DEFAULT_BATCH_SIZE, rng), dtype=np.float64)
+            # Sobol: top up with another full-size set (keeps every net a power of two).
+            batch = self._n_draws if self._sobol else DEFAULT_BATCH_SIZE
+            extra = np.asarray(self._draw(X, batch, rng), dtype=np.float64)
             samples = np.concatenate([samples, extra], axis=1)
         else:
             # Cap reached without a convergence/exception break -> not converged.
@@ -174,6 +192,10 @@ class IndependentMultiOutputWrapper(_ComposedMultiOutputWrapper):
             self._samplers.append(s)
 
     def _draw(self, X, m, rng):
+        if self._sobol:
+            U = _sobol_uniforms(X.shape[0], m, self._d, rng)
+            return np.stack([self._samplers[k].quantile_batch(X, U[:, :, k])
+                             for k in range(self._d)], axis=-1)
         per_dim = []
         for k in range(self._d):
             # (n_test, m); independent stream per dimension.
@@ -270,8 +292,8 @@ class CopulaMultiOutputWrapper(_ComposedMultiOutputWrapper):
 
     def __init__(self, sampler_factory, n_draws=int(N_DRAWS), seed=int(SEED),
                  pit_jitter: float = 1e-4, num_threads: int = 1,
-                 n_pit_folds: int = 5):
-        super().__init__(sampler_factory, n_draws=n_draws, seed=seed)
+                 n_pit_folds: int = 5, sobol: bool = False):
+        super().__init__(sampler_factory, n_draws=n_draws, seed=seed, sobol=sobol)
         self._pit_jitter = float(pit_jitter)
         self._num_threads = int(num_threads)
         self._n_pit_folds = int(n_pit_folds)
@@ -353,7 +375,15 @@ class CopulaMultiOutputWrapper(_ComposedMultiOutputWrapper):
         # copula uniforms, then invert each dimension's conditional marginal at
         # the replicated covariates so every draw shares the same dependence.
         n = n_test * m
-        if self._copula is None:
+        if self._sobol:
+            # Map the Sobol net through the vine's inverse Rosenblatt transform
+            # (instead of simulate()) so the low-discrepancy structure is kept.
+            U = _sobol_uniforms(n_test, m, self._d, rng).reshape(n, self._d)
+            if self._copula is not None:
+                U = np.asarray(self._copula.inverse_rosenblatt(
+                    U, num_threads=self._num_threads), dtype=np.float64)
+            U = np.clip(U, 1e-6, 1 - 1e-6)
+        elif self._copula is None:
             U = rng.random((n, self._d))
         else:
             seed = int(rng.integers(0, 2**31 - 1))
@@ -413,8 +443,9 @@ class ChainedMultiOutputWrapper(_ComposedMultiOutputWrapper):
     """
 
     def __init__(self, sampler_factory, n_draws=int(N_DRAWS), seed=int(SEED),
-                 n_orders: int = 3, order: list[int] | None = None):
-        super().__init__(sampler_factory, n_draws=n_draws, seed=seed)
+                 n_orders: int = 3, order: list[int] | None = None,
+                 sobol: bool = False):
+        super().__init__(sampler_factory, n_draws=n_draws, seed=seed, sobol=sobol)
         self._order = None if order is None else [int(i) for i in order]
         self._n_orders = 1 if self._order is not None else max(1, int(n_orders))
         self._orders: list[np.ndarray] = []
@@ -483,8 +514,13 @@ class ChainedMultiOutputWrapper(_ComposedMultiOutputWrapper):
 
         # -- dim 0: covariates only -> one fwd pass over n_test rows, m draws.
         k0 = int(order[0])
-        drawn[:, :, k0] = np.asarray(chain[0].sample(X, m, rng=rng),
-                                     dtype=np.float64)
+        # Sobol: chain position t consumes coordinate t of one net per row.
+        U = _sobol_uniforms(n_test, m, self._d, rng) if self._sobol else None
+        if U is not None:
+            drawn[:, :, k0] = chain[0].quantile_batch(X, U[:, :, 0])
+        else:
+            drawn[:, :, k0] = np.asarray(chain[0].sample(X, m, rng=rng),
+                                         dtype=np.float64)
         if self._d == 1:
             return drawn
 
@@ -501,7 +537,10 @@ class ChainedMultiOutputWrapper(_ComposedMultiOutputWrapper):
             X_aug = np.concatenate([X_rep, y0[:, None]], axis=1)
             for t in range(1, len(order)):
                 k = int(order[t])
-                draw_k = chain[t].sample(X_aug, 1, rng=rng)[:, 0]
+                if U is not None:
+                    draw_k = chain[t].quantile(X_aug, U[r0:r1, :, t].reshape(-1))
+                else:
+                    draw_k = chain[t].sample(X_aug, 1, rng=rng)[:, 0]
                 drawn[r0:r1, :, k] = draw_k.reshape(r1 - r0, m)
                 X_aug = np.concatenate([X_aug, draw_k[:, None]], axis=1)
         return drawn

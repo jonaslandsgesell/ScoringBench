@@ -34,6 +34,12 @@ TARGET_DIM = 2
 # shrink with m, so a shared m is required for a fair leaderboard.)
 N_DRAWS = 600
 
+# Draws for the ``*_sobol`` models (scrambled-Sobol uniforms instead of i.i.d.).
+# Sobol nets need a power of two: 512 total for independent / copula, and 256
+# per chain order for chained (CHAINED_N_ORDERS * 256 total).
+SOBOL_N_DRAWS = 512
+SOBOL_CHAINED_DRAWS_PER_ORDER = 256
+
 # ---------------------------------------------------------------------------
 # Monte-Carlo convergence diagnostic (MPSRF / multivariate Gelman–Rubin)
 # ---------------------------------------------------------------------------

@@ -102,30 +102,34 @@ BASE_SAMPLERS: dict[str, Callable[[], object]] = {
 # Model registry — {name: zero-arg factory -> MultivariateWrapper}
 # ---------------------------------------------------------------------------
 
-def _make_independent(sampler_factory: Callable[[], object]):
+def _make_independent(sampler_factory: Callable[[], object], sobol: bool = False):
     return lambda: IndependentMultiOutputWrapper(
         sampler_factory=sampler_factory,
-        n_draws=int(cfg.N_DRAWS),
+        n_draws=int(cfg.SOBOL_N_DRAWS if sobol else cfg.N_DRAWS),
         seed=int(cfg.SEED),
+        sobol=sobol,
     )
 
 
-def _make_copula(sampler_factory: Callable[[], object]):
+def _make_copula(sampler_factory: Callable[[], object], sobol: bool = False):
     return lambda: CopulaMultiOutputWrapper(
         sampler_factory=sampler_factory,
-        n_draws=int(cfg.N_DRAWS),
+        n_draws=int(cfg.SOBOL_N_DRAWS if sobol else cfg.N_DRAWS),
         seed=int(cfg.SEED),
+        sobol=sobol,
         pit_jitter=float(getattr(cfg, "COPULA_PIT_JITTER", 1e-4)),
         n_pit_folds=int(getattr(cfg, "COPULA_PIT_FOLDS", 5)),
     )
 
 
-def _make_chained(sampler_factory: Callable[[], object]):
+def _make_chained(sampler_factory: Callable[[], object], sobol: bool = False):
+    n_orders = int(getattr(cfg, "CHAINED_N_ORDERS", 3))
     return lambda: ChainedMultiOutputWrapper(
         sampler_factory=sampler_factory,
-        n_draws=int(cfg.N_DRAWS),
+        n_draws=int(n_orders * cfg.SOBOL_CHAINED_DRAWS_PER_ORDER if sobol else cfg.N_DRAWS),
         seed=int(cfg.SEED),
-        n_orders=int(getattr(cfg, "CHAINED_N_ORDERS", 3)),
+        n_orders=n_orders,
+        sobol=sobol,
     )
 
 
@@ -156,6 +160,10 @@ for _base_name, _base_factory in BASE_SAMPLERS.items():
     MODELS[f"independent_{_base_name}"] = _make_independent(_base_factory)
     MODELS[f"copula_{_base_name}"] = _make_copula(_base_factory)
     MODELS[f"chained_{_base_name}"] = _make_chained(_base_factory)
+    # Same models, drawn from scrambled-Sobol uniforms (power-of-two draw counts).
+    MODELS[f"independent_{_base_name}_sobol"] = _make_independent(_base_factory, sobol=True)
+    MODELS[f"copula_{_base_name}_sobol"] = _make_copula(_base_factory, sobol=True)
+    MODELS[f"chained_{_base_name}_sobol"] = _make_chained(_base_factory, sobol=True)
 
 # Direct multivariate samplers (no composition strategy applied).
 MODELS["forest_diffusion"] = _forest_diffusion
