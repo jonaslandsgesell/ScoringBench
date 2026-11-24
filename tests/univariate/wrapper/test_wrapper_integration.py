@@ -181,6 +181,13 @@ def _make_limix2():
     return wrapper
 
 
+def _make_causalpfn():
+    """CausalPFN (all rows t=0) with its in-context temperature calibration."""
+    pytest.importorskip("causalpfn")
+    from scoringbench.univariate.wrappers.causalpfn import CausalPFNWrapper
+    return CausalPFNWrapper(device=_cuda_or_cpu(), seed=RANDOM_STATE)
+
+
 def _make_tabdpt():
     """TabDPT v1.3 regressor — native bar-distribution probabilistic head.
 
@@ -382,6 +389,7 @@ MODEL_FACTORIES = [
     pytest.param(("TabDPTWrapper",            _make_tabdpt),       id="TabDPTWrapper"),
     pytest.param(("TabICLWrapper",            _make_tabicl),       id="TabICLWrapper"),
     pytest.param(("LightPFNWrapper",          _make_lightpfn),     id="LightPFNWrapper"),
+    pytest.param(("CausalPFNWrapper",         _make_causalpfn),    id="CausalPFNWrapper"),
     pytest.param(("KumoTabularSmallWrapper",  _make_kumo_tabular_small), id="KumoTabularSmallWrapper"),
     pytest.param(("TabLDMWrapper",            _make_tabldm),       id="TabLDMWrapper"),
     pytest.param(("PytabkitRealMLPWrapper",   _make_pytabkit),     id="PytabkitRealMLPWrapper"),

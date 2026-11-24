@@ -62,6 +62,7 @@ from .wrappers import (
     MitraFinetuneWrapper,
     AshlarDressedWrapper,
     LightPFNWrapper,
+    CausalPFNWrapper,
     resolve_mitra2_checkpoint,
 )
 from .wrappers.cde_wrapper import CDE_PRESETS
@@ -360,4 +361,6 @@ MODELS = {
     # Ashlar's dressed model with its defaults: trained from scratch, untuned (ashlar-tabular 0.1.2).
     "ashlar_dressed_v0_1_2": lambda: AshlarDressedWrapper(),
     "lightpfn_v1_5_1": lambda: LightPFNWrapper(),
+    # CausalPFN v0 checkpoint (causalpfn 0.1.5), all rows t=0; temperature calibrated by in-context CV log score.
+    "causalpfn_v0_1_5": lambda: CausalPFNWrapper(),
 }
