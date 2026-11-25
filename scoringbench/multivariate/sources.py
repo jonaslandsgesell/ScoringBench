@@ -2,9 +2,8 @@
 
 Two sources are provided:
 
-* ``"scoringbench"`` (default) — curated multi-target datasets from OpenML and
-  Dheur et al. (2025) passing model-free KCI and residual distance correlation
-  screening. Defined in ``multivariate_datasets.json``.
+* ``"scoringbench"`` (default) — curated multi-target datasets from OpenML passing
+  model-free KCI and residual distance correlation screening. Defined in ``multivariate_datasets.json``.
 * ``"synthetic"`` — nonlinear conditional means plus feature-independent,
   jointly sampled R-vine residuals (see :mod:`scoringbench.multivariate.synthetic_targets`).
 

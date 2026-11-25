@@ -9,7 +9,6 @@ import pytest
 from scoringbench.multivariate import screening, screened_datasets as pools
 from scoringbench.multivariate.ci_screen import curation_split
 from scoringbench.multivariate.sources import get_source
-from scoringbench.multivariate.runner import run_benchmark
 
 
 def test_screening_only_sees_curation_and_its_imputation(monkeypatch):
@@ -33,30 +32,32 @@ def test_screening_only_sees_curation_and_its_imputation(monkeypatch):
     np.testing.assert_array_equal(seen[0][0], seen[1][0])
 
 
-@pytest.mark.parametrize("dim,count", [(2, 55), (3, 45), (5, 29), (10, 7)])
+@pytest.mark.parametrize("dim,count", [(2, 51), (3, 44), (5, 28), (10, 7)])
 def test_native_enumeration(dim, count):
     datasets = get_source("scoringbench").enumerate_datasets(dim, 3000)
     assert len(datasets) == count
 
 
-def test_loader_filters_and_persists_both_decisions(monkeypatch, tmp_path):
+def test_screen_candidate_records_and_persists_decision(monkeypatch, tmp_path):
     features = pd.DataFrame(np.arange(200).reshape(100, 2))
     targets = features.copy()
     decision = dict(selected=False, scale_ablation=True, reason="scale_ratio", scale_ratio=501.0)
-    monkeypatch.setattr(pools.native_scoringbench, "load_native_scoringbench",
-                        lambda *args, **kw: (features, targets))
+    seen = {}
+
+    def load(config, **kw):
+        seen.update(config)
+        return features, targets
+
+    monkeypatch.setattr(pools.native_scoringbench, "load_native_scoringbench", load)
     monkeypatch.setattr(pools, "screen_dataset", lambda *args, **kwargs: (decision.copy(), np.arange(20, 100)))
     entry = get_source("scoringbench").enumerate_datasets(2, 3000)[0]
-    entry["screen_only"] = True
-    with pytest.raises(ValueError, match="excluded"):
-        pools.load_screened(entry)
+    result = pools.screen_candidate(entry, target_dim=2)
+    assert seen["screen_protocol"] == pools.PROTOCOL  # loader skips feature imputation
+    assert entry["screen"] is result and result["reason"] == "scale_ratio"
+    assert result["protocol"] == pools.PROTOCOL
     pools.save_screen(entry, tmp_path)
     saved = json.loads(next((tmp_path / "screening").glob("*.json")).read_text())
     assert saved["screen"]["selected"] is False
-    entry["selection"] = "scale_ablation"
-    loaded_features, loaded_targets = pools.load_screened(entry)
-    np.testing.assert_array_equal(loaded_targets, targets.iloc[20:])
-    assert len(loaded_features) == 80
 
 
 def test_missing_promoted_targets_do_not_move_the_split(monkeypatch):
@@ -163,26 +164,3 @@ def test_categorical_target_metadata_survives_float_coercion(monkeypatch):
     monkeypatch.setattr(screening, "screen_kci", lambda *args, **kwargs: pytest.fail("KCI called"))
     result, _ = screening.screen_dataset(rng.normal(size=(300, 3)), targets)
     assert result["reason"] == "noncontinuous_target"
-
-
-def test_screened_runner_refuses_legacy_results(tmp_path):
-    legacy = tmp_path / "raw" / "model"
-    legacy.mkdir(parents=True)
-    pd.DataFrame({"fold": [0]}).to_parquet(legacy / "toy.parquet")
-    datasets = pools.enumerate_screened(2, 3000)
-    with pytest.raises(ValueError, match="Unversioned"):
-        run_benchmark(datasets[:1], {}, tmp_path, load_fn=lambda *args, **kw: (pd.DataFrame(), pd.DataFrame()))
-
-
-def test_screened_runner_records_rejections(monkeypatch, tmp_path):
-    entry = pools.enumerate_screened(2, 3000)[0]
-
-    def reject(config, **kwargs):
-        config["screen"] = dict(selected=False, scale_ablation=True, reason="scale_ratio")
-        raise ValueError("scale ratio")
-
-    result = run_benchmark([entry], {}, tmp_path, load_fn=reject)
-    assert result.empty
-    assert len(list((tmp_path / "screening").glob("*.json"))) == 1
-    with pytest.raises(ValueError, match="different benchmark protocol"):
-        run_benchmark([entry], {}, tmp_path, seed=1234, load_fn=reject)

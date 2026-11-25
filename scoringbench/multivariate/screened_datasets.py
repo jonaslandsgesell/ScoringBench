@@ -1,4 +1,9 @@
-"""Frozen, pool-corrected KCI suite and explicit candidate diagnostics."""
+"""Model-free KCI screening of candidate multivariate datasets.
+
+Used by ``scripts/screen_multivariate.py`` to (re-)derive which manifest entries
+pass the dependence screen. Benchmark runs read ``multivariate_datasets.json``
+directly and do not call into this module.
+"""
 
 from pathlib import Path
 import json
@@ -7,13 +12,12 @@ from importlib.metadata import version
 
 import numpy as np
 
-from . import dheur_targets, native_scoringbench
+from . import native_scoringbench
 from .ci_screen import ALPHA, EFFECT_MIN, SCALE_RATIO_MAX
 from .screening import screen_dataset
 
 PROTOCOL = "kci_continuous_audited_v3"
 TARGET_DIMS = (2, 3, 5, 10)
-SUITE_PATH = Path(__file__).with_name("multivariate_suite.json")
 KNOWN_NONCONTINUOUS = {
     4531: "motor_UPDRS and total_UPDRS are clinical rating scores",
     41492: "personality targets are questionnaire ratings",
@@ -73,66 +77,35 @@ def finalize_suite(entries: list[dict]) -> dict:
     payload["suite_id"] = hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
     return payload
 
-def enumerate_screened(target_dim: int, sample_size: int) -> list[dict]:
-    """Candidate configurations for the screened scoringbench suite."""
-    datasets = native_scoringbench.enumerate_native_scoringbench(target_dim, sample_size)
-    for entry in datasets:
-        entry.update(selection="selected", screen_protocol=PROTOCOL)
-    return datasets
+def screen_candidate(ds_config: dict, target_dim=None, quality_only: bool = False) -> dict:
+    """Run the model-free KCI screen on one candidate and record the decision.
 
-
-def load_screened(ds_config: dict, target_dim=None):
-    """Replay a frozen decision, or explicitly run candidate curation."""
-    loaders = {
-        "scoringbench": native_scoringbench.load_native_scoringbench,
-        "dheur": dheur_targets.load_dheur,
-    }
+    The data are loaded without feature imputation (``screen_protocol``):
+    :func:`screen_dataset` imputes on the curation split only, so the benchmark
+    rows never influence the decision. The decision is stored in
+    ``ds_config["screen"]`` and returned.
+    """
     ds_config.pop("screen", None)
-    features, targets = loaders[ds_config.get("source", "scoringbench")](ds_config, target_dim=target_dim)
-    if ds_config.get("screen_only"):
-        dataset_id = ds_config.get("openml_id")
-        decision, benchmark = screen_dataset(features, targets,
-            name=ds_config.get("name"),
-            run_test=not (ds_config.get("quality_only", False)
-                          or dataset_id in KNOWN_NONCONTINUOUS
-                          or dataset_id in DUPLICATE_FAMILIES))
-        if dataset_id in KNOWN_NONCONTINUOUS:
-            decision.update(selected=False, scale_ablation=False, kci_p=None,
-                            reason="noncontinuous_target", is_ordinal=True, semantic_note=KNOWN_NONCONTINUOUS[dataset_id])
-        if dataset_id in DUPLICATE_FAMILIES:
-            decision.update(selected=False, scale_ablation=False, kci_p=None,
-                            reason="duplicate_family", is_duplicate=True, duplicate_of=DUPLICATE_FAMILIES[dataset_id])
-    else:
-        path = Path(ds_config.get("suite_path", SUITE_PATH))
-        if not path.exists():
-            raise ValueError("Frozen suite missing; run scripts/screen_multivariate.py --freeze first")
-        payload = json.loads(path.read_text())
-        if payload.get("protocol") != PROTOCOL:
-            raise ValueError("Frozen suite uses a different screening protocol")
-        record = next((item for item in payload["datasets"]
-                       if item["definition"] == definition(ds_config)), None)
-        if record is None:
-            raise ValueError("Dataset definition is absent from the frozen suite")
-        decision = record["screen"].copy()
-        decision["suite_id"] = payload["suite_id"]
-        ds_config["screen"] = decision
-        if not decision.get(ds_config["selection"]):
-            raise ValueError(f"{ds_config['name']}: excluded from frozen suite ({decision['reason']})")
-        audit, benchmark = screen_dataset(features, targets, name=ds_config.get("name"), run_test=False)
-        if (audit["reason"] != "quality_checked"
-                or any(audit[key] != decision[key] for key in (
-                    "fingerprint", "curation_fingerprint", "n_benchmark"))):
-            raise ValueError("Dataset or curation split changed after freezing; refuse evaluation")
+    ds_config["screen_protocol"] = PROTOCOL
+    features, targets = native_scoringbench.load_native_scoringbench(ds_config, target_dim=target_dim)
+    dataset_id = ds_config.get("openml_id")
+    decision, _ = screen_dataset(features, targets, name=ds_config.get("name"),
+                                 run_test=not (quality_only
+                                               or dataset_id in KNOWN_NONCONTINUOUS
+                                               or dataset_id in DUPLICATE_FAMILIES))
+    if dataset_id in KNOWN_NONCONTINUOUS:
+        decision.update(selected=False, scale_ablation=False, kci_p=None,
+                        reason="noncontinuous_target", is_ordinal=True,
+                        semantic_note=KNOWN_NONCONTINUOUS[dataset_id])
+    if dataset_id in DUPLICATE_FAMILIES:
+        decision.update(selected=False, scale_ablation=False, kci_p=None,
+                        reason="duplicate_family", is_duplicate=True,
+                        duplicate_of=DUPLICATE_FAMILIES[dataset_id])
     decision["protocol"] = PROTOCOL
     decision["thresholds"] = dict(alpha=ALPHA, effect_min=EFFECT_MIN,
                                   scale_ratio_max=SCALE_RATIO_MAX)
     ds_config["screen"] = decision
-    selection = ds_config.get("selection", "selected")
-    if not decision.get(selection, False):
-        raise ValueError(f"{ds_config['name']}: excluded from {selection} "
-                         f"({decision['reason']}, scale_ratio={decision['scale_ratio']})")
-    return (features.iloc[benchmark].reset_index(drop=True),
-            targets.iloc[benchmark].reset_index(drop=True))
+    return decision
 
 
 def save_screen(ds_config: dict, output_dir: Path) -> None:
@@ -143,7 +116,7 @@ def save_screen(ds_config: dict, output_dir: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     destination = directory / (ds_config["name"].replace(" ", "_") + ".json")
     payload = dict(dataset=ds_config["name"], source=ds_config["source"],
-                   target_dim=ds_config["target_dim"], selection=ds_config.get("selection", "selected"),
+                   target_dim=ds_config["target_dim"],
                    dataset_id=ds_config.get("id"),
                    target_cols=ds_config.get("target_cols"),
                    screen=ds_config["screen"])

@@ -1,4 +1,4 @@
-"""Audit and freeze the continuous-target KCI suite without benchmark scores."""
+"""Re-run the model-free KCI screen over the multivariate candidates (no benchmark scores)."""
 
 import argparse
 from collections import Counter
@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scoringbench.multivariate.screened_datasets import (
-    PROTOCOL, TARGET_DIMS, SUITE_PATH, finalize_suite, save_screen,
+    PROTOCOL, TARGET_DIMS, finalize_suite, save_screen, screen_candidate,
 )
 from scoringbench.multivariate.sources import get_source
 
@@ -23,14 +23,7 @@ def main():
     parser.add_argument("--dataset_index", type=int)
     parser.add_argument("--output_dir", type=Path, default=Path("results") / PROTOCOL)
     parser.add_argument("--quality_only", action="store_true")
-    parser.add_argument("--freeze", action="store_true")
-    parser.add_argument("--suite_path", type=Path, default=SUITE_PATH)
     args = parser.parse_args()
-    if args.freeze and (args.source != "scoringbench" or args.dataset_index is not None
-                        or sorted(args.target_dims) != list(TARGET_DIMS) or args.quality_only):
-        parser.error("--freeze requires the complete native family at d=2,3,5,10 with KCI")
-    if args.freeze and args.suite_path.exists():
-        parser.error("refusing to overwrite a frozen suite; use a new --suite_path")
     source = get_source(args.source)
     errors = 0
     entries = []
@@ -42,10 +35,8 @@ def main():
             datasets = [datasets[args.dataset_index]]
         counts = Counter()
         for entry in datasets:
-            entry.update(screen_only=True, quality_only=args.quality_only)
-            entry.pop("screen", None)
             try:
-                source.load(entry, target_dim=dimension)
+                screen_candidate(entry, target_dim=dimension, quality_only=args.quality_only)
             except Exception as exc:
                 if not entry.get("screen"):
                     errors += 1
@@ -83,12 +74,6 @@ def main():
                      f"{decision.get('scale_ratio')} | {decision.get('is_ordinal', False)} | {decision.get('duplicate_of', '-')} |")
         save_screen(entry, args.output_dir / args.source / f"d{entry['target_dim']}")
     (args.output_dir / "report.md").write_text("\n".join(lines) + "\n")
-    if args.freeze:
-        if errors:
-            raise SystemExit("Cannot freeze with unresolved loading or test errors; see report.md")
-        args.suite_path.parent.mkdir(parents=True, exist_ok=True)
-        args.suite_path.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-        print(f"Frozen suite: {args.suite_path}", flush=True)
     return int(errors > 0)
 
 

@@ -10,7 +10,6 @@ run_benchmark(datasets_config, model_factories, output_dir, ...) -> DataFrame
 """
 
 import gc
-import json
 import traceback
 from pathlib import Path
 from typing import Callable
@@ -23,7 +22,6 @@ from sklearn.model_selection import KFold
 from . import config as cfg
 from .cv import run_fold
 from .results import build_results_rows, save_fold_parquet
-from .screened_datasets import PROTOCOL, save_screen
 
 
 def _empty_cuda_cache() -> None:
@@ -83,20 +81,6 @@ def run_benchmark(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if any(entry.get("screen_protocol") for entry in datasets_config):
-        run_config = dict(protocol=PROTOCOL, score_space="raw", n_folds=n_folds,
-                          n_repeats_cv=n_repeats_cv, seed=seed, sample_size=sample_size,
-                          target_dim=target_dim, n_draws=cfg.N_DRAWS,
-                          selections=sorted({entry.get("selection", "selected") for entry in datasets_config}))
-        config_path = output_dir / "protocol.json"
-        if config_path.exists():
-            if json.loads(config_path.read_text()) != run_config:
-                raise ValueError("Output directory belongs to a different benchmark protocol")
-        elif any((output_dir / "raw").rglob("*.parquet")):
-            raise ValueError("Unversioned results cannot be resumed with screened datasets")
-        else:
-            config_path.write_text(json.dumps(run_config, indent=2) + "\n")
-
     all_rows: list[dict] = []
 
     total_folds = n_repeats_cv * n_folds
@@ -119,8 +103,6 @@ def run_benchmark(
             except ValueError as e:
                 print(f"⊘ {name} SKIPPED (loader rejected d={target_dim}): {e}")
                 continue
-            finally:
-                save_screen(ds_config, output_dir)
             print(f"Loaded: {len(X)} rows × {X.shape[1]} features → "
                   f"{Y.shape[1]}-dim target")
 

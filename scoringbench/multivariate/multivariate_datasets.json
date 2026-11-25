@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "n_datasets": 55,
+ "n_datasets": 51,
  "how_built": "curated multi-target datasets passing KCI (alpha=0.05) and residual distance correlation (effect>=0.20) screening",
  "require_stage2": false,
  "datasets": [
@@ -315,21 +315,6 @@
    ]
   },
   {
-   "openml_id": "air",
-   "name": "air",
-   "n_rows": 10000,
-   "target_cols": [
-    "max_PM2.5",
-    "max_NO2",
-    "max_O3",
-    "max_PM10",
-    "max_CO",
-    "max_SO2"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
    "openml_id": 46880,
    "name": "air-quality-and-pollution-assessment",
    "n_rows": 5000,
@@ -407,28 +392,6 @@
    "drop_cols": [
     "Date"
    ]
-  },
-  {
-   "openml_id": "bio",
-   "name": "bio",
-   "n_rows": 45730,
-   "target_cols": [
-    "F7",
-    "F9"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": "calcofi",
-   "name": "calcofi",
-   "n_rows": 814247,
-   "target_cols": [
-    "Salnty",
-    "T_degC"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
   },
   {
    "openml_id": 45029,
@@ -745,17 +708,6 @@
     "cdc15_10",
     "cdc15_70",
     "cdc15_90"
-   ],
-   "feature_cols": null,
-   "drop_cols": []
-  },
-  {
-   "openml_id": "taxi",
-   "name": "taxi",
-   "n_rows": 61286,
-   "target_cols": [
-    "dropoff_loc_lat",
-    "dropoff_loc_lonor"
    ],
    "feature_cols": null,
    "drop_cols": []

@@ -48,7 +48,7 @@ def parse_args():
     )
     p.add_argument(
         "--source", default="scoringbench", choices=sorted(SOURCES),
-        help="Dataset source: 'scoringbench' (55 dependency-screened multi-target datasets), "
+        help="Dataset source: 'scoringbench' (51 dependency-screened multi-target datasets), "
              "or 'synthetic'. Default: scoringbench.",
     )
     p.add_argument(

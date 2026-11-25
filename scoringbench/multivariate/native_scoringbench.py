@@ -35,7 +35,7 @@ from . import config as cfg
 
 SOURCE_NAME = "scoringbench"
 
-#: Curated manifest: 55 dependency-screened multi-target datasets.
+#: Curated manifest: 51 dependency-screened multi-target datasets.
 MANIFEST_PATH = Path(__file__).with_name("multivariate_datasets.json")
 
 #: Rows with a missing value in any *used* target are dropped (rf1/rf2/osales
@@ -71,11 +71,8 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int,
     given ``target_dim`` only contains datasets that genuinely have that many
     jointly-measured continuous targets.
 
-    ``manifest_path`` selects which data source to read (defaults to the curated
-    :data:`MANIFEST_PATH`); the CI-ablation source passes
-    :data:`CI_MANIFEST_PATH`. Any ``screen`` block on an entry is passed through
-    unchanged so the runner can record the conditional-dependence decision
-    alongside each result.
+    ``manifest_path`` selects which manifest to read (defaults to the curated
+    :data:`MANIFEST_PATH`).
 
     Ordering is by OpenML id so ``--dataset_index`` (SLURM arrays) maps
     deterministically regardless of manifest write order.
@@ -83,21 +80,13 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int,
     d = int(target_dim)
     n = int(sample_size)
     configs: list[dict[str, Any]] = []
-    def _sort_key(e):
-        val = e.get("openml_id")
-        try:
-            return (0, int(val))
-        except (ValueError, TypeError):
-            return (1, str(val or e.get("name", "")))
-
-    for entry in sorted(load_manifest(manifest_path), key=_sort_key):
+    for entry in sorted(load_manifest(manifest_path), key=lambda e: int(e["openml_id"])):
         targets = list(entry.get("target_cols") or [])
         if len(targets) < d:
             continue
         used = targets[:d]
-        is_openml = str(entry.get("openml_id", "")).isdigit()
-        ds_id = int(entry["openml_id"]) if is_openml else entry.get("openml_id")
-        src = entry.get("source") or (source_name if is_openml else "dheur")
+        ds_id = int(entry["openml_id"])
+        src = entry.get("source") or source_name
         configs.append({
             "name": f"{entry['name']}_d{d}",
             "id": ds_id,
@@ -113,9 +102,6 @@ def enumerate_native_scoringbench(target_dim: int, sample_size: int,
             # reproduce, because the aggregate hands the chained arm a target it
             # has not sampled yet.
             "drop_cols": list(entry.get("drop_cols") or []),
-            # Conditional-dependence screen provenance (CI source only; absent on
-            # the curated source). Carried through for result annotation.
-            "screen": entry.get("screen"),
             "target_dim": d,
             "n_samples": n,
         })
@@ -146,11 +132,6 @@ def load_native_scoringbench(ds_config: dict[str, Any], target_dim: int | None =
     when the file no longer contains the manifest's target columns or too few
     rows survive target-NaN removal.
     """
-    if ds_config.get("source") == "dheur" or not str(ds_config.get("openml_id", "")).isdigit():
-        from . import dheur_targets
-        dheur_cfg = dict(ds_config, dataset=ds_config.get("openml_name", ds_config.get("name", "").rsplit("_d", 1)[0]))
-        return dheur_targets.load_dheur(dheur_cfg, target_dim=target_dim)
-
     d = int(target_dim) if target_dim is not None else int(ds_config["target_dim"])
     targets = list(ds_config["all_target_cols"])[:d]
     df = _fetch(ds_config["openml_id"])
