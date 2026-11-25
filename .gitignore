@@ -19,3 +19,10 @@ catboost_info/
 build/
 dist/
 *.egg-info/
+
+# Multivariate screening outputs + OpenML API cache
+# (scripts/multivariate_screening/build_pool.py, screen_pool.py, screen_manifest.py)
+scripts/multivariate_screening/results/
+
+# Feature-promotion screening outputs (scripts/promote_targets/promote.py)
+scripts/promote_targets/results/

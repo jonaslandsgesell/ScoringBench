@@ -68,6 +68,30 @@ def _build_sources() -> dict[str, Source]:
         enumerate_datasets=_nsb.enumerate_native_scoringbench,
         load=_nsb.load_native_scoringbench,
     )
+
+    # Multi-target OpenML regression datasets passing the KCI dependence screen
+    # (scripts/multivariate_screening). Same OpenML loader as ``scoringbench``,
+    # but pinned to the frozen screened manifest. Imported lazily for the same
+    # reason as above (no hard ``openml`` requirement at registry import).
+    from . import multitarget_openml as _mto
+
+    sources[_mto.SOURCE_NAME] = Source(
+        name=_mto.SOURCE_NAME,
+        enumerate_datasets=_mto.enumerate_multitarget_openml,
+        load=_mto.load_multitarget_openml,
+    )
+
+    # Univariate ScoringBench datasets promoted to multivariate by promoting the
+    # most conditionally-dependent features into targets (scripts/promote_targets).
+    # Reuses the univariate loader, so it is imported lazily (no hard dependency
+    # at registry import; an absent manifest simply enumerates nothing).
+    from . import promoted_scoringbench as _prom
+
+    sources[_prom.SOURCE_NAME] = Source(
+        name=_prom.SOURCE_NAME,
+        enumerate_datasets=_prom.enumerate_promoted_scoringbench,
+        load=_prom.load_promoted_scoringbench,
+    )
     return sources
 
 

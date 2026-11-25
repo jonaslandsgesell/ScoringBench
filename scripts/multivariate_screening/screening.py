@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 
 from scoringbench.univariate.discreteness import target_discreteness
-from .ci_screen import curation_split, leaky_features, screen_kci
+from .ci_screen import EFFECT_MIN, curation_split, leaky_features, screen_kci
 
 
 def target_audit(targets, name: str | None = None) -> list[dict]:
@@ -37,7 +37,8 @@ def data_fingerprint(X, Y) -> str:
     return digest.hexdigest()
 
 
-def screen_dataset(X, Y, seed: int = 0, *, name: str | None = None, run_test: bool = True) -> tuple[dict, np.ndarray]:
+def screen_dataset(X, Y, seed: int = 0, *, name: str | None = None, run_test: bool = True,
+                   effect_min: float = EFFECT_MIN) -> tuple[dict, np.ndarray]:
     """Screen a fixed holdout and return the disjoint benchmark row indices."""
     diagnostics = target_audit(Y, name=name)
     feature_names = [str(column) for column in pd.DataFrame(X).columns]
@@ -85,6 +86,6 @@ def screen_dataset(X, Y, seed: int = 0, *, name: str | None = None, run_test: bo
             return dict(rejected, reason="redundant_targets"), benchmark
     if not run_test:
         return dict(rejected, reason="quality_checked"), benchmark
-    result = screen_kci(features, Y[curation], seed=seed)
+    result = screen_kci(features, Y[curation], effect_min=effect_min, seed=seed)
     result.update(audit)
     return result, benchmark

@@ -1,0 +1,2758 @@
+{
+ "schema": 1,
+ "n_datasets": 45,
+ "how_built": "Univariate ScoringBench datasets promoted to multivariate by moving the most conditionally dependent features into the target block (scripts/promote_targets/promote.py), KCI-screened at d=2.",
+ "target_dims": [
+  2,
+  3,
+  5,
+  10
+ ],
+ "alpha": 0.05,
+ "effect_min": 0.15,
+ "selection": "partial_distance_correlation",
+ "refine": 2,
+ "screen": "kci",
+ "datasets": [
+  {
+   "name": "225_puma8NH",
+   "univariate": {
+    "name": "225_puma8NH",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/225_puma8NH/225_puma8NH.tsv.gz",
+    "abbr": "2P"
+   },
+   "n_rows": 8192,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 8,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "theta2",
+    "theta3",
+    "tau1",
+    "tau2",
+    "theta1",
+    "thetad1"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "theta2",
+    "theta3",
+    "tau1",
+    "tau2",
+    "theta1",
+    "thetad1"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.47650819317139986,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.27963088096484867,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.09565163374144647,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "294_satellite_image",
+   "univariate": {
+    "name": "294_satellite_image",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/294_satellite_image/294_satellite_image.tsv.gz",
+    "abbr": "2SI"
+   },
+   "n_rows": 6435,
+   "n_numeric_features": 36,
+   "n_continuous_candidates": 9,
+   "original_target_continuous": false,
+   "anchor": "attr20",
+   "promoted_cols": [
+    "attr20",
+    "attr16",
+    "attr24",
+    "attr32",
+    "attr8",
+    "attr36",
+    "attr4",
+    "attr28",
+    "attr12"
+   ],
+   "all_target_cols": [
+    "attr20",
+    "attr16",
+    "attr24",
+    "attr32",
+    "attr8",
+    "attr36",
+    "attr4",
+    "attr28",
+    "attr12"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3342046664186235,
+     "n_features": 27
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.2512653564608128,
+     "n_features": 27
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.21940913601027456,
+     "n_features": 27
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "344_mv",
+   "univariate": {
+    "name": "344_mv",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/344_mv/344_mv.tsv.gz",
+    "abbr": "3M"
+   },
+   "n_rows": 40768,
+   "n_numeric_features": 10,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "x6",
+    "x4",
+    "x1",
+    "x5",
+    "x2",
+    "x9",
+    "x10"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "x6",
+    "x4",
+    "x1",
+    "x5",
+    "x2",
+    "x9",
+    "x10"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.829355268135464,
+     "n_features": 3
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.708532225499539,
+     "n_features": 3
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.28976495091925003,
+     "n_features": 3
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "3D_Estimation_using_RSSI_of_WLAN_dataset_complete_1_target",
+   "univariate": {
+    "name": "3D_Estimation_using_RSSI_of_WLAN_dataset_complete_1_target",
+    "source": "openml",
+    "id": 45720,
+    "abbr": "3EU"
+   },
+   "n_rows": 14400,
+   "n_numeric_features": 14,
+   "n_continuous_candidates": 4,
+   "original_target_continuous": false,
+   "anchor": "longitude",
+   "promoted_cols": [
+    "longitude",
+    "latitude",
+    "unixtime",
+    "index"
+   ],
+   "all_target_cols": [
+    "longitude",
+    "latitude",
+    "unixtime",
+    "index"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6314924269486328,
+     "n_features": 10
+    },
+    "3": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.46559267709179214,
+     "n_features": 10
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "503_wind",
+   "univariate": {
+    "name": "503_wind",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/503_wind/503_wind.tsv.gz",
+    "abbr": "5W"
+   },
+   "n_rows": 6574,
+   "n_numeric_features": 14,
+   "n_continuous_candidates": 11,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "CLO",
+    "MUL",
+    "BEL",
+    "DUB",
+    "CLA",
+    "BIR",
+    "KIL",
+    "SHA",
+    "RPT"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "CLO",
+    "MUL",
+    "BEL",
+    "DUB",
+    "CLA",
+    "BIR",
+    "KIL",
+    "SHA",
+    "RPT"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6360420251325477,
+     "n_features": 5
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6079457143931386,
+     "n_features": 5
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5430354324923681,
+     "n_features": 5
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4316719856158525,
+     "n_features": 5
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  },
+  {
+   "name": "529_pollen",
+   "univariate": {
+    "name": "529_pollen",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/529_pollen/529_pollen.tsv.gz",
+    "abbr": "5P"
+   },
+   "n_rows": 3848,
+   "n_numeric_features": 4,
+   "n_continuous_candidates": 4,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "RIDGE",
+    "WEIGHT"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "RIDGE",
+    "WEIGHT"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6071004385878325,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.590357507477074,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "547_no2",
+   "univariate": {
+    "name": "547_no2",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/547_no2/547_no2.tsv.gz",
+    "abbr": "5N"
+   },
+   "n_rows": 500,
+   "n_numeric_features": 7,
+   "n_continuous_candidates": 6,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "temperature_diff_2m_25m",
+    "wind_speed",
+    "temperature_at_2m",
+    "cars_per_hour",
+    "wind_direction"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "temperature_diff_2m_25m",
+    "wind_speed",
+    "temperature_at_2m",
+    "cars_per_hour",
+    "wind_direction"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.8013516509384218e-05,
+     "residual_dcor": 0.3763700795551304,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 4.474165527379448e-05,
+     "residual_dcor": 0.32505801201320533,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 8.948331054758896e-05,
+     "residual_dcor": 0.18097102541940716,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "564_fried",
+   "univariate": {
+    "name": "564_fried",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/564_fried/564_fried.tsv.gz",
+    "abbr": "5F"
+   },
+   "n_rows": 40768,
+   "n_numeric_features": 10,
+   "n_continuous_candidates": 10,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "X4",
+    "X2",
+    "X1",
+    "X5",
+    "X3",
+    "X6",
+    "X7",
+    "X8"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "X4",
+    "X2",
+    "X1",
+    "X5",
+    "X3",
+    "X6",
+    "X7",
+    "X8"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5224636649295319,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3015959159675253,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.15946338920327896,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "595_fri_c0_1000_10",
+   "univariate": {
+    "name": "595_fri_c0_1000_10",
+    "source": "pmlb",
+    "url": "https://github.com/EpistasisLab/penn-ml-benchmarks/raw/master/datasets/595_fri_c0_1000_10/595_fri_c0_1000_10.tsv.gz",
+    "abbr": "5FC"
+   },
+   "n_rows": 1000,
+   "n_numeric_features": 10,
+   "n_continuous_candidates": 10,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "oz4",
+    "oz5",
+    "oz2",
+    "oz1",
+    "oz3",
+    "oz9",
+    "oz10",
+    "oz6"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "oz4",
+    "oz5",
+    "oz2",
+    "oz1",
+    "oz3",
+    "oz9",
+    "oz10",
+    "oz6"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 3.341771304121721e-14,
+     "residual_dcor": 0.5006333572222821,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 6.683542608243442e-14,
+     "residual_dcor": 0.2829221089872921,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.3367085216486885e-13,
+     "residual_dcor": 0.1614977490701252,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "Airlines_DepDelay_10M",
+   "univariate": {
+    "name": "Airlines_DepDelay_10M",
+    "source": "openml",
+    "id": 42728,
+    "abbr": "AD1"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 6,
+   "n_continuous_candidates": 3,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "CRSDepTime",
+    "CRSArrTime",
+    "Distance"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "CRSDepTime",
+    "CRSArrTime",
+    "Distance"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.3322676295501878e-15,
+     "residual_dcor": 0.16530872770730165,
+     "n_features": 3
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.36827421151479417,
+     "n_features": 3
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "Another-Dataset-on-used-Fiat-500-(1538-rows)",
+   "univariate": {
+    "name": "Another-Dataset-on-used-Fiat-500-(1538-rows)",
+    "source": "openml",
+    "id": 43828,
+    "abbr": "A"
+   },
+   "n_rows": 1538,
+   "n_numeric_features": 6,
+   "n_continuous_candidates": 4,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "age_in_days",
+    "km",
+    "lon",
+    "lat"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "age_in_days",
+    "km",
+    "lon",
+    "lat"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.8658094221600008,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.8369810649003702,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.35531655673148216,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "BIAS_CORRECTION",
+   "univariate": {
+    "name": "BIAS_CORRECTION",
+    "source": "openml",
+    "id": 42897,
+    "abbr": "BC"
+   },
+   "n_rows": 7725,
+   "n_numeric_features": 23,
+   "n_continuous_candidates": 20,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "LDAPS_Tmin_lapse",
+    "Present_Tmin",
+    "LDAPS_Tmax_lapse",
+    "Next_Tmax",
+    "Present_Tmax",
+    "Solar radiation",
+    "LDAPS_RHmin",
+    "LDAPS_PPT4",
+    "LDAPS_LH"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "LDAPS_Tmin_lapse",
+    "Present_Tmin",
+    "LDAPS_Tmax_lapse",
+    "Next_Tmax",
+    "Present_Tmax",
+    "Solar radiation",
+    "LDAPS_RHmin",
+    "LDAPS_PPT4",
+    "LDAPS_LH"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.7519732897440261,
+     "n_features": 14
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.679990237445165,
+     "n_features": 14
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5900630315391562,
+     "n_features": 14
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.2579137308253284,
+     "n_features": 14
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  },
+  {
+   "name": "BNG(stock)",
+   "univariate": {
+    "name": "BNG(stock)",
+    "source": "openml",
+    "id": 1200,
+    "abbr": "B"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 9,
+   "n_continuous_candidates": 9,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "company1",
+    "company6",
+    "company3",
+    "company9",
+    "company8",
+    "company7",
+    "company4"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "company1",
+    "company6",
+    "company3",
+    "company9",
+    "company8",
+    "company7",
+    "company4"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4274868093710113,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.2806191019997774,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.20854097451177114,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "Ele2",
+   "univariate": {
+    "name": "Ele2",
+    "source": "keel",
+    "url": "https://sci2s.ugr.es/keel/dataset/data/regression/ele-2.zip",
+    "abbr": "E"
+   },
+   "n_rows": 1056,
+   "n_numeric_features": 4,
+   "n_continuous_candidates": 1,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "X3"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "X3"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0001352208083215123,
+     "residual_dcor": 0.7483490668049563,
+     "n_features": 3
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "Infrared_Thermography_Temperature",
+   "univariate": {
+    "name": "Infrared_Thermography_Temperature",
+    "source": "openml",
+    "id": 46613,
+    "abbr": "ITT"
+   },
+   "n_rows": 1020,
+   "n_numeric_features": 30,
+   "n_continuous_candidates": 28,
+   "original_target_continuous": false,
+   "anchor": "T_Max1",
+   "promoted_cols": [
+    "T_Max1",
+    "T_OR_Max1",
+    "T_OR1",
+    "canthiMax1",
+    "T_FH_Max1",
+    "T_RC_Max1",
+    "T_RC1",
+    "T_RC_Dry1",
+    "RCC1",
+    "T_FHC_Max1"
+   ],
+   "all_target_cols": [
+    "T_Max1",
+    "T_OR_Max1",
+    "T_OR1",
+    "canthiMax1",
+    "T_FH_Max1",
+    "T_RC_Max1",
+    "T_RC1",
+    "T_RC_Dry1",
+    "RCC1",
+    "T_FHC_Max1"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.014765201747428569,
+     "residual_dcor": 0.6825428363077524,
+     "n_features": 20
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.029530403494857138,
+     "residual_dcor": 0.7534531903673248,
+     "n_features": 20
+    },
+    "5": {
+     "selected": false,
+     "reason": "target_leakage",
+     "kci_p": null,
+     "residual_dcor": null,
+     "n_features": 20
+    },
+    "10": {
+     "selected": false,
+     "reason": "target_leakage",
+     "kci_p": null,
+     "residual_dcor": null,
+     "n_features": 20
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "Mortgage",
+   "univariate": {
+    "name": "Mortgage",
+    "source": "keel",
+    "url": "https://sci2s.ugr.es/keel/dataset/data/regression/mortgage.zip",
+    "abbr": "M"
+   },
+   "n_rows": 1049,
+   "n_numeric_features": 15,
+   "n_continuous_candidates": 15,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "5Y-CMaturityRate",
+    "3Y-CMaturityRate",
+    "bankCredit",
+    "3M-Rate-SecondaryMarket",
+    "1MonthCDRate",
+    "3M-Rate-AuctionAverage",
+    "moneyStock",
+    "1Y-CMaturityRate",
+    "loansLeases"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "5Y-CMaturityRate",
+    "3Y-CMaturityRate",
+    "bankCredit",
+    "3M-Rate-SecondaryMarket",
+    "1MonthCDRate",
+    "3M-Rate-AuctionAverage",
+    "moneyStock",
+    "1Y-CMaturityRate",
+    "loansLeases"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 8.76527321036491e-06,
+     "residual_dcor": 0.7719131508274917,
+     "n_features": 6
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 6.992409043560244e-06,
+     "residual_dcor": 0.7060958593795527,
+     "n_features": 6
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.175203557275296e-06,
+     "residual_dcor": 0.7009080201698272,
+     "n_features": 6
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 8.180874078167477e-07,
+     "residual_dcor": 0.45769452895267476,
+     "n_features": 6
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  },
+  {
+   "name": "NASA_PHM2008",
+   "univariate": {
+    "name": "NASA_PHM2008",
+    "source": "openml",
+    "id": 42821,
+    "abbr": "NP"
+   },
+   "n_rows": 45918,
+   "n_numeric_features": 21,
+   "n_continuous_candidates": 13,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "sensor_11",
+    "sensor_4",
+    "sensor_15",
+    "sensor_9",
+    "sensor_2",
+    "sensor_3",
+    "sensor_12",
+    "sensor_14",
+    "sensor_7"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "sensor_11",
+    "sensor_4",
+    "sensor_15",
+    "sensor_9",
+    "sensor_2",
+    "sensor_3",
+    "sensor_12",
+    "sensor_14",
+    "sensor_7"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.35205316041823215,
+     "n_features": 8
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.36044148842261814,
+     "n_features": 8
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.2441091095313423,
+     "n_features": 8
+    },
+    "10": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.18094220296866503,
+     "n_features": 8
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "OnlineNewsPopularity",
+   "univariate": {
+    "name": "OnlineNewsPopularity",
+    "source": "openml",
+    "id": 44064,
+    "abbr": "O"
+   },
+   "n_rows": 39644,
+   "n_numeric_features": 59,
+   "n_continuous_candidates": 38,
+   "original_target_continuous": false,
+   "anchor": "kw_avg_avg",
+   "promoted_cols": [
+    "kw_avg_avg",
+    "kw_max_avg",
+    "kw_min_avg",
+    "kw_max_min",
+    "kw_avg_min",
+    "kw_avg_max",
+    "kw_min_max",
+    "num_hrefs",
+    "LDA_03",
+    "self_reference_avg_sharess"
+   ],
+   "all_target_cols": [
+    "kw_avg_avg",
+    "kw_max_avg",
+    "kw_min_avg",
+    "kw_max_min",
+    "kw_avg_min",
+    "kw_avg_max",
+    "kw_min_max",
+    "num_hrefs",
+    "LDA_03",
+    "self_reference_avg_sharess"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.923377950825312e-07,
+     "residual_dcor": 0.5547119521520445,
+     "n_features": 49
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3684983223424237,
+     "n_features": 49
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3386315110192989,
+     "n_features": 49
+    },
+    "10": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.14056657682906845,
+     "n_features": 49
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "Parkinsons_Telemonitoring",
+   "univariate": {
+    "name": "Parkinsons_Telemonitoring",
+    "source": "openml",
+    "id": 4531,
+    "abbr": "PT"
+   },
+   "n_rows": 5875,
+   "n_numeric_features": 21,
+   "n_continuous_candidates": 18,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "Jitter...",
+    "Jitter.Abs.",
+    "Jitter.PPQ5",
+    "Jitter.RAP",
+    "Jitter.DDP",
+    "NHR",
+    "HNR",
+    "RPDE",
+    "DFA"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "Jitter...",
+    "Jitter.Abs.",
+    "Jitter.PPQ5",
+    "Jitter.RAP",
+    "Jitter.DDP",
+    "NHR",
+    "HNR",
+    "RPDE",
+    "DFA"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5511380031220642,
+     "n_features": 12
+    },
+    "3": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6295445344585513,
+     "n_features": 12
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6697632587655912,
+     "n_features": 12
+    },
+    "10": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.41878960064466214,
+     "n_features": 12
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "QsarFishToxicity",
+   "univariate": {
+    "name": "QsarFishToxicity",
+    "source": "openml",
+    "id": 44970,
+    "abbr": "Q"
+   },
+   "n_rows": 908,
+   "n_numeric_features": 6,
+   "n_continuous_candidates": 4,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "MLOGP",
+    "SM1_Dz",
+    "GATS1i",
+    "CIC0"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "MLOGP",
+    "SM1_Dz",
+    "GATS1i",
+    "CIC0"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6376572249428744,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.44076650029887515,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.33155199237115307,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "SGEMM_GPU_kernel_performance",
+   "univariate": {
+    "name": "SGEMM_GPU_kernel_performance",
+    "source": "openml",
+    "id": 44069,
+    "abbr": "SGK"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 9,
+   "n_continuous_candidates": 3,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "Run3",
+    "Run4",
+    "Run2"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "Run3",
+    "Run4",
+    "Run2"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.8561133096087906,
+     "n_features": 6
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.8974538525318011,
+     "n_features": 6
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "Treasury",
+   "univariate": {
+    "name": "Treasury",
+    "source": "keel",
+    "url": "https://sci2s.ugr.es/keel/dataset/data/regression/treasury.zip",
+    "abbr": "T"
+   },
+   "n_rows": 1049,
+   "n_numeric_features": 15,
+   "n_continuous_candidates": 15,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "moneyStock",
+    "3Y-CMaturityRate",
+    "3M-Rate-SecondaryMarket",
+    "30Y-CMortgageRate",
+    "5Y-CMaturityRate",
+    "bankCredit",
+    "3M-Rate-AuctionAverage",
+    "1Y-CMaturityRate",
+    "savingsDeposits"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "moneyStock",
+    "3Y-CMaturityRate",
+    "3M-Rate-SecondaryMarket",
+    "30Y-CMortgageRate",
+    "5Y-CMaturityRate",
+    "bankCredit",
+    "3M-Rate-AuctionAverage",
+    "1Y-CMaturityRate",
+    "savingsDeposits"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 3.489154242808379e-05,
+     "residual_dcor": 0.8182031513651616,
+     "n_features": 6
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 6.551735547910553e-05,
+     "residual_dcor": 0.7958794595729755,
+     "n_features": 6
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 7.43947246424348e-05,
+     "residual_dcor": 0.7535764452550439,
+     "n_features": 6
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.4565908909025538e-05,
+     "residual_dcor": 0.4736016814249986,
+     "n_features": 6
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  },
+  {
+   "name": "Wizmir",
+   "univariate": {
+    "name": "Wizmir",
+    "source": "keel",
+    "url": "https://sci2s.ugr.es/keel/dataset/data/regression/wizmir.zip",
+    "abbr": "W"
+   },
+   "n_rows": 1461,
+   "n_numeric_features": 9,
+   "n_continuous_candidates": 4,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "Max_temperature",
+    "Min_temperature",
+    "Dewpoint",
+    "Visibility"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "Max_temperature",
+    "Min_temperature",
+    "Dewpoint",
+    "Visibility"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.220446049250313e-16,
+     "residual_dcor": 0.8900667583753104,
+     "n_features": 5
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.8317487589970788,
+     "n_features": 5
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.47618220326087135,
+     "n_features": 5
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "Yolanda",
+   "univariate": {
+    "name": "Yolanda",
+    "source": "openml",
+    "id": 42705,
+    "abbr": "Y"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 100,
+   "n_continuous_candidates": 100,
+   "original_target_continuous": false,
+   "anchor": "1",
+   "promoted_cols": [
+    "1",
+    "2",
+    "3",
+    "46",
+    "63",
+    "6",
+    "81",
+    "36",
+    "13",
+    "16"
+   ],
+   "all_target_cols": [
+    "1",
+    "2",
+    "3",
+    "46",
+    "63",
+    "6",
+    "81",
+    "36",
+    "13",
+    "16"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.1518647591302056e-08,
+     "residual_dcor": 0.35762208718565086,
+     "n_features": 90
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.3037295182604112e-08,
+     "residual_dcor": 0.2113847269262776,
+     "n_features": 90
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 4.440892098500626e-16,
+     "residual_dcor": 0.19861239897693211,
+     "n_features": 90
+    },
+    "10": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.13504540913929286,
+     "n_features": 90
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "abalone",
+   "univariate": {
+    "name": "abalone",
+    "source": "openml",
+    "id": 42726,
+    "abbr": "A"
+   },
+   "n_rows": 4177,
+   "n_numeric_features": 7,
+   "n_continuous_candidates": 6,
+   "original_target_continuous": false,
+   "anchor": "Shell_weight",
+   "promoted_cols": [
+    "Shell_weight",
+    "Whole_weight",
+    "Diameter",
+    "Shucked_weight",
+    "Length"
+   ],
+   "all_target_cols": [
+    "Shell_weight",
+    "Whole_weight",
+    "Diameter",
+    "Shucked_weight",
+    "Length"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.555448553295426,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5191671930473346,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4727342467962619,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "bank32nh",
+   "univariate": {
+    "name": "bank32nh",
+    "source": "openml",
+    "id": 558,
+    "abbr": "B"
+   },
+   "n_rows": 8192,
+   "n_numeric_features": 32,
+   "n_continuous_candidates": 28,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "a2pop",
+    "a1pop",
+    "a3pop",
+    "temp",
+    "b1eff",
+    "a2sy",
+    "a3sy",
+    "a2cy",
+    "a1sx"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "a2pop",
+    "a1pop",
+    "a3pop",
+    "temp",
+    "b1eff",
+    "a2sy",
+    "a3sy",
+    "a2cy",
+    "a1sx"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4443417445269184,
+     "n_features": 23
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.24916448625013396,
+     "n_features": 23
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.1248831926970897,
+     "n_features": 23
+    },
+    "10": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.04535321099402597,
+     "n_features": 23
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "bank8FM",
+   "univariate": {
+    "name": "bank8FM",
+    "source": "openml",
+    "id": 572,
+    "abbr": "B"
+   },
+   "n_rows": 8192,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "a3pop",
+    "a2pop",
+    "a1cx",
+    "temp",
+    "b2x",
+    "b2y"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "a3pop",
+    "a2pop",
+    "a1cx",
+    "temp",
+    "b2x",
+    "b2y"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6656577743972976,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4027880406601962,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.14054044521340364,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "boston",
+   "univariate": {
+    "name": "boston",
+    "source": "openml",
+    "id": 531,
+    "abbr": "B"
+   },
+   "n_rows": 506,
+   "n_numeric_features": 13,
+   "n_continuous_candidates": 9,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "RM",
+    "LSTAT",
+    "NOX",
+    "TAX",
+    "AGE",
+    "CRIM",
+    "B",
+    "DIS",
+    "INDUS"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "RM",
+    "LSTAT",
+    "NOX",
+    "TAX",
+    "AGE",
+    "CRIM",
+    "B",
+    "DIS",
+    "INDUS"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 6.231897759390037e-06,
+     "residual_dcor": 0.6877497536229894,
+     "n_features": 4
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.0616070578173264e-07,
+     "residual_dcor": 0.6098724130271642,
+     "n_features": 4
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 2.123214115634653e-07,
+     "residual_dcor": 0.27050381595870576,
+     "n_features": 4
+    },
+    "10": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 4.777231760177969e-07,
+     "residual_dcor": 0.24396025523317205,
+     "n_features": 4
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "california",
+   "univariate": {
+    "name": "california",
+    "source": "openml",
+    "id": 44025,
+    "abbr": "C"
+   },
+   "n_rows": 20640,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "MedInc",
+    "AveRooms",
+    "AveOccup",
+    "Latitude",
+    "AveBedrms",
+    "Longitude"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "MedInc",
+    "AveRooms",
+    "AveOccup",
+    "Latitude",
+    "AveBedrms",
+    "Longitude"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6438509957808749,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.4940658748399258,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.23832924599313854,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "colleges",
+   "univariate": {
+    "name": "colleges",
+    "source": "openml",
+    "id": 42727,
+    "abbr": "C"
+   },
+   "n_rows": 7063,
+   "n_numeric_features": 33,
+   "n_continuous_candidates": 28,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "percent_white",
+    "sat_writing_midrange",
+    "sat_math_midrange",
+    "sat_verbal_midrange",
+    "mean_earnings_10_years",
+    "sat_total_average",
+    "faminc",
+    "percent_black",
+    "median_earnings_10_years"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "percent_white",
+    "sat_writing_midrange",
+    "sat_math_midrange",
+    "sat_verbal_midrange",
+    "mean_earnings_10_years",
+    "sat_total_average",
+    "faminc",
+    "percent_black",
+    "median_earnings_10_years"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 5.7481895048283604e-06,
+     "residual_dcor": 0.19792699550422913,
+     "n_features": 24
+    },
+    "3": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.020782243325624616,
+     "residual_dcor": 0.28910756338106514,
+     "n_features": 23
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0012911966898627725,
+     "residual_dcor": 0.38005335177844024,
+     "n_features": 23
+    },
+    "10": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0002852773135539888,
+     "residual_dcor": 0.27072919956675734,
+     "n_features": 23
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "concrete_compressive_strength",
+   "univariate": {
+    "name": "concrete_compressive_strength",
+    "source": "openml",
+    "id": 44959,
+    "abbr": "CCS"
+   },
+   "n_rows": 1030,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "cement",
+    "water",
+    "superplasticizer",
+    "fine_aggregate",
+    "coarse_aggregate",
+    "fly_ash"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "cement",
+    "water",
+    "superplasticizer",
+    "fine_aggregate",
+    "coarse_aggregate",
+    "fly_ash"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6315345351154513,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3547471356923866,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.28370449063572767,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "debutanizer",
+   "univariate": {
+    "name": "debutanizer",
+    "source": "openml",
+    "id": 23516,
+    "abbr": "D"
+   },
+   "n_rows": 2394,
+   "n_numeric_features": 7,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "u5",
+    "u4",
+    "u3",
+    "u6",
+    "u1"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "u5",
+    "u4",
+    "u3",
+    "u6",
+    "u1"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.672007060056103e-11,
+     "residual_dcor": 0.2786899465082364,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 1.858513343222512e-13,
+     "residual_dcor": 0.1525397703009239,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.18056797814812922,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "elevators",
+   "univariate": {
+    "name": "elevators",
+    "source": "openml",
+    "id": 44134,
+    "abbr": "E"
+   },
+   "n_rows": 16599,
+   "n_numeric_features": 16,
+   "n_continuous_candidates": 5,
+   "original_target_continuous": false,
+   "anchor": "climbRate",
+   "promoted_cols": [
+    "climbRate",
+    "diffDiffClb",
+    "p",
+    "diffRollRate",
+    "Sgz"
+   ],
+   "all_target_cols": [
+    "climbRate",
+    "diffDiffClb",
+    "p",
+    "diffRollRate",
+    "Sgz"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 5.320125063046355e-06,
+     "residual_dcor": 0.17681412446109304,
+     "n_features": 11
+    },
+    "3": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 1.064025012609271e-05,
+     "residual_dcor": 0.09921613214196379,
+     "n_features": 11
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 1.1567367645959337e-06,
+     "residual_dcor": 0.06148563825539648,
+     "n_features": 11
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "house_16H",
+   "univariate": {
+    "name": "house_16H",
+    "source": "openml",
+    "id": 44139,
+    "abbr": "H1"
+   },
+   "n_rows": 22784,
+   "n_numeric_features": 16,
+   "n_continuous_candidates": 16,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "P27p4",
+    "P15p1",
+    "P14p9",
+    "H18pA",
+    "H13p1",
+    "H2p2",
+    "H40p4",
+    "H10p1",
+    "P11p4"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "P27p4",
+    "P15p1",
+    "P14p9",
+    "H18pA",
+    "H13p1",
+    "H2p2",
+    "H40p4",
+    "H10p1",
+    "P11p4"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.29479823044165193,
+     "n_features": 7
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3336469294414029,
+     "n_features": 7
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.21623191906911926,
+     "n_features": 7
+    },
+    "10": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.148206077911701,
+     "n_features": 7
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "house_sales",
+   "univariate": {
+    "name": "house_sales",
+    "source": "openml",
+    "id": 44144,
+    "abbr": "HS"
+   },
+   "n_rows": 21613,
+   "n_numeric_features": 15,
+   "n_continuous_candidates": 9,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "lat",
+    "yr_built",
+    "sqft_living",
+    "sqft_basement",
+    "sqft_living15",
+    "long",
+    "sqft_lot15",
+    "sqft_above",
+    "sqft_lot"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "lat",
+    "yr_built",
+    "sqft_living",
+    "sqft_basement",
+    "sqft_living15",
+    "long",
+    "sqft_lot15",
+    "sqft_above",
+    "sqft_lot"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5391924885551058,
+     "n_features": 6
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3534267138614559,
+     "n_features": 6
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.23421167656566788,
+     "n_features": 6
+    },
+    "10": {
+     "selected": false,
+     "reason": "redundant_targets",
+     "kci_p": null,
+     "residual_dcor": null,
+     "n_features": 6
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "houses",
+   "univariate": {
+    "name": "houses",
+    "source": "openml",
+    "id": 44138,
+    "abbr": "H"
+   },
+   "n_rows": 20640,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 7,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "median_income",
+    "latitude",
+    "total_rooms",
+    "longitude",
+    "population",
+    "households"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "median_income",
+    "latitude",
+    "total_rooms",
+    "longitude",
+    "population",
+    "households"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6518369745102084,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3198456890495142,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.29760919674044006,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "isolet",
+   "univariate": {
+    "name": "isolet",
+    "source": "openml",
+    "id": 44135,
+    "abbr": "I"
+   },
+   "n_rows": 7797,
+   "n_numeric_features": 613,
+   "n_continuous_candidates": 576,
+   "original_target_continuous": false,
+   "anchor": "f480",
+   "promoted_cols": [
+    "f480",
+    "f577",
+    "f391",
+    "f392",
+    "f358",
+    "f330",
+    "f321",
+    "f359",
+    "f390",
+    "f322"
+   ],
+   "all_target_cols": [
+    "f480",
+    "f577",
+    "f391",
+    "f392",
+    "f358",
+    "f330",
+    "f321",
+    "f359",
+    "f390",
+    "f322"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0028279467961254134,
+     "residual_dcor": 0.15059693259694304,
+     "n_features": 603
+    },
+    "3": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.005655893592250827,
+     "residual_dcor": 0.09356592970045378,
+     "n_features": 603
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.01084587541187787,
+     "residual_dcor": 0.14725482029154904,
+     "n_features": 603
+    },
+    "10": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.01739125367863692,
+     "residual_dcor": 0.1232048001582043,
+     "n_features": 603
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "kin8nm",
+   "univariate": {
+    "name": "kin8nm",
+    "source": "openml",
+    "id": 189,
+    "abbr": "K"
+   },
+   "n_rows": 8192,
+   "n_numeric_features": 8,
+   "n_continuous_candidates": 8,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "theta3",
+    "theta5",
+    "theta7",
+    "theta6",
+    "theta8",
+    "theta2"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "theta3",
+    "theta5",
+    "theta7",
+    "theta6",
+    "theta8",
+    "theta2"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5139624055665576,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.224352338068027,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "small_effect",
+     "kci_p": 0.0,
+     "residual_dcor": 0.09661892483262122,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "nyc-taxi-green-dec-2016",
+   "univariate": {
+    "name": "nyc-taxi-green-dec-2016",
+    "source": "openml",
+    "id": 44143,
+    "abbr": "N"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 9,
+   "n_continuous_candidates": 1,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "total_amount"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "total_amount"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 5.6182836161156047e-11,
+     "residual_dcor": 0.40949716353008775,
+     "n_features": 8
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "particulate-matter-ukair-2017",
+   "univariate": {
+    "name": "particulate-matter-ukair-2017",
+    "source": "openml",
+    "id": 44068,
+    "abbr": "P"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 6,
+   "n_continuous_candidates": 1,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "PM.sub.2.5..sub..particulate.matter..Hourly.measured."
+   ],
+   "all_target_cols": [
+    "__y__",
+    "PM.sub.2.5..sub..particulate.matter..Hourly.measured."
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6827660470177114,
+     "n_features": 5
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "pol",
+   "univariate": {
+    "name": "pol",
+    "source": "openml",
+    "id": 44133,
+    "abbr": "P"
+   },
+   "n_rows": 15000,
+   "n_numeric_features": 26,
+   "n_continuous_candidates": 10,
+   "original_target_continuous": false,
+   "anchor": "f6",
+   "promoted_cols": [
+    "f6",
+    "f19",
+    "f18",
+    "f15",
+    "f16",
+    "f14",
+    "f17",
+    "f8",
+    "f7",
+    "f5"
+   ],
+   "all_target_cols": [
+    "f6",
+    "f19",
+    "f18",
+    "f15",
+    "f16",
+    "f14",
+    "f17",
+    "f8",
+    "f7",
+    "f5"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.7617255963711731,
+     "n_features": 16
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5496141140848378,
+     "n_features": 16
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.33517055789308053,
+     "n_features": 16
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.1803162317445345,
+     "n_features": 16
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  },
+  {
+   "name": "sulfur",
+   "univariate": {
+    "name": "sulfur",
+    "source": "openml",
+    "id": 44145,
+    "abbr": "S"
+   },
+   "n_rows": 10081,
+   "n_numeric_features": 6,
+   "n_continuous_candidates": 6,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "y2",
+    "a3",
+    "a1",
+    "a2"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "y2",
+    "a3",
+    "a1",
+    "a2"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.653760926637396,
+     "n_features": 2
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.31945745534505604,
+     "n_features": 2
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.26947040655494525,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5
+   ]
+  },
+  {
+   "name": "tecator",
+   "univariate": {
+    "name": "tecator",
+    "source": "openml",
+    "id": 505,
+    "abbr": "T"
+   },
+   "n_rows": 240,
+   "n_numeric_features": 124,
+   "n_continuous_candidates": 124,
+   "original_target_continuous": true,
+   "anchor": "__y__",
+   "promoted_cols": [
+    "moisture",
+    "protein",
+    "absorbance_38",
+    "absorbance_37",
+    "absorbance_43",
+    "absorbance_97",
+    "absorbance_40",
+    "absorbance_93",
+    "absorbance_96"
+   ],
+   "all_target_cols": [
+    "__y__",
+    "moisture",
+    "protein",
+    "absorbance_38",
+    "absorbance_37",
+    "absorbance_43",
+    "absorbance_97",
+    "absorbance_40",
+    "absorbance_93",
+    "absorbance_96"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.01096827018616442,
+     "residual_dcor": 0.6126245716462854,
+     "n_features": 115
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.02193654037232884,
+     "residual_dcor": 0.3899601146245712,
+     "n_features": 115
+    },
+    "5": {
+     "selected": false,
+     "reason": "target_leakage",
+     "kci_p": null,
+     "residual_dcor": null,
+     "n_features": 115
+    },
+    "10": {
+     "selected": false,
+     "reason": "kci_not_significant",
+     "kci_p": 0.09871443167547977,
+     "residual_dcor": null,
+     "n_features": 115
+    }
+   },
+   "selected_dims": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "wine_quality",
+   "univariate": {
+    "name": "wine_quality",
+    "source": "openml",
+    "id": 44136,
+    "abbr": "WQ"
+   },
+   "n_rows": 6497,
+   "n_numeric_features": 11,
+   "n_continuous_candidates": 10,
+   "original_target_continuous": false,
+   "anchor": "alcohol",
+   "promoted_cols": [
+    "alcohol",
+    "density",
+    "residual.sugar",
+    "total.sulfur.dioxide",
+    "chlorides",
+    "free.sulfur.dioxide",
+    "fixed.acidity",
+    "pH",
+    "sulphates"
+   ],
+   "all_target_cols": [
+    "alcohol",
+    "density",
+    "residual.sugar",
+    "total.sulfur.dioxide",
+    "chlorides",
+    "free.sulfur.dioxide",
+    "fixed.acidity",
+    "pH",
+    "sulphates"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.0,
+     "residual_dcor": 0.6897916313648813,
+     "n_features": 2
+    },
+    "3": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.5529113605954317,
+     "n_features": 2
+    },
+    "5": {
+     "selected": false,
+     "reason": "scale_ratio",
+     "kci_p": 0.0,
+     "residual_dcor": 0.3515892717909042,
+     "n_features": 2
+    }
+   },
+   "selected_dims": [
+    2
+   ]
+  },
+  {
+   "name": "year",
+   "univariate": {
+    "name": "year",
+    "source": "openml",
+    "id": 44027,
+    "abbr": "Y"
+   },
+   "n_rows": 50000,
+   "n_numeric_features": 90,
+   "n_continuous_candidates": 90,
+   "original_target_continuous": false,
+   "anchor": "1",
+   "promoted_cols": [
+    "1",
+    "2",
+    "63",
+    "46",
+    "6",
+    "14",
+    "13",
+    "81",
+    "36",
+    "77"
+   ],
+   "all_target_cols": [
+    "1",
+    "2",
+    "63",
+    "46",
+    "6",
+    "14",
+    "13",
+    "81",
+    "36",
+    "77"
+   ],
+   "screen": {
+    "2": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.002065040461979306,
+     "residual_dcor": 0.44118340227400066,
+     "n_features": 80
+    },
+    "3": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 0.004130080923958612,
+     "residual_dcor": 0.2652907447117577,
+     "n_features": 80
+    },
+    "5": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 7.447887054423674e-05,
+     "residual_dcor": 0.21916089690549617,
+     "n_features": 80
+    },
+    "10": {
+     "selected": true,
+     "reason": "selected",
+     "kci_p": 2.9164074295540132e-06,
+     "residual_dcor": 0.1569073400485104,
+     "n_features": 80
+    }
+   },
+   "selected_dims": [
+    2,
+    3,
+    5,
+    10
+   ]
+  }
+ ]
+}

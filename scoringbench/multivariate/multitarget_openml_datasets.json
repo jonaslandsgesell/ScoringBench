@@ -1,0 +1,204 @@
+{
+ "schema": 1,
+ "n_datasets": 14,
+ "how_built": "Multi-target OpenML regression datasets passing the kci_continuous_audited_v3 KCI dependence screen (scripts/multivariate_screening). The multitarget_openml source.",
+ "protocol": "kci_continuous_audited_v3",
+ "suite_id": "25076fdcb22fe03cb68578571d0b0efa312277ac6569ca4709abe74233dc6468",
+ "require_stage2": false,
+ "datasets": [
+  {
+   "openml_id": 41483,
+   "name": "rf1",
+   "n_rows": 9125,
+   "target_cols": [
+    "CHSI2_48H__0",
+    "NASI2_48H__0",
+    "EADM7_48H__0",
+    "SCLM7_48H__0",
+    "CLKM7_48H__0",
+    "VALI2_48H__0",
+    "NAPM7_48H__0",
+    "DLDI4_48H__0"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41485,
+   "name": "scm1d",
+   "n_rows": 9803,
+   "target_cols": [
+    "LBL",
+    "MTLp2",
+    "MTLp3",
+    "MTLp4",
+    "MTLp5",
+    "MTLp6",
+    "MTLp7",
+    "MTLp8",
+    "MTLp9",
+    "MTLp10",
+    "MTLp11",
+    "MTLp12",
+    "MTLp13",
+    "MTLp14",
+    "MTLp15",
+    "MTLp16"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41486,
+   "name": "scm20d",
+   "n_rows": 8966,
+   "target_cols": [
+    "LBL",
+    "MTLp2A",
+    "MTLp3A",
+    "MTLp4A",
+    "MTLp5A",
+    "MTLp6A",
+    "MTLp7A",
+    "MTLp8A",
+    "MTLp9A",
+    "MTLp10A",
+    "MTLp11A",
+    "MTLp12A",
+    "MTLp13A",
+    "MTLp14A",
+    "MTLp15A",
+    "MTLp16A"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41550,
+   "name": "atp1d",
+   "n_rows": 337,
+   "target_cols": [
+    "LBL_ALLminpA_fut_001",
+    "LBL_ALLminp0_fut_001",
+    "LBL_aDLminpA_fut_001",
+    "LBL_aCOminpA_fut_001",
+    "LBL_aFLminpA_fut_001",
+    "LBL_aUAminpA_fut_001"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41553,
+   "name": "enb",
+   "n_rows": 768,
+   "target_cols": [
+    "Y1",
+    "Y2"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 41558,
+   "name": "slump",
+   "n_rows": 103,
+   "target_cols": [
+    "SLUMP_cm",
+    "FLOW_cm",
+    "Compressive_Strength_Mpa"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42454,
+   "name": "mlr_knn_rng",
+   "n_rows": 111753,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42455,
+   "name": "mlr_glmnet_rng",
+   "n_rows": 104820,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42456,
+   "name": "mlr_svm_rng",
+   "n_rows": 540576,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42457,
+   "name": "mlr_rpart_rng",
+   "n_rows": 92067,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42458,
+   "name": "mlr_ranger_rng",
+   "n_rows": 278863,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42459,
+   "name": "mlr_xgboost_rng",
+   "n_rows": 2955210,
+   "target_cols": [
+    "perf.mmce",
+    "perf.logloss"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 42699,
+   "name": "iris",
+   "n_rows": 150,
+   "target_cols": [
+    "Sepal.Width",
+    "Petal.Length"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  },
+  {
+   "openml_id": 45719,
+   "name": "3D_Estimation_using_RSSI_of_WLAN_dataset_complete",
+   "n_rows": 14400,
+   "target_cols": [
+    "latitude",
+    "longitude",
+    "receiver_height"
+   ],
+   "feature_cols": null,
+   "drop_cols": []
+  }
+ ]
+}

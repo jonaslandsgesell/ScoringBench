@@ -1,13 +1,9 @@
 #!/bin/bash
-# Run all datasets in parallel via a SLURM array job (MULTIVARIATE benchmark).
-# Each task handles exactly one dataset (0-indexed).
+# Run the MULTIVARIATE benchmark as a SLURM array job, one dataset per task.
+# Set SOURCE and TARGET_DIM below; the array range is 0..N-1 with N from the table.
 #
-# This wraps run_bench_regression_multivariate.py, which promotes the (d-1)
-# features most correlated with the target into additional targets to build a
-# d-dimensional multivariate regression task.
-#
-# Usage — parallel (one job per dataset, 0..103):
-#   sbatch --array=0-103 run_benchmark_multivariate.sbatch
+# Usage — parallel (one task per dataset), e.g. promoted_scoringbench at d=2:
+#   sbatch --array=0-44 run_benchmark_multivariate.sbatch
 #
 # Usage — single dataset (e.g. dataset 7 only):
 #   sbatch --array=7 run_benchmark_multivariate.sbatch
@@ -31,14 +27,14 @@
 #SBATCH --output=slurm_logs/%x-%A_%a.out
 #SBATCH --error=slurm_logs/%x-%A_%a.err
 
-# Hardcoded run configuration
-SAMPLE_SIZE="3000"        # "3000" is original
-TARGET_DIM="10"            # target dimension d (number of jointly-modelled targets)
-# dataset source:
-#   "synthetic"           — copula-coupled residuals (independence fails by construction)
-#   "scoringbench"        — real jointly-measured multi-target OpenML datasets
-#                           (targets taken straight from multivariate_datasets.json)
-SOURCE="scoringbench" #"synthetic"
+# Run configuration
+SAMPLE_SIZE="3000"                # "3000" is original
+TARGET_DIM="2"                    # target dimension d: "2" | "3" | "5" | "10"
+SOURCE="promoted_scoringbench"    # dataset source, datasets at d=2/3/5/10:
+                                  #   "promoted_scoringbench"  45/36/22/6  univariate ScoringBench with promoted targets
+                                  #   "scoringbench"           51/44/28/7  curated multi-target OpenML (multivariate_datasets.json)
+                                  #   "multitarget_openml"     14/6/4/2    KCI-screened multi-target OpenML
+                                  #   "synthetic"              100         copula-coupled residuals
 
 # Output dir mirrors the runner's default naming so sweeps never collide.
 OUTPUT_DIR="./output_multivariate_${SOURCE}_d${TARGET_DIM}_n${SAMPLE_SIZE}"

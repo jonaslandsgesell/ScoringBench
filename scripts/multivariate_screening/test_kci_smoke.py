@@ -3,12 +3,12 @@
 import numpy as np
 import pytest
 
-from scoringbench.multivariate.ci_screen import (
+from multivariate_screening.ci_screen import (
     kci_pvalue,
     residual_distance_correlation,
     screen_kci,
 )
-from scoringbench.multivariate import ci_screen
+from multivariate_screening import ci_screen
 
 pytest.importorskip("causallearn")
 
@@ -57,7 +57,7 @@ def test_screen_kci_decision():
     res = screen_kci(x, Y_dep)
     assert res["selected"] is True
     assert res["kci_p"] < 0.05
-    assert res["residual_dcor"] >= 0.175
+    assert res["residual_dcor"] >= ci_screen.EFFECT_MIN
     assert res["n_targets"] == 2
 
 
@@ -72,8 +72,8 @@ def test_scale_boundary(monkeypatch, ratio, selected):
 
 
 @pytest.mark.parametrize("pvalue,effect,reason", [
-    (0.05, 0.5, "kci_not_significant"), (0.001, 0.17, "small_effect"),
-    (0.001, 0.175, "selected"),
+    (0.05, 0.5, "kci_not_significant"), (0.001, 0.19, "small_effect"),
+    (0.001, 0.20, "selected"),
 ])
 def test_sequential_gates(monkeypatch, pvalue, effect, reason):
     values = np.arange(100, dtype=float)

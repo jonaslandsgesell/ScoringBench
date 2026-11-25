@@ -1,13 +1,14 @@
 """Integration tests for screened pools and disjoint curation/evaluation."""
 
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from scoringbench.multivariate import screening, screened_datasets as pools
-from scoringbench.multivariate.ci_screen import curation_split
+from multivariate_screening import screening, decisions as pools
+from multivariate_screening.ci_screen import curation_split
 from scoringbench.multivariate.sources import get_source
 
 
@@ -48,7 +49,9 @@ def test_screen_candidate_records_and_persists_decision(monkeypatch, tmp_path):
         seen.update(config)
         return features, targets
 
-    monkeypatch.setattr(pools.native_scoringbench, "load_native_scoringbench", load)
+    # screen_candidate resolves the loader through the source registry
+    # (get_source(...).load), so patch the registry lookup in decisions' namespace.
+    monkeypatch.setattr(pools, "get_source", lambda name: SimpleNamespace(load=load))
     monkeypatch.setattr(pools, "screen_dataset", lambda *args, **kwargs: (decision.copy(), np.arange(20, 100)))
     entry = get_source("scoringbench").enumerate_datasets(2, 3000)[0]
     result = pools.screen_candidate(entry, target_dim=2)

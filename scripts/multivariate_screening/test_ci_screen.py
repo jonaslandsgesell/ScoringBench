@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from scoringbench.multivariate import ci_screen as cs
+from multivariate_screening import ci_screen as cs
 
 pytest.importorskip("causallearn")
 

@@ -49,7 +49,9 @@ def parse_args():
     p.add_argument(
         "--source", default="scoringbench", choices=sorted(SOURCES),
         help="Dataset source: 'scoringbench' (51 dependency-screened multi-target datasets), "
-             "or 'synthetic'. Default: scoringbench.",
+             "'multitarget_openml' (the 14 KCI-screened multi-target OpenML regression datasets), "
+             "'promoted_scoringbench' (univariate ScoringBench datasets with promoted targets, "
+             "scripts/promote_targets), or 'synthetic'. Default: scoringbench.",
     )
     p.add_argument(
         "--output_dir", default=None,

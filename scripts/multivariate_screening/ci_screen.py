@@ -25,10 +25,28 @@ from __future__ import annotations
 import numpy as np
 
 ALPHA = 0.05
-EFFECT_MIN = 0.175
+EFFECT_MIN = 0.20
 CURATION_FRACTION = 0.2
 CURATION_CAP = 1000
 SCALE_RATIO_MAX = 500.0
+
+
+# Memoisation of the two expensive, deterministic steps. When a target block is
+# screened at several d with the same conditioning set, each KCI block test and
+# each per-target residualisation recurs; caching returns identical numbers.
+_KCI_CACHE: dict[str, float] = {}
+_RESID_CACHE: dict[str, np.ndarray] = {}
+
+
+def _key(*arrays, extra=()) -> str:
+    import hashlib
+
+    h = hashlib.sha1(repr(extra).encode())
+    for a in arrays:
+        a = np.ascontiguousarray(np.asarray(a, dtype=float))
+        h.update(repr(a.shape).encode())
+        h.update(a.tobytes())
+    return h.hexdigest()
 
 
 def curation_split(n: int, seed: int = 0) -> np.ndarray:
@@ -45,7 +63,10 @@ def kci_pvalue(y: np.ndarray, block: np.ndarray, x: np.ndarray) -> float:
     """
     from causallearn.utils.KCI.KCI import KCI_CInd
 
-    return float(KCI_CInd().compute_pvalue(_2d(y), _2d(block), _2d(x))[0])
+    key = _key(y, block, x)
+    if key not in _KCI_CACHE:
+        _KCI_CACHE[key] = float(KCI_CInd().compute_pvalue(_2d(y), _2d(block), _2d(x))[0])
+    return _KCI_CACHE[key]
 
 
 def block_pvalues(Y: np.ndarray, X: np.ndarray, test=kci_pvalue) -> list[float]:
@@ -112,6 +133,9 @@ def residualize_oof(y: np.ndarray, X: np.ndarray, seed: int = 0) -> np.ndarray:
     X = np.asarray(X, float)
     if X.shape[1] == 0:
         return y - y.mean()
+    key = _key(y, X, extra=(seed,))
+    if key in _RESID_CACHE:
+        return _RESID_CACHE[key].copy()
     resid = np.empty_like(y)
     n_splits = min(5, max(2, len(y) // 10))
     for tr, te in KFold(n_splits, shuffle=True, random_state=seed).split(X):
@@ -123,6 +147,7 @@ def residualize_oof(y: np.ndarray, X: np.ndarray, seed: int = 0) -> np.ndarray:
             from sklearn.ensemble import HistGradientBoostingRegressor
             m = HistGradientBoostingRegressor(max_iter=100, random_state=seed).fit(X[tr], y[tr])
             resid[te] = y[te] - m.predict(X[te])
+    _RESID_CACHE[key] = resid.copy()
     return resid
 
 

@@ -12,7 +12,7 @@ from importlib.metadata import version
 
 import numpy as np
 
-from . import native_scoringbench
+from scoringbench.multivariate.sources import get_source
 from .ci_screen import ALPHA, EFFECT_MIN, SCALE_RATIO_MAX
 from .screening import screen_dataset
 
@@ -87,7 +87,10 @@ def screen_candidate(ds_config: dict, target_dim=None, quality_only: bool = Fals
     """
     ds_config.pop("screen", None)
     ds_config["screen_protocol"] = PROTOCOL
-    features, targets = native_scoringbench.load_native_scoringbench(ds_config, target_dim=target_dim)
+    # Dispatch the loader by source (scoringbench/OpenML, multitarget_openml, ...)
+    # so the same model-free screen runs on any registered multivariate source.
+    load = get_source(ds_config.get("source", "scoringbench")).load
+    features, targets = load(ds_config, target_dim=target_dim)
     dataset_id = ds_config.get("openml_id")
     decision, _ = screen_dataset(features, targets, name=ds_config.get("name"),
                                  run_test=not (quality_only
