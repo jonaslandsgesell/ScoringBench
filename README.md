@@ -46,6 +46,16 @@ Typical directory structure:
 6. Create a pull request to the ScoringBench repository for review; contributions that meet standards will be merged.
 7. Upon merge, https://scoringbench.com will automatically display the updated leaderboard; the data is also available in the repository.
 
+### Causilo releases
+
+`causilo_v1` uses `causilo==1.0.1` from `requirements_models.txt`. Run the 1.5 presets in a separate environment with the SDK pinned to 1.5.1.
+
+```bash
+python -m pip install -e . 'causilo==1.5.1'
+python run_bench_regression.py --models causilo_v1_5 causilo_v1_5_light \
+    --output_dir output/output_univariate_scoringbench_d1_n3000
+```
+
 ## Multivariate benchmark (d-dimensional targets)
 
 The multivariate benchmark evaluates **purely sample-based** models on

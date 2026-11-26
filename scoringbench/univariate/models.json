@@ -9,6 +9,24 @@
     }
   },
   {
+    "model_name": "causilo_v1_5",
+    "organization": "Nums AI",
+    "links": {
+      "paper": "https://arxiv.org/abs/2609.22866",
+      "huggingface": "https://huggingface.co/nums-ai/causilo-1.5",
+      "github": "https://github.com/nums-ai/causilo/tree/v1.5.1"
+    }
+  },
+  {
+    "model_name": "causilo_v1_5_light",
+    "organization": "Nums AI",
+    "links": {
+      "paper": "https://arxiv.org/abs/2609.22866",
+      "huggingface": "https://huggingface.co/nums-ai/causilo-1.5",
+      "github": "https://github.com/nums-ai/causilo/tree/v1.5.1"
+    }
+  },
+  {
     "model_name": "nori",
     "organization": "Synthefy",
     "links": {
