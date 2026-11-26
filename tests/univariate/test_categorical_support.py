@@ -166,13 +166,26 @@ def test_lightpfn_auto_detects_category_dtype():
     assert auto_categorical(X).tolist() == [False, True]
 
 
-def test_causilo_encoder_detects_category_dtype():
-    pytest.importorskip("causilo")
-    from causilo.data.encoding import FeatureEncoder
+def _causilo_model_version():
+    sdk = pytest.importorskip("causilo")
+    versions = {"1.0.1": "1.0", "1.5.1": "1.5"}
+    if sdk.__version__ not in versions:
+        pytest.skip("install the SDK version pinned for the Causilo model")
+    return versions[sdk.__version__]
 
+
+def test_causilo_encoder_detects_category_dtype():
+    model_version = _causilo_model_version()
     X, _ = _toy()
-    schema, _ = FeatureEncoder.fit(X)
-    assert tuple(schema.categories) == (1,)
+    if model_version == "1.0":
+        from causilo.data.encoding import FeatureEncoder
+
+        schema, _ = FeatureEncoder.fit(X)
+        assert tuple(schema.categories) == (1,)
+    else:
+        from causilo.v1_5.data.encoding import InputLayout
+
+        assert InputLayout.from_table(X).categorical_columns == (1,)
 
 
 def test_ashlar_splits_off_category_columns():
@@ -289,7 +302,7 @@ def _unseen_factories():
     ).LightPFNWrapper())
     add("causilo", "causilo", lambda: __import__(
         "scoringbench.univariate.wrappers.causilo", fromlist=["x"]
-    ).CausiloWrapper(n_estimators=1))
+    ).CausiloWrapper(n_estimators=1, model_version=_causilo_model_version()))
     add("kumo_small", "sdm", lambda: __import__(
         "scoringbench.univariate.wrappers.kumo", fromlist=["x"]
     ).KumoTabularSmallWrapper())

@@ -6,12 +6,15 @@ from .base import DistributionPrediction, ProbabilisticWrapper
 from .quantile_based import quantiles_to_distribution
 
 
+_SDK_VERSIONS = {"1.0": "1.0.1", "1.5": "1.5.1"}
+
+
 class CausiloWrapper(ProbabilisticWrapper):
     """Pretrained Causilo regression with exponential quantile tails.
 
     Code: https://github.com/nums-ai/causilo (Apache-2.0).
-    Weights: https://huggingface.co/nums-ai/causilo (Causilo License v1.0).
-    Developed by Nums AI Inc.; the technical report is forthcoming.
+    Causilo 1.0 weights: https://huggingface.co/nums-ai/causilo.
+    Causilo 1.5 weights: https://huggingface.co/nums-ai/causilo-1.5.
 
     n_estimators controls ensemble size, random_state fixes its permutations,
     and device selects CPU or CUDA (auto prefers CUDA).
@@ -19,14 +22,22 @@ class CausiloWrapper(ProbabilisticWrapper):
 
     supports_categorical = True  # FeatureEncoder treats non-numeric DataFrame dtypes as categorical
 
-    def __init__(self, n_estimators=8, random_state=42, device="auto"):
+    def __init__(self, n_estimators=8, random_state=42, device="auto", *, model_version="1.0"):
         self.n_estimators = n_estimators
         self.random_state = random_state
         self.device = device
+        self.model_version = model_version
         self._levels = np.r_[0.0001, np.arange(1, 1000) / 1000, 0.9999]
 
     def fit(self, X, y):
-        from causilo import CausiloRegressor
+        from causilo import CausiloRegressor, __version__
+
+        expected_sdk = _SDK_VERSIONS[self.model_version]
+        if __version__ != expected_sdk:
+            raise RuntimeError(
+                f"Causilo model {self.model_version} requires causilo=={expected_sdk} "
+                f"(installed {__version__}). Use a separate environment for each release."
+            )
 
         y = np.asarray(y, dtype=np.float64).reshape(-1)
         valid = np.isfinite(y)
@@ -36,10 +47,14 @@ class CausiloWrapper(ProbabilisticWrapper):
         if not y.size:
             raise ValueError("Causilo requires finite training targets")
         self._set_train_range(y)
+        options = {}
+        if self.model_version == "1.5":
+            options = {"model_version": "1.5", "use_kv_cache": False}
         self.model_ = CausiloRegressor(
             n_estimators=self.n_estimators,
             random_state=self.random_state,
             device=self.device,
+            **options,
         ).fit(X, y)
         return self
 

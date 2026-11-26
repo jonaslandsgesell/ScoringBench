@@ -192,6 +192,8 @@ dict_surjectors_models = {
 
 MODELS = {
     "causilo_v1": lambda: CausiloWrapper(),
+    "causilo_v1_5": lambda: CausiloWrapper(model_version="1.5"),
+    "causilo_v1_5_light": lambda: CausiloWrapper(model_version="1.5", n_estimators=1),
     "nori": lambda: SynthefyWrapper(),
     "nori_30m": lambda: SynthefyWrapper(model="nori-30m"),
     "tabpfn_realv2_5": lambda: TabPFNWrapper(model_path=MODEL_PATH_MAP["realv2_5"], ignore_pretraining_limits=True),

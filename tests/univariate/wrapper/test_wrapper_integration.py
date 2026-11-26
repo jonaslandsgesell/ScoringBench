@@ -164,10 +164,12 @@ def _make_tabldm():
     return TabLDMWrapper(device="cuda:0" if device == "cuda" else device)
 
 
-def _make_causilo():
-    pytest.importorskip("causilo", minversion="1.0.1")
+def _make_causilo(model_version="1.0", sdk_version="1.0.1", n_estimators=8):
+    sdk = pytest.importorskip("causilo")
+    if sdk.__version__ != sdk_version:
+        pytest.skip(f"Causilo model {model_version} requires causilo=={sdk_version}")
     from scoringbench.univariate.wrappers.causilo import CausiloWrapper
-    return CausiloWrapper(device=_cuda_or_cpu())
+    return CausiloWrapper(device=_cuda_or_cpu(), model_version=model_version, n_estimators=n_estimators)
 
 
 def _make_limix2():
@@ -380,6 +382,8 @@ def _make_ashlar_dressed():
 # without relying on pytest internals that differ across scopes.
 MODEL_FACTORIES = [
     pytest.param(("CausiloWrapper", _make_causilo), id="CausiloWrapper"),
+    pytest.param(("Causilo 1.5", lambda: _make_causilo("1.5", "1.5.1")), id="Causilo15"),
+    pytest.param(("Causilo 1.5 Light", lambda: _make_causilo("1.5", "1.5.1", 1)), id="Causilo15Light"),
     pytest.param(("LimiXWrapper", _make_limix2), id="LimiXWrapper"),
     pytest.param(("XGBVectorWrapper",        _make_xgb_vector),   id="XGBVectorWrapper"),
     pytest.param(("XGBQuantileVectorWrapper", _make_xgb_quantile), id="XGBQuantileVectorWrapper"),
